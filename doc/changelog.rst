@@ -76,6 +76,9 @@ Enhancements
   differentiate between arguments for initialising and those for fitting the
   smoothing model.
 
+- The way in which layers are created has been refactored to give packages that
+  that extend plotnine more flexibility in manipulating the layers.
+
 v0.5.1
 ------
 (2018-10-17)
