@@ -73,6 +73,11 @@ class scale_color_brewer(scale_discrete):
          If a string, will use that named palette.
          If a number, will index into the list of palettes
          of appropriate type. Default is 1
+    direction: int in ``[-1, 1]``
+         Sets the order of colors in the scale. If 1,
+         the default, colors are as output by
+         mizani.palettes.brewer_pal(). If -1,
+         the order of colors is reversed.
     {superclass_parameters}
     na_value : str
         Color of missing values. Default is ``'None'``
@@ -80,8 +85,8 @@ class scale_color_brewer(scale_discrete):
     _aesthetics = ['color']
     na_value = '#7F7F7F'
 
-    def __init__(self, type='seq', palette=1, **kwargs):
-        self.palette = brewer_pal(type, palette)
+    def __init__(self, type='seq', palette=1, direction=1, **kwargs):
+        self.palette = brewer_pal(type, palette, direction=direction)
         scale_discrete.__init__(self, **kwargs)
 
 
@@ -321,7 +326,9 @@ class scale_color_distiller(scale_color_gradientn):
     Sequential and diverging continuous color scales
 
     This is a convinience scale around :class:`.scale_color_gradientn`
-    with colors from `colorbrewer.org <http://colorbrewer2.org/>`_
+    with colors from `colorbrewer.org <http://colorbrewer2.org/>`_.
+    It smoothly interpolates 7 colors from a brewer palette to create
+    a continuous palette.
 
     Parameters
     ----------
@@ -335,6 +342,10 @@ class scale_color_distiller(scale_color_gradientn):
         list of points in the range [0, 1] at which to
         place each color. Must be the same size as
         `colors`. Default to evenly space the colors
+    direction: int in ``[-1, 1]``
+        Sets the order of colors in the scale. If 1
+        colors are as output by mizani.palettes.brewer_pal().
+        If -1, the default, the order of colors is reversed.
     {superclass_parameters}
     na_value : str
         Color of missing values. Default is ``'None'``
@@ -343,7 +354,8 @@ class scale_color_distiller(scale_color_gradientn):
     guide = 'colorbar'
     na_value = '#7F7F7F'
 
-    def __init__(self, type='seq', palette=1, values=None, **kwargs):
+    def __init__(self, type='seq', palette=1,
+                 values=None, direction=-1, **kwargs):
         """
         Create colormap that will be used by the palette
         """
@@ -352,8 +364,10 @@ class scale_color_distiller(scale_color_gradientn):
                  "Consider using type = 'seq' or type = 'div' instead",
                  PlotnineWarning)
 
-        # Grab 6 colors from brewer and create a gradient palette
-        colors = brewer_pal(type, palette)(6)
+        # Grab 7 colors from brewer and create a gradient palette
+        # An odd number matches the midpoint of the palette to that
+        # of the data
+        colors = brewer_pal(type, palette, direction=direction)(7)
         scale_color_gradientn.__init__(self, colors, values, **kwargs)
 
 
@@ -377,7 +391,7 @@ class scale_color_cmap(scale_continuous):
 
     Parameters
     ----------
-    name : str
+    cmap_name : str
         A standard Matplotlib colormap name. The default is
         `viridis`. For the list of names checkout the output
         of ``matplotlib.cm.cmap_d.keys()`` or see the
@@ -399,8 +413,8 @@ class scale_color_cmap(scale_continuous):
     guide = 'colorbar'
     na_value = '#7F7F7F'
 
-    def __init__(self, name='viridis', lut=None, **kwargs):
-        self.palette = cmap_pal(name, lut)
+    def __init__(self, cmap_name='viridis', lut=None, **kwargs):
+        self.palette = cmap_pal(cmap_name, lut)
         super(scale_color_cmap, self).__init__(**kwargs)
 
 
@@ -487,8 +501,10 @@ class scale_fill_datetime(scale_datetime, scale_fill_cmap):
 # Default scales
 alias('scale_color_discrete', scale_color_hue)
 alias('scale_color_continuous', scale_color_cmap)
+alias('scale_color_ordinal', scale_color_cmap_d)
 alias('scale_fill_discrete', scale_fill_hue)
 alias('scale_fill_continuous', scale_fill_cmap)
+alias('scale_fill_ordinal', scale_fill_cmap_d)
 
 # American to British spelling
 alias('scale_colour_hue', scale_color_hue)
@@ -502,8 +518,9 @@ alias('scale_colour_gradient', scale_color_gradient)
 alias('scale_colour_gradient2', scale_color_gradient2)
 alias('scale_colour_gradientn', scale_color_gradientn)
 alias('scale_colour_discrete', scale_color_hue)
-alias('scale_colour_continuous', scale_color_gradient)
+alias('scale_colour_continuous', scale_color_cmap)
 alias('scale_colour_distiller', scale_color_distiller)
 alias('scale_colour_cmap', scale_color_cmap)
 alias('scale_colour_cmap_d', scale_color_cmap_d)
 alias('scale_colour_datetime', scale_color_datetime)
+alias('scale_colour_ordinal', scale_color_cmap_d)

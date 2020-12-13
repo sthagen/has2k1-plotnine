@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats.mstats import plotting_positions
 
+from ..mapping.evaluation import after_stat
 from ..doctools import document
 from ..exceptions import PlotnineError
 from .distributions import get_continuous_distribution
@@ -40,7 +41,7 @@ class stat_qq(stat):
 
     See Also
     --------
-    scipy.stats.mstats.plotting_positions - Uses ``alpha_beta``
+    scipy.stats.mstats.plotting_positions : Uses ``alpha_beta``
         to calculate the quantiles.
     """
 
@@ -56,7 +57,7 @@ class stat_qq(stat):
 
     """
     REQUIRED_AES = {'sample'}
-    DEFAULT_AES = {'x': 'stat(theoretical)', 'y': 'stat(sample)'}
+    DEFAULT_AES = {'x': after_stat('theoretical'), 'y': after_stat('sample')}
     DEFAULT_PARAMS = {'geom': 'qq', 'position': 'identity',
                       'na_rm': False,
                       'distribution': 'norm', 'dparams': (),
@@ -64,7 +65,7 @@ class stat_qq(stat):
 
     @classmethod
     def compute_group(cls, data, scales, **params):
-        sample = data['sample'].sort_values()
+        sample = data['sample'].sort_values().values
         alpha, beta = params['alpha_beta']
         quantiles = params['quantiles']
 

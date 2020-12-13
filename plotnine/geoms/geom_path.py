@@ -82,10 +82,6 @@ class geom_path(geom):
                  "observation. Do you need to adjust the "
                  "group aesthetic?", PlotnineWarning)
 
-        # dataframe mergesort is stable, we rely on that here
-        data = data.sort_values('group', kind='mergesort')
-        data.reset_index(drop=True, inplace=True)
-
         # drop lines with less than two points
         c = Counter(data['group'])
         counts = np.array([c[v] for v in data['group']])
@@ -93,6 +89,10 @@ class geom_path(geom):
 
         if len(data) < 2:
             return
+
+        # dataframe mergesort is stable, we rely on that here
+        data = data.sort_values('group', kind='mergesort')
+        data.reset_index(drop=True, inplace=True)
 
         # When the parameters of the path are not constant
         # with in the group, then the lines that make the paths
@@ -124,7 +124,7 @@ class geom_path(geom):
         if 'arrow' in params and params['arrow']:
             params['arrow'].draw(
                 data, panel_params, coord,
-                ax, zorder=params['zorder'], constant=constant)
+                ax, constant=constant, **params)
 
     @staticmethod
     def draw_legend(data, da, lyr):
@@ -177,14 +177,14 @@ class arrow:
         When it is closed, it is also filled
     """
 
-    def __init__(self, angle=30, length=0.25,
+    def __init__(self, angle=30, length=0.2,
                  ends='last', type='open'):
         self.angle = angle
         self.length = length
         self.ends = ends
         self.type = type
 
-    def draw(self, data, panel_params, coord, ax, zorder, constant=True):
+    def draw(self, data, panel_params, coord, ax, constant=True, **params):
         """
         Draw arrows at the end(s) of the lines
 
@@ -220,11 +220,13 @@ class arrow:
                 idx2.extend(df.index[1:])
 
             d = dict(
-                zorder=zorder,
+                zorder=params['zorder'],
+                rasterized=params['raster'],
                 edgecolor=data.loc[idx1, 'color'],
                 facecolor=data.loc[idx1, 'facecolor'],
                 linewidth=data.loc[idx1, 'size'],
-                linestyle=data.loc[idx1, 'linetype'])
+                linestyle=data.loc[idx1, 'linetype']
+            )
 
             x1 = data.loc[idx1, 'x'].values
             y1 = data.loc[idx1, 'y'].values
@@ -244,13 +246,15 @@ class arrow:
                 ax.add_collection(coll)
         else:
             d = dict(
-                zorder=zorder,
+                zorder=params['zorder'],
+                rasterized=params['raster'],
                 edgecolor=data['color'].iloc[0],
                 facecolor=data['facecolor'].iloc[0],
                 linewidth=data['size'].iloc[0],
                 linestyle=data['linetype'].iloc[0],
                 joinstyle='round',
-                capstyle='butt')
+                capstyle='butt'
+            )
 
             if first:
                 x1, x2 = data['x'].iloc[0:2]
@@ -304,10 +308,9 @@ class arrow:
         # Slices into the vertices list
         slc = slice(0, 3)
 
-        # We need the plot dimensions so that we can
+        # We need the axes dimensions so that we can
         # compute scaling factors
-        fig = ax.get_figure()
-        width, height = fig.get_size_inches()
+        width, height = _axes_get_size_inches(ax)
         ranges = coord.range(panel_params)
         width_ = np.ptp(ranges.x)
         height_ = np.ptp(ranges.y)
@@ -367,11 +370,14 @@ def _draw_segments(data, ax, **params):
     linewidth = data.loc[indices, 'size']
     linestyle = data.loc[indices, 'linetype']
 
-    coll = mcoll.LineCollection(segments,
-                                edgecolor=edgecolor,
-                                linewidth=linewidth,
-                                linestyle=linestyle,
-                                zorder=params['zorder'])
+    coll = mcoll.LineCollection(
+        segments,
+        edgecolor=edgecolor,
+        linewidth=linewidth,
+        linestyle=linestyle,
+        zorder=params['zorder'],
+        rasterized=params['raster']
+    )
     ax.add_collection(coll)
 
 
@@ -382,13 +388,16 @@ def _draw_lines(data, ax, **params):
     """
     color = to_rgba(data['color'].iloc[0], data['alpha'].iloc[0])
     join_style = _get_joinstyle(data, params)
-    lines = mlines.Line2D(data['x'],
-                          data['y'],
-                          color=color,
-                          linewidth=data['size'].iloc[0],
-                          linestyle=data['linetype'].iloc[0],
-                          zorder=params['zorder'],
-                          **join_style)
+    lines = mlines.Line2D(
+        data['x'],
+        data['y'],
+        color=color,
+        linewidth=data['size'].iloc[0],
+        linestyle=data['linetype'].iloc[0],
+        zorder=params['zorder'],
+        rasterized=params['raster'],
+        **join_style
+    )
     ax.add_artist(lines)
 
 
@@ -411,3 +420,24 @@ def _get_joinstyle(data, params):
         d['dash_joinstyle'] = joinstyle
         d['dash_capstyle'] = capstyle
     return d
+
+
+def _axes_get_size_inches(ax):
+    """
+    Size of axes in inches
+
+    Parameters
+    ----------
+    ax : axes
+        Axes
+
+    Returns
+    -------
+    out : tuple[float, float]
+        (width, height) of ax in inches
+    """
+    fig = ax.get_figure()
+    bbox = ax.get_window_extent().transformed(
+        fig.dpi_scale_trans.inverted()
+    )
+    return bbox.width, bbox.height

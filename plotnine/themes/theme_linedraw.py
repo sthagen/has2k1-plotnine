@@ -1,4 +1,4 @@
-from .elements import element_line, element_rect, element_text
+from .elements import element_line, element_rect, element_text, element_blank
 from .theme import theme
 from .theme_gray import theme_gray
 
@@ -16,11 +16,12 @@ class theme_linedraw(theme_gray):
         Base font family.
     """
 
-    def __init__(self, base_size=11, base_family='DejaVu Sans'):
+    def __init__(self, base_size=11, base_family=None):
         theme_gray.__init__(self, base_size, base_family)
         self.add_theme(theme(
             axis_text=element_text(color='black', size=base_size*0.8),
             axis_ticks=element_line(color='black', size=0.5),
+            axis_ticks_minor=element_blank(),
             legend_key=element_rect(color='black', size=0.5),
             panel_background=element_rect(fill='white'),
             panel_border=element_rect(fill='None', color='black', size=1),

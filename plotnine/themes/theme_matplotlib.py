@@ -31,6 +31,7 @@ class theme_matplotlib(theme):
             dpi=get_option('dpi'),
             figure_size=get_option('figure_size'),
             legend_key=element_rect(fill='None', colour='None'),
+            legend_key_size=16,
             panel_spacing=0.1,
             strip_background=element_rect(
                 fill='#D9D9D9', color='#D9D9D9', size=1),
@@ -38,9 +39,13 @@ class theme_matplotlib(theme):
 
         if use_defaults:
             _copy = mpl.rcParams.copy()
+            deprecated_rcparams = (
+                set(mpl._deprecated_remain_as_none)
+                | set(mpl._all_deprecated)
+            )
             # no need to a get a deprecate warning just because
             # they are still included in rcParams...
-            for key in mpl._deprecated_map:
+            for key in deprecated_rcparams:
                 if key in _copy:
                     del _copy[key]
             if 'tk.pythoninspect' in _copy:

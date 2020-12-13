@@ -1,5 +1,5 @@
 from ..coords import coord_flip
-from ..utils import to_rgba, groupby_with_null, SIZE_FACTOR
+from ..utils import to_rgba, SIZE_FACTOR
 from ..doctools import document
 from ..exceptions import PlotnineError
 from .geom import geom
@@ -36,7 +36,7 @@ class geom_ribbon(geom):
             msg = "Aesthetics cannot vary within a ribbon."
             raise PlotnineError(msg)
 
-        for _, udata in groupby_with_null(data, units):
+        for _, udata in data.groupby(units, dropna=False):
             udata.reset_index(inplace=True, drop=True)
             geom_ribbon.draw_unit(udata, panel_params, coord,
                                   ax, **params)
@@ -60,9 +60,14 @@ class geom_ribbon(geom):
             fill_between = ax.fill_between
             _x, _min, _max = data['x'], data['ymin'], data['ymax']
 
-        fill_between(_x, _min, _max,
-                     facecolor=fill,
-                     edgecolor=color,
-                     linewidth=data['size'].iloc[0],
-                     linestyle=data['linetype'].iloc[0],
-                     zorder=params['zorder'])
+        fill_between(
+            _x,
+            _min,
+            _max,
+            facecolor=fill,
+            edgecolor=color,
+            linewidth=data['size'].iloc[0],
+            linestyle=data['linetype'].iloc[0],
+            zorder=params['zorder'],
+            rasterized=params['raster']
+        )

@@ -76,6 +76,12 @@ class stat_smooth(stat):
                     data['ymax'] = high
 
                 return data
+    formula : formula_like
+        An object that can be used to construct a patsy design matrix.
+        This is usually a string. You can only use a formula if ``method``
+        is one of *lm*, *ols*, *wls*, *glm*, *rlm* or *gls*, and in the
+        :ref:`formula <patsy:formulas>` you may refer to the ``x`` and
+        ``y`` aesthetic variables.
     se : bool (default: True)
         If :py:`True` draw confidence interval around the smooth line.
     n : int (default: 80)
@@ -123,14 +129,15 @@ class stat_smooth(stat):
          'ymin'  # Lower confidence limit
          'ymax'  # Upper confidence limit
 
-    Calculated aesthetics are accessed using the `calc` function.
-    e.g. :py:`'stat(se)'`.
+    Calculated aesthetics are accessed using the `after_stat` function.
+    e.g. :py:`after_stat('se')`.
     """
 
     REQUIRED_AES = {'x', 'y'}
     DEFAULT_PARAMS = {'geom': 'smooth', 'position': 'identity',
                       'na_rm': False,
                       'method': 'auto', 'se': True, 'n': 80,
+                      'formula': None,
                       'fullrange': False, 'level': 0.95,
                       'span': 0.75, 'method_args': {}}
     CREATES = {'se', 'ymin', 'ymax'}
@@ -168,6 +175,15 @@ class stat_smooth(stat):
                     "facets".format(window), PlotnineWarning)
                 params['method_args']['window'] = window
 
+        if params['formula']:
+            allowed = {'lm', 'ols', 'wls', 'glm', 'rlm', 'gls'}
+            if params['method'] not in allowed:
+                raise ValueError(
+                    "You can only use a formula with `method` is "
+                    "one of {}".format(allowed)
+                )
+            params['enviroment'] = self.environment
+
         return params
 
     @classmethod
@@ -178,6 +194,13 @@ class stat_smooth(stat):
         x_unique = data['x'].unique()
 
         if len(x_unique) < 2:
+            warnings.warn(
+                "Smoothing requires 2 or more points. Got {}. "
+                "Not enough points for smoothing. If this message "
+                "a surprise, make sure the column mapped to the x "
+                "aesthetic has the right dtype.".format(len(x_unique)),
+                PlotnineWarning
+            )
             # Not enough data to fit
             return pd.DataFrame()
 

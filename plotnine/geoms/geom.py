@@ -1,7 +1,8 @@
 from copy import deepcopy
 
 from ..stats.stat import stat
-from ..aes import rename_aesthetics, is_valid_aesthetic
+from ..mapping.aes import rename_aesthetics, is_valid_aesthetic
+from ..mapping.evaluation import evaluate
 from ..layer import layer
 from ..positions.position import position
 from ..utils import data_mapping_as_kwargs, remove_missing
@@ -22,6 +23,10 @@ class geom(metaclass=Registry):
     aes_params = None  # setting of aesthetic
     params = None      # parameter settings
 
+    # Plot namespace, it gets its value when the plot is being
+    # built.
+    environment = None
+
     # The geom responsible for the legend if draw_legend is
     # not implemented
     legend_geom = 'point'
@@ -32,9 +37,9 @@ class geom(metaclass=Registry):
     # their default values.
     _aesthetics_doc = '{aesthetics_table}'
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, mapping=None, data=None, **kwargs):
         kwargs = rename_aesthetics(kwargs)
-        kwargs = data_mapping_as_kwargs(args, kwargs)
+        kwargs = data_mapping_as_kwargs((mapping, data), kwargs)
         self._kwargs = kwargs  # Will be used to create stat & layer
 
         # separate aesthetics and parameters
@@ -65,7 +70,8 @@ class geom(metaclass=Registry):
 
         Raises
         ------
-        :class:`PlotnineError` if unable to create a `geom`.
+        PlotnineError
+            If unable to create a `geom`.
         """
         name = stat.params['geom']
         if issubclass(type(name), geom):
@@ -111,9 +117,12 @@ class geom(metaclass=Registry):
         old = self.__dict__
         new = result.__dict__
 
+        # don't make a deepcopy of data, or environment
+        shallow = {'data', '_kwargs', 'environment'}
         for key, item in old.items():
-            if key in {'data', '_kwargs'}:
+            if key in shallow:
                 new[key] = old[key]
+                memo[id(new[key])] = new[key]
             else:
                 new[key] = deepcopy(old[key], memo)
 
@@ -152,7 +161,7 @@ class geom(metaclass=Registry):
         """
         return data
 
-    def use_defaults(self, data):
+    def use_defaults(self, data, aes_modifiers):
         """
         Combine data with defaults and set aesthetics from parameters
 
@@ -162,6 +171,8 @@ class geom(metaclass=Registry):
         ----------
         data : dataframe
             Data used for drawing the geom.
+        aes_modifiers : dict
+            Aesthetics
 
         Returns
         -------
@@ -175,6 +186,11 @@ class geom(metaclass=Registry):
         # Not in data and not set, use default
         for ae in missing_aes:
             data[ae] = self.DEFAULT_AES[ae]
+
+        # Evaluate/Modify the mapped aesthetics
+        evaled = evaluate(aes_modifiers, data, self.environment)
+        for ae in (evaled.columns & data.columns):
+            data[ae] = evaled[ae]
 
         # If set, use it
         for ae, value in self.aes_params.items():
@@ -233,14 +249,14 @@ class geom(metaclass=Registry):
         data : dataframe
             Data to be plotted by this geom. This is the
             dataframe created in the plot_build pipeline.
-        panel_params : dict
+        panel_params : types.SimpleNamespace
             The scale information as may be required by the
             axes. At this point, that information is about
-            ranges, ticks and labels. Keys of interest to
-            the geom are::
+            ranges, ticks and labels. Attributes are of interest
+            to the geom are::
 
-                'x_range'  # tuple
-                'y_range'  # tuple
+                'panel_params.x.range'  # tuple
+                'panel_params.y.range'  # tuple
 
         coord : coord
             Coordinate (e.g. coord_cartesian) system of the
@@ -350,10 +366,19 @@ class geom(metaclass=Registry):
             ggplot object with added layer.
         """
         gg = gg if inplace else deepcopy(gg)
-
-        # create and add layer
-        gg += layer.from_geom(self)
+        gg += self.to_layer()  # Add layer
         return gg
+
+    def to_layer(self):
+        """
+        Make a layer that represents this geom
+
+        Returns
+        -------
+        out : layer
+            Layer
+        """
+        return layer.from_geom(self)
 
     def _verify_arguments(self, kwargs):
         """
@@ -361,12 +386,12 @@ class geom(metaclass=Registry):
         """
         geom_stat_args = kwargs.keys() | self._stat._kwargs.keys()
         unknown = (geom_stat_args -
-                   self.aesthetics() -                # geom aesthetics
+                   self.aesthetics() -                 # geom aesthetics
                    self.DEFAULT_PARAMS.keys() -        # geom parameters
-                   self._stat.aesthetics() -          # stat aesthetics
+                   self._stat.aesthetics() -           # stat aesthetics
                    self._stat.DEFAULT_PARAMS.keys() -  # stat parameters
-                   {'data', 'mapping',                # layer parameters
-                    'show_legend', 'inherit_aes'})    # layer parameters
+                   {'data', 'mapping', 'show_legend',  # layer parameters
+                    'inherit_aes', 'raster'})       # layer parameters
         if unknown:
             msg = ("Parameters {}, are not understood by "
                    "either the geom, stat or layer.")

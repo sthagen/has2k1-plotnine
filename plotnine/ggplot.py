@@ -3,22 +3,27 @@ import os
 import sys
 from copy import deepcopy
 from contextlib import suppress
+from itertools import chain
+from types import SimpleNamespace as NS
 from warnings import warn
 
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.offsetbox import AnchoredOffsetbox
 import matplotlib.transforms as mtransforms
+from matplotlib.offsetbox import AnchoredOffsetbox
+from matplotlib.backends.backend_pdf import PdfPages
 from patsy.eval import EvalEnvironment
 
-from .aes import aes, make_labels
+from .mapping.aes import aes, make_labels
 from .layer import Layers
 from .facets import facet_null
 from .facets.layout import Layout
 from .options import get_option
 from .themes.theme import theme, theme_get
-from .utils import to_inches, from_inches
+from .utils import (
+        to_inches, from_inches, defaults, order_as_mapping_data, ungroup
+        )
 from .exceptions import PlotnineError, PlotnineWarning
 from .scales.scales import Scales
 from .coords import coord_cartesian
@@ -52,17 +57,9 @@ class ggplot:
 
     def __init__(self, mapping=None, data=None, environment=None):
         # Allow some sloppiness
-        if (isinstance(mapping, pd.DataFrame) and
-                (data is None or isinstance(data, aes))):
-            mapping, data = data, mapping
+        mapping, data = order_as_mapping_data(mapping, data)
         if mapping is None:
             mapping = aes()
-
-        if (data is not None and
-                not isinstance(data, pd.DataFrame)):
-            raise PlotnineError(
-                'data must be a dataframe or None if each '
-                'layer will have separate data.')
 
         # Recognize plydata groups
         if hasattr(data, 'group_indices') and 'group' not in mapping:
@@ -76,7 +73,7 @@ class ggplot:
         self.layers = Layers()
         self.guides = guides()
         self.scales = Scales()
-        self.theme = None
+        self.theme = theme_get()
         self.coordinates = coord_cartesian()
         self.environment = environment or EvalEnvironment.capture(1)
         self.layout = None
@@ -84,16 +81,20 @@ class ggplot:
         self.watermarks = []
         self.axs = None
 
+    def __str__(self):
+        """
+        Print/show the plot
+        """
+        self.draw(show=True)
+
+        # Return and empty string so that print(p) is "pretty"
+        return ''
+
     def __repr__(self):
         """
         Print/show the plot
         """
-        # Do not draw if drawn already.
-        # This prevents a needless error when reusing figure & axes
-        # in the jupyter notebook.
-        if not self.figure:
-            self.draw()
-        plt.show()
+        self.__str__()
         return '<ggplot: (%d)>' % self.__hash__()
 
     def __deepcopy__(self, memo):
@@ -148,6 +149,7 @@ class ggplot:
         """
         Overload the >> operator to receive a dataframe
         """
+        other = ungroup(other)
         if isinstance(other, pd.DataFrame):
             if self.data is None:
                 self.data = other
@@ -159,7 +161,7 @@ class ggplot:
             raise TypeError(msg.format(type(other)))
         return self
 
-    def draw(self, return_ggplot=False):
+    def draw(self, return_ggplot=False, show=False):
         """
         Render the complete plot
 
@@ -167,6 +169,8 @@ class ggplot:
         ----------
         return_ggplot : bool
             If ``True``, return ggplot object.
+        show : bool (default: False)
+            Whether to show the plot.
 
         Returns
         -------
@@ -181,48 +185,39 @@ class ggplot:
         This method does not modify the original ggplot object. You can
         get the modified ggplot object with :py:`return_ggplot=True`.
         """
-        # Pandas deprecated is_copy, and when we create new dataframes
-        # from slices we do not want complaints. We always uses the
-        # new frames knowing that they are separate from the original.
-        with pd.option_context('mode.chained_assignment', None):
-            return self._draw(return_ggplot)
+        # Do not draw if drawn already.
+        # This prevents a needless error when reusing
+        # figure & axes in the jupyter notebook.
+        if self.figure:
+            return (self.figure, self) if return_ggplot else self.figure
 
-    def _draw(self, return_ggplot=False):
         # Prevent against any modifications to the users
         # ggplot object. Do the copy here as we may/may not
         # assign a default theme
         self = deepcopy(self)
-        self._build()
+        with plot_context(self, show=show):
+            self._build()
 
-        # If no theme we use the default
-        self.theme = self.theme or theme_get()
+            # setup
+            figure, axs = self._create_figure()
+            self._setup_parameters()
+            self._resize_panels()
 
-        try:
-            with mpl.rc_context():
-                # setup & rcparams theming
-                self.theme.apply_rcparams()
-                figure, axs = self._create_figure()
-                self._setup_parameters()
-                self._resize_panels()
-                # Drawing
-                self._draw_layers()
-                self._draw_facet_labels()
-                self._draw_labels()
-                self._draw_legend()
-                self._draw_title()
-                self._draw_watermarks()
-                # Artist object theming
-                self._apply_theme()
-        except Exception as err:
-            if self.figure is not None:
-                plt.close(self.figure)
-            raise err
+            # Drawing
+            self._draw_layers()
+            self._draw_labels()
+            self._draw_breaks_and_labels()
+            self._draw_legend()
+            self._draw_title()
+            self._draw_watermarks()
 
-        if return_ggplot:
-            output = self.figure, self
-        else:
-            output = self.figure
+            # Artist object theming
+            self._apply_theme()
 
+            if return_ggplot:
+                output = self.figure, self
+            else:
+                output = self.figure
         return output
 
     def _draw_using_figure(self, figure, axs):
@@ -241,24 +236,15 @@ class ggplot:
             Array of Axes onto which to draw the plots
         """
         self = deepcopy(self)
-        self._build()
-
-        self.theme = self.theme or theme_get()
         self.figure = figure
         self.axs = axs
-
-        try:
-            with mpl.rc_context():
-                self.theme.apply_rcparams()
-                self._setup_parameters()
-                self._draw_layers()
-                self._draw_facet_labels()
-                self._draw_legend()
-                self._apply_theme()
-        except Exception as err:
-            if self.figure is not None:
-                plt.close(self.figure)
-            raise err
+        with plot_context(self):
+            self._build()
+            self._setup_parameters()
+            self._draw_layers()
+            self._draw_breaks_and_labels()
+            self._draw_legend()
+            self._apply_theme()
 
         return self
 
@@ -280,8 +266,11 @@ class ggplot:
         scales = self.scales
         layout = self.layout
 
-        # Give each layer a copy of the data that it will need
-        layers.generate_data(self.data)
+        # Update the label information for the plot
+        layers.update_labels(self)
+
+        # Give each layer a copy of the data and the mappings
+        layers.prepare(self)
 
         # Initialise panels, add extra data for margins & missing
         # facetting variables, and add on a PANEL variable to data
@@ -392,20 +381,33 @@ class ggplot:
         # Draw the geoms
         self.layers.draw(self.layout, self.coordinates)
 
-    def _draw_facet_labels(self):
+    def _draw_breaks_and_labels(self):
         """
-        Draw facet labels a.k.a strip texts
+        Draw breaks and labels
         """
         # Decorate the axes
         #   - xaxis & yaxis breaks, labels, limits, ...
-        #   - facet labels
+        #   - facet labels a.k.a strip text
         #
         # pidx is the panel index (location left to right, top to bottom)
         for pidx, layout_info in self.layout.layout.iterrows():
+            ax = self.axs[pidx]
             panel_params = self.layout.panel_params[pidx]
-            self.facet.set_breaks_and_labels(
-                panel_params, layout_info, pidx)
-            self.facet.draw_label(layout_info, pidx)
+            self.facet.draw_label(layout_info, ax)
+            self.facet.set_limits_breaks_and_labels(panel_params, ax)
+
+            # Remove unnecessary ticks and labels
+            if not layout_info['AXIS_X']:
+                ax.xaxis.set_tick_params(
+                    which='both', bottom=False, labelbottom=False)
+            if not layout_info['AXIS_Y']:
+                ax.yaxis.set_tick_params(
+                    which='both', left=False, labelleft=False)
+
+            if layout_info['AXIS_X']:
+                ax.xaxis.set_tick_params(which='both', bottom=True)
+            if layout_info['AXIS_Y']:
+                ax.yaxis.set_tick_params(which='both', left=True)
 
     def _draw_legend(self):
         """
@@ -505,11 +507,10 @@ class ggplot:
 
         # Get the axis labels (default or specified by user)
         # and let the coordinate modify them e.g. flip
-        labels = self.coordinates.labels({
-            'x': self.layout.xlabel(self.labels),
-            'y': self.layout.ylabel(self.labels)
-        })
-
+        labels = self.coordinates.labels(NS(
+            x=self.layout.xlabel(self.labels),
+            y=self.layout.ylabel(self.labels)
+        ))
         # The first axes object is on left, and the last axes object
         # is at the bottom. We change the transform so that the relevant
         # coordinate is in figure coordinates. This way we take
@@ -520,9 +521,9 @@ class ggplot:
         # last_ax = self.axs[-1]
 
         xlabel = self.facet.last_ax.set_xlabel(
-            labels['x'], labelpad=pad_x)
+            labels.x, labelpad=pad_x)
         ylabel = self.facet.first_ax.set_ylabel(
-            labels['y'], labelpad=pad_y)
+            labels.y, labelpad=pad_y)
 
         xlabel.set_transform(mtransforms.blended_transform_factory(
             figure.transFigure, mtransforms.IdentityTransform()))
@@ -615,6 +616,21 @@ class ggplot:
         hash_token = abs(self.__hash__())
         return 'plotnine-save-{}.{}'.format(hash_token, ext)
 
+    def _update_labels(self, layer):
+        """
+        Update label data for the ggplot
+
+        Parameters
+        ----------
+        layer : layer
+            New layer that has just been added to the ggplot
+            object.
+        """
+        mapping = make_labels(layer.mapping)
+        default = make_labels(layer.stat.DEFAULT_AES)
+        new_labels = defaults(mapping, default)
+        self.labels = defaults(self.labels, new_labels)
+
     def save(self, filename=None, format=None, path=None,
              width=None, height=None, units='in',
              dpi=None, limitsize=True, verbose=True, **kwargs):
@@ -657,8 +673,6 @@ class ggplot:
                       'format': format}
         fig_kwargs.update(kwargs)
 
-        figure = [None]  # nonlocal
-
         # filename, depends on the object
         if filename is None:
             ext = format if format else 'pdf'
@@ -669,9 +683,6 @@ class ggplot:
 
         # Preserve the users object
         self = deepcopy(self)
-
-        # theme
-        self.theme = self.theme or theme_get()
 
         # The figure size should be known by the theme
         if width is not None and height is not None:
@@ -692,42 +703,18 @@ class ggplot:
                 "not pixels). If you are sure you want these "
                 "dimensions, use 'limitsize=False'.".format(width, height))
 
-        if dpi is None:
-            try:
-                self.theme.themeables.property('dpi')
-            except KeyError:
-                self.theme = self.theme + theme(dpi=100)
-        else:
-            self.theme = self.theme + theme(dpi=dpi)
-
         if verbose:
             warn("Saving {0} x {1} {2} image.".format(
                  from_inches(width, units),
                  from_inches(height, units), units), PlotnineWarning)
             warn('Filename: {}'.format(filename), PlotnineWarning)
 
-        # Helper function so that we can clean up when it fails
-        def _save():
-            fig = figure[0] = self.draw()
+        if dpi is not None:
+            self.theme = self.theme + theme(dpi=dpi)
 
-            # savefig ignores the figure face & edge colors
-            facecolor = fig.get_facecolor()
-            edgecolor = fig.get_edgecolor()
-            if edgecolor:
-                fig_kwargs['facecolor'] = facecolor
-            if edgecolor:
-                fig_kwargs['edgecolor'] = edgecolor
-                fig_kwargs['frameon'] = True
-
+        fig = self.draw()
+        with plot_context(self):
             fig.savefig(filename, **fig_kwargs)
-
-        try:
-            _save()
-        except Exception as err:
-            figure[0] and plt.close(figure[0])
-            raise err
-        else:
-            figure[0] and plt.close(figure[0])
 
 
 def ggsave(plot, *arg, **kwargs):
@@ -797,26 +784,20 @@ def save_as_pdf_pages(plots, filename=None, path=None, verbose=True, **kwargs):
     >>> plot.save('filename.pdf', height=6, width=8)
     >>> save_as_pdf_pages([plot + theme(figure_size=(8, 6))])
     """
-    from itertools import chain
-
-    from matplotlib.backends.backend_pdf import PdfPages
-
     # as in ggplot.save()
     fig_kwargs = {'bbox_inches': 'tight'}
     fig_kwargs.update(kwargs)
 
-    figure = [None]
-
-    # If plots is already an iterator, this is a no-op; otherwise convert a
-    # list, etc. to an iterator
+    # If plots is already an iterator, this is a no-op; otherwise
+    # convert a list, etc. to an iterator
     plots = iter(plots)
-    peek = []
 
     # filename, depends on the object
     if filename is None:
-        # Take the first element from the iterator, store it, and use it to
-        # generate a file name
+        # Take the first element from the iterator, store it, and
+        # use it to generate a file name
         peek = [next(plots)]
+        plots = chain(peek, plots)
         filename = peek[0]._save_filename('pdf')
 
     if path:
@@ -827,27 +808,45 @@ def save_as_pdf_pages(plots, filename=None, path=None, verbose=True, **kwargs):
 
     with PdfPages(filename) as pdf:
         # Re-add the first element to the iterator, if it was removed
-        for plot in chain(peek, plots):
-            try:
-                fig = figure[0] = plot.draw()
+        for plot in plots:
+            fig = plot.draw()
+            # Save as a page in the PDF file
+            pdf.savefig(fig, **fig_kwargs)
 
-                # as in ggplot.save()
-                facecolor = fig.get_facecolor()
-                edgecolor = fig.get_edgecolor()
-                if edgecolor:
-                    fig_kwargs['facecolor'] = facecolor
-                if edgecolor:
-                    fig_kwargs['edgecolor'] = edgecolor
-                    fig_kwargs['frameon'] = True
 
-                # Save as a page in the PDF file
-                pdf.savefig(figure[0], **fig_kwargs)
-            except AttributeError as err:
-                msg = 'non-ggplot object of %s: %s' % (type(plot), plot)
-                raise TypeError(msg) from err
-            except Exception:
-                raise
-            finally:
-                # Close the figure whether or not there was an exception, to
-                # conserve memory when plotting a large number of pages
-                figure[0] and plt.close(figure[0])
+class plot_context:
+    """
+    Context to setup the environment within with the plot is built
+
+    Parameters
+    ----------
+    plot : ggplot
+        ggplot object to be built within the context.
+    show : bool (default: False)
+        Whether to show (``plt.show()``) the plot before the context
+        exits.
+    """
+    def __init__(self, plot, show=False):
+        self.plot = plot
+        self.show = show
+
+    def __enter__(self):
+        self.rc_context = mpl.rc_context(self.plot.theme.rcParams)
+        # Pandas deprecated is_copy, and when we create new dataframes
+        # from slices we do not want complaints. We always uses the
+        # new frames knowing that they are separate from the original.
+        self.pd_option_context = pd.option_context(
+            'mode.chained_assignment', None
+        )
+        self.rc_context.__enter__()
+        self.pd_option_context.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        if self.show:
+            plt.show()
+        if self.plot.figure is not None:
+            plt.close(self.plot.figure)
+
+        self.rc_context.__exit__(exc_type, exc_value, exc_traceback)
+        self.pd_option_context.__exit__(exc_type, exc_value, exc_traceback)

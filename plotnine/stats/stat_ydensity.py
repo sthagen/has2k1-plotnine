@@ -46,6 +46,16 @@ class stat_ydensity(stat):
         Number of equally spaced points at which the density is to
         be estimated. For efficient computation, it should be a power
         of two.
+    bw : str or float, optional (default: 'nrd0')
+        The bandwidth to use, If a float is given, it is the bandwidth.
+        The :py:`str` choices are::
+
+            'normal_reference'
+            'scott'
+            'silverman'
+
+        ``nrd0`` is a port of ``stats::bw.nrd0`` in R; it is eqiuvalent
+        to ``silverman`` when there is more than 1 value in a group.
     scale : (default: area)
         How to scale the violins. The options are::
 
@@ -71,10 +81,11 @@ class stat_ydensity(stat):
 
     ::
 
-         'width'  # Maximum width of density, [0, 1] range.
+         'width'        # Maximum width of density, [0, 1] range.
+         'violinwidth'  # Shape of the violin
 
-    Calculated aesthetics are accessed using the `calc` function.
-    e.g. :py:`'stat(width)'`.
+    Calculated aesthetics are accessed using the `after_stat` function.
+    e.g. :py:`after_stat('width')`.
     """
     REQUIRED_AES = {'x', 'y'}
     NON_MISSING_AES = {'weight'}
@@ -82,9 +93,10 @@ class stat_ydensity(stat):
                       'na_rm': False,
                       'adjust': 1, 'kernel': 'gaussian',
                       'n': 1024, 'trim': True,
+                      'bw': 'nrd0',
                       'scale': 'area'}
     DEFAULT_AES = {'weight': None}
-    CREATES = {'width'}
+    CREATES = {'width', 'violinwidth'}
 
     def setup_params(self, data):
         params = self.params.copy()
@@ -144,8 +156,7 @@ class stat_ydensity(stat):
     @classmethod
     def compute_group(cls, data, scales, **params):
         n = len(data)
-
-        if n < 3:
+        if n == 0:
             return pd.DataFrame()
 
         weight = data.get('weight')
@@ -156,6 +167,10 @@ class stat_ydensity(stat):
             range_y = scales.y.dimension()
 
         dens = compute_density(data['y'], weight, range_y, **params)
+
+        if not len(dens):
+            return dens
+
         dens['y'] = dens['x']
         dens['x'] = np.mean([data['x'].min(), data['x'].max()])
 

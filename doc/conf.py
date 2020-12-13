@@ -36,7 +36,7 @@ if on_rtd:
 # -- General configuration ------------------------------------------------
 
 # If your documentation needs a minimal Sphinx version, state it here.
-needs_sphinx = '1.6.1'
+needs_sphinx = '3.0.0'
 
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
@@ -74,8 +74,8 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'plotnine'
-copyright = u'2017, Hassan Kibirige'
+project = 'plotnine'
+copyright = '2020, Hassan Kibirige'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -93,7 +93,7 @@ except ImportError:
 if on_rtd:
     import re
     version = version.rstrip('.dirty')
-    version = re.sub('\+0\..+', '', version)
+    version = re.sub(r'\+0\..+', '', version)
     version
 
 # The full version, including alpha/beta/rc tags.
@@ -257,19 +257,19 @@ latex_elements = {
     'pointsize': '12pt',
 
     # Additional stuff for the LaTeX preamble.
-    'preamble': r'''
+    'preamble': r"""
         \usepackage{charter}
         \usepackage[defaultsans]{lato}
         \usepackage{inconsolata}
-    ''',
+    """,
 }
 
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-  ('index', 'plotnine.tex', u'plotnine Documentation',
-   u'Hassan Kibirige', 'manual'),
+  ('index', 'plotnine.tex', 'plotnine Documentation',
+   'Hassan Kibirige', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of
@@ -298,7 +298,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('index', 'plotnine', u'plotnine Documentation',
+    ('index', 'plotnine', 'plotnine Documentation',
      ['Hassan Kibirige'], 1)
 ]
 
@@ -333,13 +333,13 @@ texinfo_documents = [
 # -- Options for Epub output ----------------------------------------------
 
 # Bibliographic Dublin Core info.
-epub_title = u'plotnine'
-epub_author = u'Hassan Kibirige'
-epub_publisher = u'Hassan Kibirige'
-epub_copyright = u'2016, Hassan Kibirige'
+epub_title = 'plotnine'
+epub_author = 'Hassan Kibirige'
+epub_publisher = 'Hassan Kibirige'
+epub_copyright = '2020, Hassan Kibirige'
 
 # The basename for the epub file. It defaults to the project name.
-# epub_basename = u'plotnine'
+# epub_basename = 'plotnine'
 
 # The HTML theme for the epub output. Since the default themes are not
 # optimized for small screen space, using the same theme for HTML and epub
@@ -404,15 +404,15 @@ epub_exclude_files = ['search.html']
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3/', None),
     'matplotlib': ('https://matplotlib.org/', None),
-    'numpy': ('https://docs.scipy.org/doc/numpy', None),
+    'numpy': ('https://numpy.org/doc/stable/', None),
     'scipy': ('https://docs.scipy.org/doc/scipy/reference', None),
-    'statsmodels': ('http://www.statsmodels.org/stable/', None),
+    'statsmodels': ('https://www.statsmodels.org/stable/', None),
     'pandas': ('https://pandas.pydata.org/pandas-docs/stable/', None),
-    'sklearn': ('http://scikit-learn.org/stable/', None),
-    'skmisc': ('https://has2k1.github.io/scikit-misc/', None),
-    'adjustText': ('https://adjusttext.readthedocs.io/en/latest/', None)
+    'sklearn': ('https://scikit-learn.org/stable/', None),
+    'skmisc': ('https://has2k1.github.io/scikit-misc/stable/', None),
+    'adjustText': ('https://adjusttext.readthedocs.io/en/latest/', None),
+    'patsy': ('https://patsy.readthedocs.io/en/stable', None)
 }
-
 
 # -- Extension configuration ----------------------------------------------
 autodoc_member_order = 'bysource'
@@ -457,6 +457,8 @@ numpydoc_xref_aliases = {
     'element_text': 'plotnine.themes.element_text',
 }
 
+numpydoc_xref_ignore = {'type', 'optional', 'default'}
+
 
 def link_to_tutorials():
     # Linking to the directory does not work well with
@@ -479,4 +481,4 @@ def link_to_tutorials():
 
 def setup(app):
     link_to_tutorials()
-    app.add_stylesheet('custom.css')
+    app.add_css_file('custom.css')

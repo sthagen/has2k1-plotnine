@@ -1,9 +1,10 @@
 import numpy as np
 import pandas as pd
+import pytest
 from mizani.transforms import trans_new
 
-from plotnine import (ggplot, aes, geom_bar, coord_flip,
-                      coord_fixed, coord_trans)
+from plotnine import (ggplot, aes, geom_bar, geom_line, coord_flip,
+                      coord_fixed, coord_trans, xlim)
 
 n = 10  # Some even number greater than 2
 
@@ -25,7 +26,10 @@ def test_coord_fixed():
 
 def test_coord_trans():
     double_trans = trans_new('double', np.square, np.sqrt)
-    assert p + coord_trans(y=double_trans) == 'coord_trans'
+    # Warns probably because of a bad value around the left
+    # edge of the domain.
+    with pytest.warns(RuntimeWarning):
+        assert p + coord_trans(y=double_trans) == 'coord_trans'
 
 
 def test_coord_trans_reverse():
@@ -35,3 +39,13 @@ def test_coord_trans_reverse():
          + coord_trans(x='reverse', y='reverse')
          )
     assert p == 'coord_trans_reverse'
+
+
+def test_coord_trans_backtransforms():
+    df = pd.DataFrame({'x': [-np.inf, np.inf], 'y': [1, 2]})
+    p = (ggplot(df, aes('x', 'y'))
+         + geom_line(size=2)
+         + xlim(1, 2)
+         + coord_trans(x='log10')
+         )
+    assert p == 'coord_trans_backtransform'

@@ -1,9 +1,176 @@
 Changelog
 =========
 
-v0.5.2
+v0.8.0
 ------
 (not-yet-released)
+
+API Changes
+***********
+
+- How you map to calculated aesthetics has changed. Use the
+  :func:`~plotnine.aes.after_stat` function. The old methods ``'stat(name)'``
+  and ``'..name..'`` have been deprecated.
+
+New Features
+************
+
+- You can now map to aesthetics at three different stages. See
+  :class:`~plotnine.aes.aes`, :func:`~plotnine.aes.after_stat`,
+  :func:`~plotnine.aes.after_scale` and :class:`~plotnine.aes.stage`.
+
+- :class:`~plotnine.geoms.geom_violin` gained the a new parameter ``style``
+  with which you can draw half violin (density curve on one side and flat
+  on the other).
+
+- Added :class:`~plotnine.geoms.geom_raster`.
+
+- ``geoms`` gained new parameter ``raster`` for the
+  :class:`~plotnine.layer.Layer`. You can use it to rasterize any layer
+  when the resulting plot is of vector format e.g. ``pdf``.
+
+Bug Fixes
+*********
+
+- Fixed issue where some plots with a colorbar would fail for specific
+  themes. (:issue:`424`)
+
+- Fixed :class:`~plotnine.geoms.geom_map` to plot ``MultiLineString`` geom types.
+
+- Fixed :class:`~plotnine.geoms.geom_text` to allow any order of ``mapping`` and
+  ``data`` positional arguments.
+
+- Fixed bug were the plotted image may have ignored theming that relied on
+  some Matplotlib rcParams. (:issue:`451`)
+
+Enhancements
+************
+- Manual scales now match the values of the breaks if the breaks are given.
+  (:issue:`445`)
+
+- Using ``print`` to show a ggplot object will not show the hash
+  (``<ggplot: ...>``) anymore. There is now a difference between
+  ``repr(p)`` and ``str(p)``. (:issue:`453`)
+
+- Added option to for the ``base_family`` of a theme, now you can set it
+  once with and have it be applied to all themes. (:issue:`436`)
+
+  .. code-block:: python
+
+      from plotnine.options import set_option
+      set_option('base_family', 'Comic Sans MS')
+
+v0.7.1
+------
+(2020-08-05)
+
+Bug Fixes
+*********
+
+- Fixed issue where a plot has no data and the geoms have no data,
+  but the mappings are valid. (:issue:`404`)
+
+- Fixed ``preserve='single'`` in :class:`plotnine.positions.position_dodge`
+  and :class:`plotnine.positions.position_dodge2` to work for geoms that
+  only have ``x`` aesthetic and not ``xmin`` and ``xmax``
+  e.g :class:`plotnine.geoms.geom_text`.
+
+- Fix regression in ``v0.7.0`` where plots with a colorbar
+  would fail if using :class:`~plotnine.themse.theme_matplotlib`.
+
+v0.7.0
+------
+(2020-06-05)
+
+API Changes
+***********
+
+- Changed the default method of caculating bandwidth for all stats that
+  use kernel density estimation. The affected stats are
+  :class:`~plotnine.stats.stat_density`,
+  :class:`~plotnine.stats.stat_ydensity`, and
+  :class:`~plotnine.stats.stat_sina`. These stats can now work with groups
+  that have a single unique value.
+
+- Changed :class:`plotnine.scale.scale_colour_continuous` to refer to the same
+  scale as :class:`plotnine.scale.scale_color_continuous`.
+
+- Changed :class:`plotnine.scale.scale_color_cmap` so the parameter
+  `cmap_name` refers to the name of the color palette and `name` refers
+  to the name of the scale. (:issue:`371`)
+
+New Features
+************
+
+- :class:`~plotnine.aes.aes` got an internal function ``reorder`` which
+  makes it easy to change the ordering of a discrete variable according
+  to some other variable/column.
+
+- :class:`~plotnine.stats.stat_smooth` can now use formulae for linear
+  models.
+
+
+Bug Fixes
+*********
+
+- Fixed issue where a wrong warning could be issued about changing the
+  transform of a specialised scale. It mostly affected the *timedelta*
+  scale.
+
+- Fixed :class:`plotnine.geoms.geom_violin` and other geoms when used
+  with ``position='dodge'`` not to crash when if a layer has an empty
+  group of data.
+
+- Fixed bug in :class:`plotnine.geoms.geom_path` for some cases when groups
+  had less than 2 points. (:issue:`319`)
+
+- Fixed all stats that compute kernel density estimates to work when all
+  the data points are the same. (:issue:`317`)
+
+- Fixed issue where setting the group to a string value i.e. ``group='string'``
+  outside ``aes()`` failed due to an error.
+
+- Fixed issue where discrete position scales could not deal with fewer limits
+  than those present in the data. (:issue:`342`)
+
+- Fixed issue with using custom tuple linetypes with
+  :class:`plotnine.scales.scale_linetype_manual`. (:issue:`352`)
+
+- Fixed :class:`plotnine.geoms.geom_map` to work with facets. (:issue:`359`)
+
+- Fixed :class:`plotnine.position.jitter_dodge` to work when ``color`` is
+  used as an aesthetic. (:issue:`372`)
+
+- Fixed :class:`plotnine.geoms.geom_qq` to work with facets (:issue:`379`)
+
+- Fixed skewed head in :class:`plotnine.geoms.arrow` when drawn on
+  facetted plot (:issue:`388`)
+
+- Fixed issue with :class:`plotnine.stats.stat_density` where weights could
+  not be used with a gaussian model. (:issue:`392`)
+
+- Fixed bug where :class:`~plotnine.guides.guide_colorbar` width and height
+  could not be controlled by
+  :class:`~plotnine.themes.theamables.legend_key_width` and
+  :class:`~plotnine.themes.theamables.legend_key_height`. (:issue:`360`)
+
+Enhancements
+************
+
+- You can now set the bandwidth parameter ``bw`` of
+  :class:`~plotnine.stats.stat_ydensity`.
+
+- Parameters `ha` and `va` of :class:`~plotnine.geoms.geom_text` have been converted
+  to aesthetics. You can now map to them. (:issue:`325`)
+
+- All themes (except `theme_matplotlib`) now do not show minor ticks. (:issue:`348`)
+
+v0.6.0
+------
+(2019-08-21)
+
+.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.3373970.svg
+   :target: https://doi.org/10.5281/zenodo.3373970
 
 API Changes
 ***********
@@ -12,6 +179,13 @@ API Changes
   Shapefiles should contain only one type of geometry and that is the geometry
   that is drawn.
 
+- Ordinal (Ordered categorical) columns are now mapped to ordinal scales. This
+  creates different plots.
+
+- The default mapping for the computed aesthetic *size* of
+  :class:`~plotnine.stat.stat_sum` has changed to ``'stat(n)'``. This also
+  changes the default plot for :class:`~plotnine.geom.geom_count`.
+
 New Features
 ************
 
@@ -19,6 +193,10 @@ New Features
   and can now repel text.
 - Added :class:`~plotnine.annotate.annotation_logticks`.
 - Added :class:`~plotnine.geoms.geom_sina`
+- Added scales for ordinal (ordered categorical) columns.
+- :class:`~plotnine.geoms.geom_step` gained the option ``mid`` for the
+  direction parameter. The steps are taken mid-way between adjacent x values.
+- Added :class:`~plotnine.annotate.annotation_stripes`.
 
 Bug Fixes
 *********
@@ -60,6 +238,21 @@ Bug Fixes
 - Fixed bug where :class:`~plotnine.geoms.geom_rect` could not be used with
   :class:`~plotnine.coord.coord_trans`. (:issue:`256`)
 
+- Fixed bug where using free scales with facetting and flipping the coordinate
+  axes could give unexpected results. (:issue:`286`)
+
+- Fixed unwanted tick along the axis for versions of Matplotlib >= 3.1.0.
+
+- Fixed :class:`~plotnine.geoms.geom_text` not to error when using ``hjust``
+  and ``vjust``. (:issue:`287`)
+
+- Fixed bug where :class:`~plotnine.geoms.geom_abline`
+  :class:`~plotnine.geoms.geom_hline` and :class:`~plotnine.geoms.geom_vline`
+  could give wrong results when used with :class:`~plotnine.coord.coord_trans`.
+
+- Fixed bug where layers with only infinite values would lead to an exception
+  if they were the first layer encountered when choosing a scale.
+
 Enhancements
 ************
 
@@ -79,6 +272,26 @@ Enhancements
 - The ``method_args`` parameter in :class:`~plotnine.stats.stat_smooth` can now
   differentiate between arguments for initialising and those for fitting the
   smoothing model.
+
+- :class:`~plotnine.postions.position_nudge` can now deal with more geoms e.g.
+  :class:`~plotnine.geoms.geom_boxplot`.
+
+- The ``limits`` parameter of :class:`~plotnine.scales.scale_x_discrete` and
+    :class:`~plotnine.scales.scale_y_discrete` can now be a function.
+
+- The ``width`` of the boxplot can now be set irrespective of the stat.
+
+- The mid-point color of :class:`~plotnine.scales.scale_color_distiller` now
+  matches that of the trainned data.
+
+- The way in which layers are created has been refactored to give packages that
+  that extend plotnine more flexibility in manipulating the layers.
+
+- You can now specify one sided limits for coordinates. e.g.
+  `coord_cartesian(limits=(None, 10))`.
+
+- All the themeables have been lifted into the definition of
+  :class:`~plotnine.themes.theme` so they can be suggested autocomplete.
 
 v0.5.1
 ------

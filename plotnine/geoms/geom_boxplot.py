@@ -27,12 +27,16 @@ class geom_boxplot(geom):
     Parameters
     ----------
     {common_parameters}
+    width : float, optional (default None)
+        Box width. If :py:`None`, the width is set to
+        `90%` of the resolution of the data. Note that if the stat
+        has a width parameter, that takes precedence over this one.
     outlier_alpha : float, optional (default: 1)
         Transparency of the outlier points.
     outlier_color : str or tuple, optional (default: None)
         Color of the outlier points.
     outlier_shape : str, optional (default: o)
-        Shape of the outlier points.
+        Shape of the outlier points. An empty string hides the outliers.
     outlier_size : float, optional (default: 1.5)
         Size of the outlier points.
     outlier_stroke : float, optional (default: 0.5)
@@ -54,14 +58,14 @@ class geom_boxplot(geom):
                    'weight': 1}
     REQUIRED_AES = {'x', 'lower', 'upper', 'middle', 'ymin', 'ymax'}
     DEFAULT_PARAMS = {'stat': 'boxplot', 'position': 'dodge2',
-                      'na_rm': False,
+                      'na_rm': False, 'width': None,
                       'outlier_alpha': 1, 'outlier_color': None,
                       'outlier_shape': 'o', 'outlier_size': 1.5,
                       'outlier_stroke': 0.5, 'notch': False,
                       'varwidth': False, 'notchwidth': 0.5,
                       'fatten': 2}
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, mapping=None, data=None, **kwargs):
         _position = kwargs.get('position', self.DEFAULT_PARAMS['position'])
         varwidth = kwargs.get('varwidth', self.DEFAULT_PARAMS['varwidth'])
 
@@ -75,12 +79,13 @@ class geom_boxplot(geom):
                          PlotnineWarning)
                     _position.params['preserve'] = 'single'
 
-        super().__init__(*args, **kwargs)
+        super().__init__(mapping, data, **kwargs)
 
     def setup_data(self, data):
         if 'width' not in data:
-            if 'width' in self.params and self.params['width']:
-                data['width'] = self.params['width']
+            width = self.params.get('width', None)
+            if width is not None:
+                data['width'] = width
             else:
                 data['width'] = resolution(data['x'], False) * 0.9
 

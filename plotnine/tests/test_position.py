@@ -5,8 +5,8 @@ import pandas as pd
 import pytest
 
 from plotnine import (ggplot, aes, geom_point, geom_jitter, geom_bar,
-                      geom_col, geom_boxplot, geom_text,
-                      position_dodge, position_dodge2,
+                      geom_col, geom_boxplot, geom_text, geom_rect,
+                      after_stat, position_dodge, position_dodge2,
                       position_jitter, position_jitterdodge,
                       position_nudge, position_stack, theme)
 from plotnine.positions.position import position
@@ -91,6 +91,22 @@ def test_dodge_preserve_single():
     assert p + _theme == 'dodge_preserve_single'
 
 
+def test_dodge_preserve_single_text():
+    df1 = pd.DataFrame({'x': ['a', 'b', 'b', 'b'],
+                        'y': ['a', 'a', 'b', 'b']})
+
+    d = position_dodge(preserve='single', width=0.9)
+    p = (ggplot(df1, aes('x', fill='y'))
+         + geom_bar(position=d)
+         + geom_text(
+             aes(y=after_stat('count'), label=after_stat('count')),
+             stat='count',
+             position=d,
+             va='bottom')
+         )
+    assert p + _theme == 'dodge_preserve_single_text'
+
+
 def test_dodge2():
     p = (ggplot(df3, aes('x', 'y', color='c')) +
          geom_boxplot(position='dodge2', size=2))
@@ -132,3 +148,15 @@ def test_position_from_geom():
 
     geom = geom_point(position=position_jitter)
     assert isinstance(position.from_geom(geom), position_jitter)
+
+
+def test_dodge_empty_data():
+    empty_df = pd.DataFrame({'x': [], 'y': []})
+    p = (ggplot(df1, aes('x', 'y'))
+         + geom_point()
+         + geom_rect(
+             empty_df,
+             aes(xmin='x', xmax='x+1', ymin='y', ymax='y+1'),
+             position='dodge')
+         )
+    p.draw_test()

@@ -1,13 +1,14 @@
 from copy import deepcopy, copy
 import itertools
 from contextlib import suppress
+from warnings import warn
 
 import numpy as np
 import pandas as pd
 import types
 
 from ..utils import cross_join, match
-from ..exceptions import PlotnineError
+from ..exceptions import PlotnineError, PlotnineWarning
 from ..scales.scales import Scales
 
 # For default matplotlib backend
@@ -44,7 +45,7 @@ class facet:
         will automatically be dropped. If ``False``, all
         factor levels will be shown, regardless of whether
         or not they appear in the data. Default is ``True``.
-    dir : str in ``['h', 'v']
+    dir : str in ``['h', 'v']``
         Direction in which to layout the panels. ``h`` for
         horizontal and ``v`` for vertical.
     """
@@ -235,28 +236,28 @@ class facet:
 
         return self
 
-    def _set_limits_and_ranges(self, ax, ranges):
+    def set_limits_breaks_and_labels(self, panel_params, ax):
         # limits
-        ax.set_xlim(ranges['x_range'])
-        ax.set_ylim(ranges['y_range'])
+        ax.set_xlim(panel_params.x.range)
+        ax.set_ylim(panel_params.y.range)
 
         # breaks
-        ax.set_xticks(ranges['x_major'])
-        ax.set_yticks(ranges['y_major'])
+        ax.set_xticks(panel_params.x.breaks)
+        ax.set_yticks(panel_params.y.breaks)
 
         # minor breaks
-        ax.set_xticks(ranges['x_minor'], minor=True)
-        ax.set_yticks(ranges['y_minor'], minor=True)
+        ax.set_xticks(panel_params.x.minor_breaks, minor=True)
+        ax.set_yticks(panel_params.y.minor_breaks, minor=True)
 
         # labels
-        ax.set_xticklabels(ranges['x_labels'])
-        ax.set_yticklabels(ranges['y_labels'])
+        ax.set_xticklabels(panel_params.x.labels)
+        ax.set_yticklabels(panel_params.y.labels)
 
         # When you manually set the tick labels MPL changes the locator
         # so that it no longer reports the x & y positions
         # Fixes https://github.com/has2k1/plotnine/issues/187
-        ax.xaxis.set_major_formatter(MyFixedFormatter(ranges['x_labels']))
-        ax.yaxis.set_major_formatter(MyFixedFormatter(ranges['y_labels']))
+        ax.xaxis.set_major_formatter(MyFixedFormatter(panel_params.x.labels))
+        ax.yaxis.set_major_formatter(MyFixedFormatter(panel_params.y.labels))
 
         get_property = self.theme.themeables.property
         # Padding between ticks and text
@@ -276,24 +277,6 @@ class facet:
 
         ax.tick_params(axis='x', which='major', pad=pad_x)
         ax.tick_params(axis='y', which='major', pad=pad_y)
-
-    def set_breaks_and_labels(self, ranges, layout_info, pidx):
-        ax = self.axs[pidx]
-
-        # Add axes and labels on all sides
-        self._set_limits_and_ranges(ax, ranges)
-
-        # Remove unnecessary axes
-        if not layout_info['AXIS_X']:
-            ax.xaxis.set_ticks_position('none')
-            ax.xaxis.set_ticklabels([])
-        if not layout_info['AXIS_Y']:
-            ax.yaxis.set_ticks_position('none')
-            ax.yaxis.set_ticklabels([])
-        if layout_info['AXIS_X']:
-            ax.xaxis.set_ticks_position('bottom')
-        if layout_info['AXIS_Y']:
-            ax.yaxis.set_ticks_position('left')
 
     def __deepcopy__(self, memo):
         """
@@ -435,7 +418,7 @@ class facet:
         breadth = breadth + (m1 + m2) / dpi
         return breadth
 
-    def strip_dimensions(self, text_lines, location, pid):
+    def strip_dimensions(self, text_lines, location, ax):
         """
         Calculate the dimension
 
@@ -448,7 +431,6 @@ class facet:
         dpi = 72
         num_lines = len(text_lines)
         get_property = self.theme.themeables.property
-        ax = self.axs[pid]
         bbox = ax.get_window_extent().transformed(
             self.figure.dpi_scale_trans.inverted())
         ax_width, ax_height = bbox.width, bbox.height  # in inches
@@ -504,13 +486,12 @@ class facet:
             box_height=box_height)
         return dimensions
 
-    def draw_strip_text(self, text_lines, location, pid):
+    def draw_strip_text(self, text_lines, location, ax):
         """
         Create a background patch and put a label on it
         """
-        ax = self.axs[pid]
         themeable = self.figure._themeable
-        dim = self.strip_dimensions(text_lines, location, pid)
+        dim = self.strip_dimensions(text_lines, location, ax)
 
         if location == 'right':
             rotation = -90
@@ -551,6 +532,31 @@ class facet:
         else:
             themeable['strip_background_x'].append(rect)
             themeable['strip_text_x'].append(text)
+
+    def check_axis_text_space(self):
+        _adjust = self.theme.themeables.get('subplots_adjust')
+        if _adjust:
+            has_wspace = 'wspace' in _adjust.properties['value']
+            has_hspace = 'hspace' in _adjust.properties['value']
+        else:
+            has_wspace = False
+            has_hspace = False
+
+        warn_x = self.ncol > 1 and self.free['y'] and not has_wspace
+        warn_y = self.nrow > 1 and self.free['x'] and not has_hspace
+
+        if warn_x:
+            warn("If you need more space for the x-axis tick text use "
+                 "... + theme(subplots_adjust={'wspace': 0.25}). "
+                 "Choose an appropriate value for 'wspace'.",
+                 PlotnineWarning
+                 )
+        if warn_y:
+            warn("If you need more space for the y-axis tick text use "
+                 "... + theme(subplots_adjust={'hspace': 0.25}). "
+                 "Choose an appropriate value for 'hspace'",
+                 PlotnineWarning
+                 )
 
 
 def combine_vars(data, environment=None, vars=None, drop=True):

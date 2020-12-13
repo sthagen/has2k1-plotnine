@@ -117,7 +117,10 @@ class position(metaclass=Registry):
         out : position
             A position object
 
-        Raises :class:`PlotnineError` if unable to create a `position`.
+        Raises
+        ------
+        PlotnineError
+            If unable to create a `position`.
         """
         name = geom.params['position']
         if issubclass(type(name), position):
@@ -152,7 +155,7 @@ class position(metaclass=Registry):
             # Width set manually
             if not all([col in data.columns for col in xminmax]):
                 data['xmin'] = data['x'] - width / 2
-                data['xmax'] = data['x'] - width / 2
+                data['xmax'] = data['x'] + width / 2
         else:
             if not all([col in data.columns for col in xminmax]):
                 data['xmin'] = data['x']

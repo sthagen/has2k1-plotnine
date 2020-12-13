@@ -1,21 +1,22 @@
 from contextlib import suppress
 from copy import deepcopy, copy
-from collections import OrderedDict
+from functools import partial
+from types import SimpleNamespace as NS
 from warnings import warn
 
 import numpy as np
 import pandas as pd
-import matplotlib.cbook as cbook
 from mizani.bounds import expand_range_distinct, zero_range
 from mizani.bounds import rescale, censor
 from mizani.breaks import date_breaks
 from mizani.formatters import date_format
 from mizani.transforms import gettrans
 
-from ..aes import is_position_aes, rename_aesthetics
+from ..mapping.aes import is_position_aes, rename_aesthetics
 from ..doctools import document
 from ..exceptions import PlotnineError, PlotnineWarning
 from ..utils import match, waiver, is_waive, Registry
+from ..utils import ignore_warnings
 from .range import Range, RangeContinuous, RangeDiscrete
 
 
@@ -29,14 +30,26 @@ class scale(metaclass=Registry):
         Major break points. Alternatively, a callable that
         takes a tuple of limits and returns a list of breaks.
         Default is to automatically calculate the breaks.
-    expand : array_like, optional
+    expand : tuple, optional
         Multiplicative and additive expansion constants
         that determine how the scale is expanded. If
-        specified must of of length 2 or 4. Specifically the
-        the values are of this order::
+        specified must be of length 2 or 4. Specifically the
+        values are in this order::
 
             (mul, add)
             (mul_low, add_low, mul_high, add_high)
+
+        For example,
+
+            - ``(0, 0)`` - Do not expand.
+            - ``(0, 1)`` - Expand lower and upper limits by 1 unit.
+            - ``(1, 0)`` - Expand lower and upper limits by 100%.
+            - ``(0, 0, 0, 0)`` - Do not expand, as ``(0, 0)``.
+            - ``(0, 0, 0, 1)`` - Expand upper limit by 1 unit.
+            - ``(0, 1, 0.1, 0)`` - Expand lower limit by 1 unit and
+              upper limit by 10%.
+            - ``(0, 0, 0.1, 2)`` - Expand upper limit by 10% plus
+              2 units.
 
         If not specified, suitable defaults are chosen.
     name : str, optional
@@ -74,7 +87,7 @@ class scale(metaclass=Registry):
     _limits = None      # (min, max) - set by user
 
     #: multiplicative and additive expansion constants
-    expand = waiver()
+    expand = None
 
     # range of aesthetic, instantiated by __init__ from the
     range = None
@@ -90,7 +103,7 @@ class scale(metaclass=Registry):
 
         self.range = self._range_class()
 
-        if cbook.iterable(self.breaks) and cbook.iterable(self.labels):
+        if np.iterable(self.breaks) and np.iterable(self.labels):
             if len(self.breaks) != len(self.labels):
                 raise PlotnineError(
                     "Breaks and labels have unequal lengths")
@@ -147,7 +160,14 @@ class scale(metaclass=Registry):
         """
         raise NotImplementedError('Not Implemented')
 
-    def dimension(self, expand=None):
+    def dimension(self, expand=None, limits=None):
+        """
+        The phyical size of the scale.
+        """
+        raise NotImplementedError('Not Implemented')
+
+    def expand_limits(self, limits, expand=None, coord_limits=None,
+                      trans=None):
         """
         The phyical size of the scale.
         """
@@ -170,6 +190,53 @@ class scale(metaclass=Registry):
         Inverse transform array|series x
         """
         raise NotImplementedError('Not Implemented')
+
+    def view(self, limits=None, range=None):
+        """
+        Information about the trained scale
+        """
+        raise NotImplementedError('Not Implemented')
+
+    def default_expansion(self, mult=0, add=0, expand=True):
+        """
+        Default expansion for this scale
+        """
+
+        if not expand:
+            return (0, 0, 0, 0)
+
+        if self.expand:
+            n = len(self.expand)
+            if n == 2:
+                mult, add = self.expand
+            elif n == 4:
+                mult = self.expand[0], self.expand[2]
+                add = self.expand[1], self.expand[3]
+            else:
+                raise ValueError(
+                    "The scale.expand must be a tuple of "
+                    "size 2 or 4. "
+                )
+
+        if isinstance(mult, (float, int)):
+            mult = (mult, mult)
+
+        if isinstance(add, (float, int)):
+            add = (add, add)
+
+        if len(mult) != 2:
+            raise ValueError(
+                "The scale expansion multiplication factor should "
+                "either be a single float, or a tuple of two floats. "
+            )
+
+        if len(add) != 2:
+            raise ValueError(
+                "The scale expansion addition constant should "
+                "either be a single float, or a tuple of two floats. "
+            )
+
+        return (mult[0], add[0], mult[1], add[1])
 
     def clone(self):
         return deepcopy(self)
@@ -275,12 +342,80 @@ class scale_discrete(scale):
         na_rm = (not self.na_translate)
         self.range.train(x, drop, na_rm=na_rm)
 
-    def dimension(self, expand=(0, 0, 0, 0)):
+    def dimension(self, expand=(0, 0, 0, 0), limits=None):
         """
         The phyical size of the scale, if a position scale
         Unlike limits, this always returns a numeric vector of length 2
         """
-        return expand_range_distinct(len(self.limits), expand)
+        if limits is None:
+            limits = self.limits
+        return expand_range_distinct(self.limits, expand)
+
+    def expand_limits(self, limits, expand=None, coord_limits=None,
+                      trans=None):
+        """
+        Calculate the final range in coordinate space
+        """
+        expand_func = partial(scale_continuous.expand_limits, self,
+                              trans=trans)
+        n_limits = len(limits)
+        range_c = (0, 1)
+        range_d = (1, n_limits)
+        is_only_continuous = n_limits == 0
+
+        if hasattr(self.range, 'range_c'):
+            is_only_discrete = self.range.range_c.range is None
+            range_c = self.range.range_c.range
+        else:
+            is_only_discrete = True
+
+        if self.is_empty():
+            return expand_func(range_c, expand, coord_limits),
+        elif is_only_continuous:
+            return expand_func(range_c, expand, coord_limits)
+        elif is_only_discrete:
+            return expand_func(range_d, expand, coord_limits)
+        else:
+            no_expand = self.default_expand(0, 0)
+            ranges_d = expand_func(range_d, expand, coord_limits)
+            ranges_c = expand_func(range_c, no_expand, coord_limits)
+            limits = np.hstack(ranges_d.range, ranges_c.range)
+            range = (np.min(limits), np.max(limits))
+            ranges = NS(range=range, range_coord=range)
+            return ranges
+
+    def view(self, limits=None, range=None):
+        """
+        Information about the trained scale
+        """
+        if limits is None:
+            limits = self.limits
+
+        if range is None:
+            range = self.dimension(limits=limits)
+
+        breaks_d = self.get_breaks(limits)
+        breaks = self.map(pd.Categorical(breaks_d.keys()))
+        minor_breaks = []
+        labels = self.get_labels(breaks_d)
+
+        vs = NS(
+            scale=self,
+            aesthetics=self.aesthetics,
+            name=self.name,
+            limits=limits,
+            range=range,
+            breaks=breaks,
+            labels=labels,
+            minor_breaks=minor_breaks
+        )
+        return vs
+
+    def default_expansion(self, mult=0, add=0.6, expand=True):
+        """
+        Default expansion for discrete scale
+        """
+        return super().default_expansion(mult, add, expand)
 
     def map(self, x, limits=None):
         """
@@ -308,40 +443,21 @@ class scale_discrete(scale):
             except IndexError:
                 # Deal with missing data
                 # - Insert NaN where there is no match
-                bool_idx_good = (0 <= idx) & (idx < len(pal))
-                bool_idx_bad = ~bool_idx_good
-                pal_match = pal[idx[bool_idx_good]]
-                pal_match = np.insert(
-                    np.array(pal_match, dtype=object),
-                    np.where(bool_idx_bad)[0],
-                    np.nan
-                )
+                pal = np.hstack((pal.astype(object), np.nan))
+                idx = np.clip(idx, 0, len(pal)-1)
+                pal_match = pal[idx]
 
         if self.na_translate:
-            bool_idx = pd.isnull(x) | pd.isnull(pal_match)
+            bool_pal_match = pd.isnull(pal_match)
+            if len(bool_pal_match.shape) > 1:
+                # linetypes take tuples, these return 2d
+                bool_pal_match = bool_pal_match.any(axis=1)
+            bool_idx = pd.isnull(x) | bool_pal_match
             if bool_idx.any():
                 pal_match = [x if i else self.na_value
                              for x, i in zip(pal_match, ~bool_idx)]
 
         return pal_match
-
-    def break_info(self, range=None):
-        if range is None:
-            range = self.dimension()
-        # for discrete, limits != range
-        limits = self.limits
-        major = self.get_breaks(limits)
-        minor = []
-        if major is None:
-            major = labels = []
-        else:
-            labels = self.get_labels(major)
-            major = pd.Categorical(major.keys())
-            major = self.map(major)
-        return {'range': range,
-                'labels': labels,
-                'major': major,
-                'minor': minor}
 
     def get_breaks(self, limits=None, strict=True):
         """
@@ -360,7 +476,7 @@ class scale_discrete(scale):
             limits = self.limits
 
         if self.breaks is None:
-            return None
+            return dict()
         elif is_waive(self.breaks):
             breaks = limits
         elif callable(self.breaks):
@@ -375,7 +491,7 @@ class scale_discrete(scale):
             in_domain = breaks
         pos = match(in_domain, breaks)
         tups = zip(in_domain, pos)
-        return OrderedDict(sorted(tups, key=lambda t: t[1]))
+        return dict(sorted(tups, key=lambda t: t[1]))
 
     def get_labels(self, breaks=None):
         """
@@ -498,7 +614,9 @@ class scale_continuous(scale):
             Transform object
         """
         orig_trans_name = self.__class__._trans
-        new_trans_name = t.__class__.__name__.rstrip('_trans')
+        new_trans_name = t.__class__.__name__
+        if new_trans_name.endswith('_trans'):
+            new_trans_name = new_trans_name[:-6]
         if orig_trans_name != 'identity':
             if new_trans_name != orig_trans_name:
                 warn(
@@ -588,12 +706,92 @@ class scale_continuous(scale):
         except TypeError:
             return np.array([self.trans.inverse(val) for val in x])
 
-    def dimension(self, expand=(0, 0, 0, 0)):
+    def dimension(self, expand=(0, 0, 0, 0), limits=None):
         """
         The phyical size of the scale, if a position scale
         Unlike limits, this always returns a numeric vector of length 2
         """
-        return expand_range_distinct(self.limits, expand)
+        if limits is None:
+            limits = self.limits
+        return expand_range_distinct(limits, expand)
+
+    def expand_limits(self, limits, expand=None, coord_limits=None,
+                      trans=None):
+        """
+        Calculate the final range in coordinate space
+        """
+        if limits is None:
+            limits = (None, None)
+
+        if coord_limits is None:
+            coord_limits = (None, None)
+
+        if trans is None:
+            trans = self.trans
+
+        def _expand_range_distinct(x, expand):
+            # Expand ascending and descending order range
+            if x[0] > x[1]:
+                x = expand_range_distinct(x[::-1], expand)[::-1]
+            else:
+                x = expand_range_distinct(x, expand)
+            return x
+
+        # - Override None in coord_limits
+        # - Expand limits in coordinate space
+        # - Remove any computed infinite values &
+        #   fallback on unexpanded limits
+        limits = tuple(l if cl is None else cl
+                       for cl, l in zip(coord_limits, limits))
+        limits_coord_space = trans.transform(limits)
+        range_coord = _expand_range_distinct(limits_coord_space, expand)
+        with ignore_warnings(RuntimeWarning):
+            # Consequences of the runtimewarning (NaNs and infs)
+            # are dealt with below
+            final_limits = trans.inverse(range_coord)
+        final_range = tuple([fl if np.isfinite(fl) else l
+                             for fl, l in zip(final_limits, limits)])
+        ranges = NS(range=final_range, range_coord=range_coord)
+        return ranges
+
+    def view(self, limits=None, range=None):
+        """
+        Information about the trained scale
+        """
+        if limits is None:
+            limits = self.limits
+
+        if range is None:
+            range = self.dimension(limits=limits)
+
+        breaks = self.get_breaks(range)
+        breaks = breaks.compress(np.isfinite(breaks))
+        minor_breaks = self.get_minor_breaks(breaks, range)
+        mask = (range[0] <= breaks) & (breaks <= range[1])
+        breaks = breaks.compress(mask)
+        labels = self.get_labels(breaks, mask)
+
+        if minor_breaks is None:
+            minor_breaks = []
+
+        vs = NS(
+            scale=self,
+            aesthetics=self.aesthetics,
+            name=self.name,
+            limits=limits,
+            range=range,
+            breaks=breaks,
+            labels=labels,
+            minor_breaks=minor_breaks
+
+        )
+        return vs
+
+    def default_expansion(self, mult=0.05, add=0, expand=True):
+        """
+        Default expansion for continuous scale
+        """
+        return super().default_expansion(mult, add, expand)
 
     def map(self, x, limits=None):
         if limits is None:
@@ -604,35 +802,14 @@ class scale_continuous(scale):
         uniq = np.unique(x)
         pal = np.asarray(self.palette(uniq))
         scaled = pal[match(x, uniq)]
-        scaled[pd.isnull(scaled)] = self.na_value
-        return scaled
-
-    def break_info(self, range=None):
-        """
-        Return break information for the axis
-
-        The range, major breaks & minor_breaks are
-        in transformed space. The labels for the major
-        breaks depict data space values.
-        """
-        if range is None:
-            range = self.dimension()
-
-        major = self.get_breaks(range)
-        if major is None or len(major) == 0:
-            major = minor = labels = np.array([])
+        if scaled.dtype.kind == 'U':
+            scaled = [
+                self.na_value if x == 'nan' else x
+                for x in scaled
+            ]
         else:
-            major = major.compress(np.isfinite(major))
-            minor = self.get_minor_breaks(major, range)
-
-        mask = (range[0] <= major) & (major <= range[1])
-        major = major.compress(mask)
-        labels = self.get_labels(major, mask)
-
-        return {'range': range,
-                'labels': labels,
-                'major': major,
-                'minor': minor}
+            scaled[pd.isnull(scaled)] = self.na_value
+        return scaled
 
     def get_breaks(self, limits=None, strict=False):
         """
@@ -692,7 +869,7 @@ class scale_continuous(scale):
         """
         Return minor breaks
         """
-        if major is None:
+        if major is None or len(major) == 0:
             return []
 
         if limits is None:
@@ -716,15 +893,14 @@ class scale_continuous(scale):
         """
         Generate labels for the axis or legend
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         breaks: None or array-like
-            None ->result of self.breaks
-        mask: np.array(...,dtype=bool)
+            If None, use self.breaks.
+        mask: array[bool]
             Restrict returned labels to those with True
             in mask (used to exclude labels outside of a scale's
             domain even if the user defined them)
-
         """
         if breaks is None:
             breaks = self.get_breaks()

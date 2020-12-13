@@ -9,7 +9,7 @@ except ImportError:
 else:
     HAS_ADJUST_TEXT = True
 
-from ..utils import to_rgba
+from ..utils import to_rgba, order_as_mapping_data
 from ..doctools import document
 from ..positions import position_nudge
 from ..exceptions import PlotnineError
@@ -38,10 +38,6 @@ class geom_text(geom):
         Font weight.
     fontstyle : str (default: normal)
         Font style. One of *normal*, *italic* or *oblique*
-    ha : str (default: center)
-        Horizontal alignment. One of *left*, *center* or *right.*
-    va : str (default: center)
-        Vertical alignment. One of *top*, *center* or *bottom.*
     nudge_x : float (default: 0)
         Horizontal adjustment to apply to the text
     nudge_y : float (default: 0)
@@ -54,24 +50,44 @@ class geom_text(geom):
     format_string : str (default: None)
         If not :py:`None`, then the text if formatted with this
         string using :meth:`str.format`
+    path_effects : list (default: None)
+        If not :py:`None`, then the text will use these effects.
+        See `path_effects
+        <https://matplotlib.org/tutorials/advanced/patheffects_guide.html>`_
+        documentation for more details.
 
     See Also
     --------
     matplotlib.text.Text
+    matplotlib.patheffects
+
+    """
+    _aesthetics_doc = """
+    {aesthetics_table}
+
+    .. rubric:: Aesthetics Descriptions
+
+    ha
+        Horizontal alignment. One of *left*, *center* or *right.*
+
+    va
+        Vertical alignment. One of *top*, *center*, *bottom*, *baseline*.
 
     """
     DEFAULT_AES = {'alpha': 1, 'angle': 0, 'color': 'black',
-                   'size': 11, 'lineheight': 1.2}
+                   'size': 11, 'lineheight': 1.2, 'ha': 'center',
+                   'va': 'center'}
     REQUIRED_AES = {'label', 'x', 'y'}
     DEFAULT_PARAMS = {'stat': 'identity', 'position': 'identity',
                       'na_rm': False, 'parse': False,
                       'family': None, 'fontweight': 'normal',
-                      'fontstyle': 'normal', 'ha': 'center',
-                      'va': 'center', 'nudge_x': 0, 'nudge_y': 0,
+                      'fontstyle': 'normal', 'nudge_x': 0, 'nudge_y': 0,
                       'adjust_text': None,
-                      'format_string': None}
+                      'format_string': None,
+                      'path_effects': None}
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, mapping=None, data=None, **kwargs):
+        mapping, data = order_as_mapping_data(mapping, data)
         nudge_kwargs = {}
         adjust_text = kwargs.get('adjust_text', None)
         if adjust_text is None:
@@ -87,14 +103,14 @@ class geom_text(geom):
                 "package."
             )
 
-        # Accomodate for the old names
-        if 'hjust' in kwargs:
-            kwargs['ha'] = kwargs['hjust']
+        # Accomodate the old names
+        if mapping and 'hjust' in mapping:
+            mapping['ha'] = mapping.pop('hjust')
 
-        if 'vjust' in kwargs:
-            kwargs['va'] = kwargs['vjust']
+        if mapping and 'vjust' in mapping:
+            mapping['va'] = mapping.pop('vjust')
 
-        geom.__init__(self, *args, **kwargs)
+        geom.__init__(self, mapping, data, **kwargs)
 
     def setup_data(self, data):
         parse = self.params['parse']
@@ -127,12 +143,13 @@ class geom_text(geom):
         df['rotation'] = data['angle']
         df['linespacing'] = data['lineheight']
         df['color'] = color
-        df['ha'] = params['ha']
-        df['va'] = params['va']
+        df['ha'] = data['ha']
+        df['va'] = data['va']
         df['family'] = params['family']
         df['fontweight'] = params['fontweight']
         df['fontstyle'] = params['fontstyle']
         df['zorder'] = params['zorder']
+        df['rasterized'] = params['raster']
         df['clip_on'] = True
 
         # 'boxstyle' indicates geom_label so we need an MPL bbox
@@ -169,7 +186,9 @@ class geom_text(geom):
                 kw['bbox'] = bbox
                 kw['bbox']['edgecolor'] = params['boxcolor'] or kw['color']
                 kw['bbox']['facecolor'] = kw.pop('facecolor')
-            ax.text(**kw)
+            text_elem = ax.text(**kw)
+            if params['path_effects']:
+                text_elem.set_path_effects(params['path_effects'])
 
         if params['adjust_text']:
             adjust_text(list(ax.texts), ax=ax, **params['adjust_text'])

@@ -9,9 +9,9 @@ from plotnine import geom_line, geom_bar
 from plotnine import xlab, ylab, labs, ggtitle, xlim, lims, guides
 from plotnine import scale_x_continuous, coord_trans, annotate
 from plotnine import stat_identity, facet_null, theme, theme_gray
-from plotnine.aes import get_calculated_aes, strip_calculated_markers
-from plotnine.aes import is_valid_aesthetic
-from plotnine.exceptions import PlotnineError
+from plotnine import stage, after_stat, after_scale
+from plotnine.mapping.aes import is_valid_aesthetic
+from plotnine.exceptions import PlotnineError, PlotnineWarning
 
 df = pd.DataFrame({'x': np.arange(10),
                    'y': np.arange(10)})
@@ -73,12 +73,23 @@ def test_ggplot_parameters():
     assert p.data is None
     assert p.mapping == aes()
 
-    with pytest.raises(PlotnineError):
+    with pytest.raises(TypeError):
         ggplot([1, 2, 3], aes('x'))
 
 
+def test_ggplot_parameters_grouped():
+    p = ggplot(df.groupby('x'), aes('x'))
+
+    assert p.data is df
+    assert p.mapping == aes('x')
+
+    p = ggplot(data=df, mapping=aes('x'))
+    assert p.data is df
+    assert p.mapping == aes('x')
+
+
 def test_data_transforms():
-    p = ggplot(aes(x='x', y='np.log(y)'), df)
+    p = ggplot(aes(x='x', y='np.log(y+1)'), df)
     p = p + geom_point()
     p.draw_test()
 
@@ -107,6 +118,10 @@ def test_aes():
     expected = {'x': 'weight', 'y': 'hp', 'color': 'qsec'}
     assert result == expected
 
+    mapping = aes('weight', 'hp', color=stage('qsec'))
+    assert mapping['color'].start == 'qsec'
+    assert mapping._starting['color'] == 'qsec'
+
 
 def test_valid_aes_linetypes():
     assert is_valid_aesthetic('solid', 'linetype')
@@ -133,46 +148,67 @@ def test_valid_aes_colors():
 
 
 def test_calculated_aes():
-    _strip = strip_calculated_markers
+    # after_stat('ae')
+    mapping1 = aes('x', y=after_stat('density'))
+    mapping2 = aes('x', y=after_stat('density*2'))
+    mapping3 = aes('x', y=after_stat('density + count'))
+    mapping4 = aes('x', y=after_stat('func(density)'))
 
-    # stat(ae)
+    def _test():
+        assert list(mapping1._calculated.keys()) == ['y']
+        assert list(mapping2._calculated.keys()) == ['y']
+        assert list(mapping3._calculated.keys()) == ['y']
+        assert list(mapping4._calculated.keys()) == ['y']
+
+        assert mapping1['y'].after_stat == 'density'
+        assert mapping2['y'].after_stat == 'density*2'
+        assert mapping3['y'].after_stat == 'density + count'
+        assert mapping4['y'].after_stat == 'func(density)'
+
+        assert mapping1._calculated['y'] == 'density'
+        assert mapping2._calculated['y'] == 'density*2'
+        assert mapping3._calculated['y'] == 'density + count'
+        assert mapping4._calculated['y'] == 'func(density)'
+
+    _test()
+
+    # 'stat(ae)', DEPRECATED but still works
     mapping1 = aes('x', y='stat(density)')
     mapping2 = aes('x', y='stat(density*2)')
     mapping3 = aes('x', y='stat(density + count)')
-    mapping4 = aes('x', y='func(stat(density))')
+    mapping4 = aes('x', y='stat(func(density))')
+    _test()
 
-    assert get_calculated_aes(mapping1) == ['y']
-    assert get_calculated_aes(mapping2) == ['y']
-    assert get_calculated_aes(mapping3) == ['y']
-    assert get_calculated_aes(mapping4) == ['y']
-
-    assert _strip(mapping1['y']) == 'density'
-    assert _strip(mapping2['y']) == 'density*2'
-    assert _strip(mapping3['y']) == 'density + count'
-    assert _strip(mapping4['y']) == 'func(density)'
-
-    # ..ae..
+    # '..ae..', DEPRECATED but still works
     mapping1 = aes('x', y='..density..')
     mapping2 = aes('x', y='..density..*2')
     mapping3 = aes('x', y='..density.. + ..count..')
     mapping4 = aes('x', y='func(..density..)')
-
-    assert get_calculated_aes(mapping1) == ['y']
-    assert get_calculated_aes(mapping2) == ['y']
-    assert get_calculated_aes(mapping3) == ['y']
-    assert get_calculated_aes(mapping4) == ['y']
-
-    assert _strip(mapping1['y']) == 'density'
-    assert _strip(mapping2['y']) == 'density*2'
-    assert _strip(mapping3['y']) == 'density + count'
-    assert _strip(mapping4['y']) == 'func(density)'
+    _test()
 
     df = pd.DataFrame({'x': [1, 2, 2, 3, 3, 3, 4, 4, 4, 4]})
+    p = ggplot(df) + geom_bar(aes(x='x', fill=after_stat('count + 2')))
+    p.draw_test()
+
     p = ggplot(df) + geom_bar(aes(x='x', fill='stat(count + 2)'))
     p.draw_test()
 
     p = ggplot(df) + geom_bar(aes(x='x', fill='..count.. + 2'))
     p.draw_test()
+
+
+def test_after_scale_mapping():
+    df = pd.DataFrame({'x': [1, 2, 2, 3, 3, 3, 4, 4, 4, 4]})
+    df2 = pd.DataFrame({
+        # Same as above, but add 2 of each unique element
+        'x': [1, 2, 2, 3, 3, 3, 4, 4, 4, 4] + [1, 2, 3, 4] * 2
+    })
+
+    p = ggplot(df) + geom_bar(aes(x='x', ymax=after_scale('ymax + 2')))
+    p2 = ggplot(df2) + geom_bar(aes(x='x'))
+
+    assert p + lims(y=(0, 7)) == 'after_scale_mapping'
+    assert p2 + lims(y=(0, 7)) == 'after_scale_mapping'
 
 
 def test_add_aes():
@@ -208,8 +244,10 @@ def test_inplace_add():
     p += scale_x_continuous()
     assert p is _p
 
-    p += xlim(0, 10)
-    assert p is _p
+    with pytest.warns(PlotnineWarning):
+        # Warning for; replacing existing scale added above
+        p += xlim(0, 10)
+        assert p is _p
 
     p += lims(y=(0, 10))
     assert p is _p
@@ -248,6 +286,11 @@ def test_rrshift_piping():
         'not a dataframe' >> ggplot(aes('x', 'y')) + geom_point()
 
 
+def test_rrshift_piping_grouped():
+    p = df.groupby("x") >> ggplot(aes('x', 'y')) + geom_point()
+    assert p.data is df
+
+
 def test_adding_list_ggplot():
     lst = [
         geom_point(),
@@ -259,3 +302,8 @@ def test_adding_list_ggplot():
     assert len(g.layers) == 2
     assert g.labels['x'] == 'x-label'
     assert isinstance(g.coordinates, coord_trans)
+
+
+def test_string_group():
+    p = ggplot(df, aes('x', 'y')) + geom_point(group='pi')
+    p.draw_test()

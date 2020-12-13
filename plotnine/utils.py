@@ -4,6 +4,7 @@ Little functions used all over the codebase
 import collections
 import itertools
 import inspect
+import warnings
 from contextlib import suppress
 from weakref import WeakValueDictionary
 from warnings import warn
@@ -11,6 +12,7 @@ from warnings import warn
 import numpy as np
 import pandas as pd
 import pandas.api.types as pdtypes
+from pandas.core.groupby import DataFrameGroupBy
 import matplotlib.colors as mcolors
 from matplotlib.colors import colorConverter
 from matplotlib.offsetbox import DrawingArea
@@ -18,6 +20,7 @@ from matplotlib.patches import Rectangle
 from mizani.bounds import zero_range
 from mizani.utils import multitype_sort
 
+from .mapping import aes
 from .exceptions import PlotnineError, PlotnineWarning
 
 
@@ -667,56 +670,6 @@ def pivot_apply(df, column, index, func, *args, **kwargs):
     return df.pivot_table(column, index, aggfunc=_func)[column]
 
 
-def groupby_with_null(data, *args, **kwargs):
-    """
-    Groupby on columns with NaN/None/Null values
-
-    Pandas currently does have proper support for
-    groupby on columns with null values. The nulls
-    are discarded and so not grouped on.
-    """
-    by = kwargs.get('by', args[0])
-    altered_columns = {}
-
-    if not isinstance(by, (list, tuple)):
-        by = [by]
-
-    # Convert NaNs & Nones in the grouping columns
-    # to sum unique string value. And, for those
-    # columns record which rows have been converted
-    # Note: this may affect the dtype of the column,
-    # so we record the dtype too. Both these changes
-    # are undone.
-    for col in by:
-        bool_idx = pd.isnull(data[col])
-        idx = bool_idx.index[bool_idx]
-        if idx.size:
-            altered_columns[col] = (idx, data[col].dtype)
-            data.loc[idx, col] = '-*-null-*-'
-
-    # Groupby on the columns, making sure to revert back
-    # to NaN/None and the correct dtype.
-    for group, df in data.groupby(*args, **kwargs):
-        for col, (orig_idx, orig_dtype) in altered_columns.items():
-            # Indices in the grouped df that need correction
-            sub_idx = orig_idx.intersection(df[col].index)
-            # NaN/None
-            if sub_idx.size:
-                df.loc[sub_idx, col] = None
-            # dtype
-            if df[col].dtype != orig_dtype:
-                df[col] = df[col].astype(orig_dtype)
-
-        yield group, df
-
-    # Undo the NaN / None conversion and any dtype
-    # changes on the original dataframe
-    for col, (orig_idx, orig_dtype) in altered_columns.items():
-        data.loc[orig_idx, col] = None
-        if data[col].dtype != orig_dtype:
-            data[col] = data[col].astype(orig_dtype)
-
-
 def make_line_segments(x, y, ispath=True):
     """
     Return an (n x 2 x 2) array of n line segments
@@ -973,35 +926,34 @@ def data_mapping_as_kwargs(args, kwargs):
     out : dict
         kwargs that includes 'data' and 'mapping' keys.
     """
-    # No need to be strict about the aesthetic superclass
-    aes = dict
-    mapping, data = aes(), None
-    aes_err = ("Found more than one aes argument. "
-               "Expecting zero or one")
-    data_err = "More than one dataframe argument."
+    mapping, data = order_as_mapping_data(*args)
 
     # check args #
-    for arg in args:
-        if isinstance(arg, aes) and mapping:
-            raise PlotnineError(aes_err)
-        if isinstance(arg, pd.DataFrame) and data:
-            raise PlotnineError(data_err)
+    if mapping is not None and not isinstance(mapping, aes):
+        raise PlotnineError(
+            "Unknown mapping of type {}".format(type(mapping))
+        )
 
-        if isinstance(arg, aes):
-            mapping = arg
-        elif isinstance(arg, pd.DataFrame):
-            data = arg
-        else:
-            msg = "Unknown argument of type '{0}'."
-            raise PlotnineError(msg.format(type(arg)))
+    if data is not None and not isinstance(data, pd.DataFrame):
+        raise PlotnineError(
+            "Unknown data of type {}".format(type(mapping))
+        )
 
     # check kwargs #
-    # kwargs mapping has precedence over that in args
-    if 'mapping' not in kwargs:
+    if mapping is not None:
+        if 'mapping' in kwargs:
+            raise PlotnineError("More than one mapping argument.")
+        else:
+            kwargs['mapping'] = mapping
+    else:
+        if 'mapping' not in kwargs:
+            mapping = aes()
+
+    if kwargs.get('mapping', None) is None:
         kwargs['mapping'] = mapping
 
     if data is not None and 'data' in kwargs:
-        raise PlotnineError(data_err)
+        raise PlotnineError("More than one data argument.")
     elif 'data' not in kwargs:
         kwargs['data'] = data
 
@@ -1010,6 +962,73 @@ def data_mapping_as_kwargs(args, kwargs):
         msg = "Aesthetics {} specified two times."
         raise PlotnineError(msg.format(duplicates))
     return kwargs
+
+
+def ungroup(data):
+    """Return an ungrouped DataFrame, or pass the original data back."""
+
+    if isinstance(data, DataFrameGroupBy):
+        return data.obj
+
+    return data
+
+
+def order_as_mapping_data(*args):
+    """
+    Reorder args to ensure (mapping, data) order
+
+    This function allow the user to pass mapping and data
+    to ggplot and geom in any order.
+
+    Parameter
+    ---------
+    *args : tuple
+        In-line arguments as passed to ggplot, a geom or a stat.
+
+    Returns
+    -------
+    mapping : aes
+    data : pd.DataFrame
+    *rest : tuple
+    """
+    n = len(args)
+    if n == 0:
+        return None, None
+    elif n == 1:
+        single_arg = ungroup(args[0])
+        if isinstance(single_arg, pd.DataFrame):
+            return None, single_arg
+        elif isinstance(single_arg, aes):
+            return single_arg, None
+        else:
+            raise TypeError(
+                "Unknown argument type {!r}, expected mapping "
+                "or dataframe.".format(single_arg)
+            )
+    elif n > 2:
+        raise PlotnineError(
+            "Expected at most 2 positional arguments, "
+            "but I got {}.".format(n)
+        )
+
+    mapping, data = (ungroup(arg) for arg in args)
+    if isinstance(mapping, pd.DataFrame):
+        if data is None or isinstance(data, aes):
+            mapping, data = data, mapping
+
+    if mapping and not isinstance(mapping, aes):
+        raise TypeError(
+            "Unknown argument type {!r}, expected mapping/aes."
+            .format(type(mapping))
+        )
+
+    if not isinstance(data, pd.DataFrame) and data is not None:
+        raise TypeError(
+            "Unknown argument type {!r}, expected dataframe."
+            .format(type(data))
+        )
+
+    return mapping, data
 
 
 def interleave(*arrays):
@@ -1051,7 +1070,7 @@ def resolution(x, zero=True):
     x = np.asarray(x)
 
     # (unsigned) integers or an effective range of zero
-    _x = x[~np.isnan(x)]
+    _x = x[~pd.isna(x)]
     _x = (x.min(), x.max())
     if x.dtype.kind in ('i', 'u') or zero_range(_x):
         return 1
@@ -1169,6 +1188,25 @@ class array_kind:
     def timedelta(arr):
         return arr.dtype.kind == 'm'
 
+    @staticmethod
+    def ordinal(arr):
+        """
+        Return True if array is an ordered categorical
+
+        Parameters
+        ----------
+        arr : numpy.array
+            Must have a dtype
+
+        Returns
+        -------
+        out : bool
+            Whether array `arr` is an ordered categorical
+        """
+        if pdtypes.is_categorical_dtype(arr):
+            return arr.cat.ordered
+        return False
+
 
 def log(x, base=None):
     """
@@ -1195,3 +1233,29 @@ def log(x, base=None):
         return np.log(x)
     else:
         return np.log(x)/np.log(base)
+
+
+class ignore_warnings:
+    """
+    Ignore Warnings Context Manager
+
+    Wrap around warnings.catch_warnings to make ignoring
+    warnings easier.
+
+    Parameters
+    ----------
+    *categories : tuple
+        Warning categories to ignore e.g UserWarning,
+        FutureWarning, RuntimeWarning, ...
+    """
+    def __init__(self, *categories):
+        self.categories = categories
+        self._cm = warnings.catch_warnings()
+
+    def __enter__(self):
+        self._cm.__enter__()
+        for c in self.categories:
+            warnings.filterwarnings('ignore', category=c)
+
+    def __exit__(self, type, value, traceback):
+        return self._cm.__exit__()

@@ -11,7 +11,9 @@ simple plots remain simple.
 To find out about all building blocks that you can use to create a
 plot, check out the documentation_. Since plotnine has an API
 similar to ggplot2, where we lack in coverage the
-`ggplot2 documentation`_ may be of some help.
+ggplot2 documentation may be of some help.
+
+.. _documentation: https://plotnine.readthedocs.io/en/stable/
 """
 import os
 from setuptools import find_packages, setup
@@ -28,7 +30,8 @@ __classifiers__ = [
     'Operating System :: Microsoft :: Windows',
     'Operating System :: Unix',
     'Operating System :: MacOS',
-    'Programming Language :: Python :: 3 :: Only'
+    'Programming Language :: Python :: 3 :: Only',
+    'Framework :: Matplotlib'
 ]
 
 
@@ -45,13 +48,13 @@ def get_required_packages():
 
     Plus any version tests and warnings
     """
-    install_requires = ['mizani >= 0.5.3',
-                        'matplotlib >= 3.0.0',
-                        'numpy',
-                        'scipy >= 1.0.0',
-                        'patsy >= 0.4.1',
-                        'statsmodels >= 0.9.0',
-                        'pandas >= 0.23.4',
+    install_requires = ['mizani >= 0.7.1',
+                        'matplotlib >= 3.1.1',
+                        'numpy >= 1.16.0',
+                        'scipy >= 1.2.0',
+                        'patsy >= 0.5.1',
+                        'statsmodels >= 0.11.1',
+                        'pandas >= 1.1.0',
                         # 'geopandas >= 0.3.0',
                         'descartes >= 1.1.0'
                         ]
@@ -105,7 +108,7 @@ if __name__ == '__main__':
           version=versioneer.get_version(),
           cmdclass=versioneer.get_cmdclass(),
           url=__url__,
-          python_requires='>=3.5',
+          python_requires='>=3.6',
           install_requires=get_required_packages(),
           extras_require=get_extra_packages(),
           packages=find_packages(),

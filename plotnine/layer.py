@@ -1,26 +1,12 @@
-from contextlib import suppress
 from copy import copy, deepcopy
-import numbers
 
 import pandas as pd
-import numpy as np
-import pandas.api.types as pdtypes
-from patsy.eval import EvalEnvironment
 
 from .exceptions import PlotnineError
 from .utils import array_kind, ninteraction
 from .utils import check_required_aesthetics, defaults
-from .aes import aes, get_calculated_aes, stat, make_labels
-from .aes import strip_calculated_markers, NO_GROUP
-
-_TPL_EVAL_FAIL = """\
-Could not evaluate the '{}' mapping: '{}' \
-(original error: {})"""
-
-_TPL_BAD_EVAL_TYPE = """\
-The '{}' mapping: '{}' produced a value of type '{}',\
-but only single items and lists/arrays can be used. \
-(original error: {})"""
+from .mapping.aes import aes, NO_GROUP
+from .mapping.evaluation import stage, evaluate
 
 
 class Layers(list):
@@ -62,9 +48,11 @@ class Layers(list):
     def data(self):
         return [l.data for l in self]
 
-    def generate_data(self, plot_data):
+    def prepare(self, plot):
         for l in self:
-            l.generate_data(plot_data)
+            l.make_layer_data(plot.data)
+            l.make_layer_mapping(plot.mapping)
+            l.make_layer_environments(plot.environment)
 
     def setup_data(self):
         for l in self:
@@ -92,9 +80,9 @@ class Layers(list):
         for l in self:
             l.compute_position(layout)
 
-    def use_defaults(self):
+    def use_defaults(self, data=None, aes_modifiers=None):
         for l in self:
-            l.use_defaults()
+            l.use_defaults(data, aes_modifiers)
 
     def transform(self, scales):
         for l in self:
@@ -111,6 +99,10 @@ class Layers(list):
     def finish_statistics(self):
         for l in self:
             l.finish_statistics()
+
+    def update_labels(self, plot):
+        for l in self:
+            plot._update_labels(l)
 
 
 class layer:
@@ -142,6 +134,9 @@ class layer:
         Whether to make up and show a legend for the mappings
         of this layer. If ``None`` then an automatic/good choice
         is made. Default is ``None``.
+    raster : bool, optional (default: False)
+        If ``True``, draw onto this layer a raster (bitmap) object
+        even if the final image format is vector.
 
     Notes
     -----
@@ -150,7 +145,8 @@ class layer:
     """
 
     def __init__(self, geom=None, stat=None, data=None, mapping=None,
-                 position=None, inherit_aes=True, show_legend=None):
+                 position=None, inherit_aes=True, show_legend=None,
+                 raster=False):
         self.geom = geom
         self.stat = stat
         self.data = data
@@ -158,6 +154,7 @@ class layer:
         self.position = position
         self.inherit_aes = inherit_aes
         self.show_legend = show_legend
+        self.raster = raster
         self._active_mapping = {}
         self.zorder = 0
 
@@ -183,7 +180,8 @@ class layer:
                    'stat': geom._stat,
                    'position': geom._position}
 
-        for param in ('show_legend', 'inherit_aes'):
+        layer_params = ('inherit_aes', 'show_legend', 'raster')
+        for param in layer_params:
             if param in kwargs:
                 lkwargs[param] = kwargs[param]
             elif param in geom.DEFAULT_PARAMS:
@@ -200,12 +198,6 @@ class layer:
         except AttributeError:
             msg = "Cannot add layer to object of type {!r}".format
             raise PlotnineError(msg(type(gg)))
-
-        # Add any new labels
-        mapping = make_labels(self.mapping)
-        default = make_labels(self.stat.DEFAULT_AES)
-        new_labels = defaults(mapping, default)
-        gg.labels = defaults(gg.labels, new_labels)
         return gg
 
     def __deepcopy__(self, memo):
@@ -226,7 +218,7 @@ class layer:
 
         return result
 
-    def generate_data(self, plot_data):
+    def make_layer_data(self, plot_data):
         """
         Generate data to be used by this layer
 
@@ -235,12 +227,23 @@ class layer:
         plot_data : dataframe
             ggplot object data
         """
+        if plot_data is None:
+            plot_data = pd.DataFrame()
+
         # Each layer that does not have data gets a copy of
         # of the ggplot.data. If the has data it is replaced
         # by copy so that we do not alter the users data
         if self.data is None:
-            self.data = plot_data.copy()
-        elif hasattr(self.data, '__call__'):
+            try:
+                self.data = plot_data.copy()
+            except AttributeError:
+                _geom_name = self.geom.__class__.__name__
+                _data_name = plot_data.__class__.__name__
+                raise PlotnineError(
+                    "{} layer expects a dataframe, but it got "
+                    "{} instead.".format(_geom_name, _data_name)
+                )
+        elif callable(self.data):
             self.data = self.data(plot_data)
             if not isinstance(self.data, pd.DataFrame):
                 raise PlotnineError(
@@ -248,35 +251,44 @@ class layer:
         else:
             self.data = self.data.copy()
 
-    def layer_mapping(self, mapping):
+    def make_layer_mapping(self, plot_mapping):
         """
-        Return the mappings that are active in this layer
+        Create the aesthetic mappings to be used by this layer
 
         Parameters
         ----------
-        mapping : aes
-            mappings in the ggplot call
-
-        Notes
-        -----
-        Once computed the layer mappings are also stored
-        in self._active_mapping
+        plot_mapping : aes
+            ggplot object mapping
         """
-        # For certain geoms, it is useful to be able to
-        # ignore the default aesthetics and only use those
-        # set in the layer
         if self.inherit_aes:
-            aesthetics = defaults(self.mapping, mapping)
-        else:
-            aesthetics = self.mapping
+            self.mapping = defaults(self.mapping, plot_mapping)
 
-        # drop aesthetic parameters or the calculated aesthetics
-        calculated = set(get_calculated_aes(aesthetics))
-        d = dict((ae, v) for ae, v in aesthetics.items()
-                 if (ae not in self.geom.aes_params) and
-                 (ae not in calculated))
-        self._active_mapping = aes(**d)
-        return self._active_mapping
+        # aesthetics set as parameters override the same
+        # aesthetics set as mappings, so we can ignore
+        # those in the mapping
+        for ae in self.geom.aes_params:
+            if ae in self.mapping:
+                del self.mapping[ae]
+
+        # Set group as a mapping if set as a parameter
+        if 'group' in self.geom.aes_params:
+            group = self.geom.aes_params['group']
+            # Double quote str so that it evaluates to itself
+            if isinstance(group, str):
+                group = f'"{group}"'
+            self.mapping['group'] = stage(start=group)
+
+    def make_layer_environments(self, plot_environment):
+        """
+        Create the aesthetic mappings to be used by this layer
+
+        Parameters
+        ----------
+        plot_environment : ~patsy.Eval.EvalEnvironment
+            Namespace in which to execute aesthetic expressions.
+        """
+        self.geom.environment = plot_environment
+        self.stat.environment = plot_environment
 
     def compute_aesthetics(self, plot):
         """
@@ -286,64 +298,15 @@ class layer:
         Transformations like 'factor(cyl)' and other
         expression evaluation are  made in here
         """
-        data = self.data
-        aesthetics = self.layer_mapping(plot.mapping)
-
-        # Override grouping if set in layer.
-        with suppress(KeyError):
-            aesthetics['group'] = self.geom.aes_params['group']
-
-        env = EvalEnvironment.capture(eval_env=plot.environment)
-        env = env.with_outer_namespace({'factor': pd.Categorical})
-
-        # Using `type` preserves the subclass of pd.DataFrame
-        evaled = type(data)(index=data.index)
-
-        # If a column name is not in the data, it is evaluated/transformed
-        # in the environment of the call to ggplot
-        for ae, col in aesthetics.items():
-            if isinstance(col, str):
-                if col in data:
-                    evaled[ae] = data[col]
-                else:
-                    try:
-                        new_val = env.eval(col, inner_namespace=data)
-                    except Exception as e:
-                        raise PlotnineError(
-                            _TPL_EVAL_FAIL.format(ae, col, str(e)))
-
-                    try:
-                        evaled[ae] = new_val
-                    except Exception as e:
-                        raise PlotnineError(
-                            _TPL_BAD_EVAL_TYPE.format(
-                                ae, col, str(type(new_val)), str(e)))
-            elif pdtypes.is_list_like(col):
-                n = len(col)
-                if len(data) and n != len(data) and n != 1:
-                    raise PlotnineError(
-                        "Aesthetics must either be length one, " +
-                        "or the same length as the data")
-                # An empty dataframe does not admit a scalar value
-                elif len(evaled) and n == 1:
-                    col = col[0]
-                evaled[ae] = col
-            elif is_known_scalar(col):
-                if not len(evaled):
-                    col = [col]
-                evaled[ae] = col
-            else:
-                msg = "Do not know how to deal with aesthetic '{}'"
-                raise PlotnineError(msg.format(ae))
-
-        evaled_aes = aes(**dict((col, col) for col in evaled))
+        evaled = evaluate(self.mapping._starting, self.data, plot.environment)
+        evaled_aes = aes(**{col: col for col in evaled})
         plot.scales.add_defaults(evaled, evaled_aes)
 
-        if len(data) == 0 and len(evaled) > 0:
+        if len(self.data) == 0 and len(evaled) > 0:
             # No data, and vectors suppled to aesthetics
             evaled['PANEL'] = 1
         else:
-            evaled['PANEL'] = data['PANEL']
+            evaled['PANEL'] = self.data['PANEL']
 
         self.data = add_group(evaled)
 
@@ -369,31 +332,11 @@ class layer:
         if not len(data):
             return type(data)()
 
-        # Assemble aesthetics from layer, plot and stat mappings
-        aesthetics = deepcopy(self.mapping)
-        if self.inherit_aes:
-            aesthetics = defaults(aesthetics, plot.mapping)
+        # Mixin default stat aesthetic mappings
+        aesthetics = defaults(self.mapping, self.stat.DEFAULT_AES)
+        stat_data = evaluate(aesthetics._calculated, data, plot.environment)
 
-        aesthetics = defaults(aesthetics, self.stat.DEFAULT_AES)
-
-        # The new aesthetics are those that the stat calculates
-        # and have been mapped to with dot dot notation
-        # e.g aes(y='..count..'), y is the new aesthetic and
-        # 'count' is the computed column in data
-        new = {}  # {'aesthetic_name': 'calculated_stat'}
-        stat_data = type(data)()
-        stat_namespace = dict(stat=stat)
-        env = plot.environment.with_outer_namespace(stat_namespace)
-        for ae in get_calculated_aes(aesthetics):
-            new[ae] = strip_calculated_markers(aesthetics[ae])
-            # In conjuction with the pd.concat at the end,
-            # be careful not to create duplicate columns
-            # for cases like y='..y..'
-            if new[ae] != ae:
-                stat_data[ae] = env.eval(
-                    new[ae], inner_namespace=data)
-
-        if not new:
+        if not len(stat_data):
             return
 
         # (see stat_spoke for one exception)
@@ -406,6 +349,7 @@ class layer:
         self.data = pd.concat([data[columns], stat_data], axis=1)
 
         # Add any new scales, if needed
+        new = {ae: ae for ae in stat_data.columns}
         plot.scales.add_defaults(self.data, new)
 
     def setup_data(self):
@@ -430,6 +374,9 @@ class layer:
         Compute the position of each geometric object
         in concert with the other objects in the panel
         """
+        if len(self.data) == 0:
+            return self.data
+
         params = self.position.setup_params(self.data)
         data = self.position.setup_data(self.data, params)
         data = self.position.compute_layer(data, params, layout)
@@ -450,18 +397,31 @@ class layer:
         params = copy(self.geom.params)
         params.update(self.stat.params)
         params['zorder'] = self.zorder
+        params['raster'] = self.raster
         self.data = self.geom.handle_na(self.data)
         # At this point each layer must have the data
         # that is created by the plot build process
         self.geom.draw_layer(self.data, layout, coord, **params)
 
-    def use_defaults(self, data=None):
+    def use_defaults(self, data=None, aes_modifiers=None):
         """
         Prepare/modify data for plotting
+
+        Parameters
+        ----------
+        data : dataframe, optional
+            Data
+        aes_modifiers : dict
+            Expression to evaluate and replace aesthetics in
+            the data.
         """
         if data is None:
             data = self.data
-        return self.geom.use_defaults(data)
+
+        if aes_modifiers is None:
+            aes_modifiers = self.mapping._scaled
+
+        return self.geom.use_defaults(data, aes_modifiers)
 
     def finish_statistics(self):
         """
@@ -504,16 +464,3 @@ def discrete_columns(df, ignore):
                 continue
             lst.append(col)
     return lst
-
-
-def is_known_scalar(value):
-    """
-    Return True if value is a type we expect in a dataframe
-    """
-    def _is_datetime_or_timedelta(value):
-        # Using pandas.Series helps catch python, numpy and pandas
-        # versions of these types
-        return pd.Series(value).dtype.kind in ('M', 'm')
-
-    return not np.iterable(value) and (isinstance(value, numbers.Number) or
-                                       _is_datetime_or_timedelta(value))

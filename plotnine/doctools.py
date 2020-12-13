@@ -1,6 +1,5 @@
 import re
 from textwrap import indent, dedent, wrap
-from collections import OrderedDict
 from functools import lru_cache
 
 import numpy as np
@@ -9,10 +8,23 @@ import numpy as np
 # Parameter arguments that are listed first in the geom and
 # stat class signatures
 
-common_geom_params = ['mapping', 'data', 'stat', 'position',
-                      'na_rm', 'inherit_aes', 'show_legend']
-common_geom_param_values = {'mapping': None, 'data': None,
-                            'inherit_aes': True, 'show_legend': None}
+common_geom_params = [
+    'mapping',
+    'data',
+    'stat',
+    'position',
+    'na_rm',
+    'inherit_aes',
+    'show_legend',
+    'raster'
+]
+common_geom_param_values = {
+    'mapping': None,
+    'data': None,
+    'inherit_aes': True,
+    'show_legend': None,
+    'raster': False
+}
 
 common_stat_params = ['mapping', 'data', 'geom', 'position', 'na_rm']
 common_stat_param_values = common_geom_param_values
@@ -82,7 +94,11 @@ default, includes any aesthetics that are mapped. If a :class:`bool`, \
 :py:`False` never includes and :py:`True` always includes. A \
 :class:`dict` can be used to *exclude* specific aesthetis of the layer \
 from showing in the legend. e.g :py:`show_legend={'color': False}`, \
-any other aesthetic are included by default."""
+any other aesthetic are included by default.""",
+
+    'raster': """\
+If ``True``, draw onto this layer a raster (bitmap) object even if\
+the final image is in vector format."""
 }
 
 
@@ -102,6 +118,8 @@ inherit_aes : bool, optional (default: {default_inherit_aes})
     {inherit_aes}
 show_legend : bool or dict, optional (default: None)
     {show_legend}
+raster : bool, optional (default: {default_raster})
+    {raster}
 """
 
 STAT_PARAMS_TPL = """\
@@ -110,7 +128,7 @@ mapping : aes, optional
     {_aesthetics_doc}
 data : dataframe, optional
     {data}
-geom : str or stat, optional (default: {default_geom})
+geom : str or geom, optional (default: {default_geom})
     {stat}
 position : str or position, optional (default: {default_position})
     {position}
@@ -287,7 +305,7 @@ def parameters_str_to_dict(param_section):
 
     Returns
     -------
-    d : OrderedDict
+    d : dict
         Dictionary of the parameters in the order that they
         are described in the parameters section. The dict
         is of the form ``{param: all_parameter_text}``.
@@ -298,7 +316,7 @@ def parameters_str_to_dict(param_section):
     --------
     :func:`parameters_dict_to_str`
     """
-    d = OrderedDict()
+    d = {}
     previous_param = None
     param_desc = None
     for line in param_section.split('\n'):
@@ -338,6 +356,37 @@ def parameters_dict_to_str(d):
     return '\n'.join(d.values())
 
 
+def qualified_name(s, prefix):
+    """
+    Return the qualified name of s
+
+    Only if s does not start with the prefix
+
+    Examples
+    --------
+    >>> qualified_name('bin', 'stat_')
+    '~plotnine.stats.stat_bin'
+    >>> qualified_name('point', 'geom_')
+    '~plotnine.geoms.geom_point'
+    >>> qualified_name('stack', 'position_')
+    '~plotnine.positions.position_'
+    """
+    lookup = {
+        'stat_': '~plotnine.stats.stat_',
+        'geom_': '~plotnine.geoms.geom_',
+        'position_': '~plotnine.positions.position_'
+    }
+    if isinstance(s, str):
+        if not s.startswith(prefix) and prefix in lookup:
+            pre = lookup[prefix]
+            s = f'{pre}{s}'
+    elif isinstance(s, type):
+        s = s.__name__
+    else:
+        s = s.__class__.__name__
+    return s
+
+
 def document_geom(geom):
     """
     Create a structured documentation for the geom
@@ -357,8 +406,10 @@ def document_geom(geom):
     usage = GEOM_SIGNATURE_TPL.format(signature=signature)
 
     # aesthetics
-    contents = OrderedDict(('**{}**'.format(ae), '')
-                           for ae in sorted(geom.REQUIRED_AES))
+    contents = {
+        '**{}**'.format(ae): ''
+        for ae in sorted(geom.REQUIRED_AES)
+    }
     if geom.DEFAULT_AES:
         d = geom.DEFAULT_AES.copy()
         d['group'] = ''  # All geoms understand the group aesthetic
@@ -373,10 +424,11 @@ def document_geom(geom):
     # common_parameters
     d = geom.DEFAULT_PARAMS
     common_parameters = GEOM_PARAMS_TPL.format(
-        default_stat=d['stat'],
-        default_position=d['position'],
+        default_stat=qualified_name(d['stat'], 'stat_'),
+        default_position=qualified_name(d['position'], 'position_'),
         default_na_rm=d['na_rm'],
         default_inherit_aes=d.get('inherit_aes', True),
+        default_raster=d.get('raster', False),
         _aesthetics_doc=aesthetics_doc,
         **common_params_doc)
 
@@ -406,8 +458,10 @@ def document_stat(stat):
     usage = STAT_SIGNATURE_TPL.format(signature=signature)
 
     # aesthetics
-    contents = OrderedDict(('**{}**'.format(ae), '')
-                           for ae in sorted(stat.REQUIRED_AES))
+    contents = {
+        '**{}**'.format(ae): ''
+        for ae in sorted(stat.REQUIRED_AES)
+    }
     contents.update(sorted(stat.DEFAULT_AES.items()))
     table = dict_to_table(('Aesthetic', 'Default value'), contents)
     aesthetics_table = AESTHETICS_TABLE_TPL.format(table=table)
@@ -418,8 +472,8 @@ def document_stat(stat):
     # common_parameters
     d = stat.DEFAULT_PARAMS
     common_parameters = STAT_PARAMS_TPL.format(
-            default_geom=d['geom'],
-            default_position=d['position'],
+            default_geom=qualified_name(d['geom'], 'geom_'),
+            default_position=qualified_name(d['position'], 'position_'),
             default_na_rm=d['na_rm'],
             _aesthetics_doc=aesthetics_doc,
             **common_params_doc)

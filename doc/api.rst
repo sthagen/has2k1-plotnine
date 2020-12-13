@@ -17,11 +17,28 @@ Plot creation
 
    ggplot
    qplot
-   aes
    ~watermark.watermark
    ~layer.layer
    ~animation.PlotnineAnimation
    ~ggplot.save_as_pdf_pages
+
+Mapping Aesthetics
+------------------
+
+Aesthetics are the visual properties of a plot. The following functions control
+how the data (and calculations based on the data) is mapped to the aesthetics.
+
+.. currentmodule:: plotnine.mapping
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+   :template: members-example.rst
+
+   aes
+   after_stat
+   after_scale
+   stage
 
 geoms
 =====
@@ -76,6 +93,7 @@ distinct visual aspects of the representation are controlled by the
    geom_quantile
    geom_qq
    geom_qq_line
+   geom_raster
    geom_rect
    geom_ribbon
    geom_rug
@@ -97,6 +115,8 @@ Related to geoms
    :template: main.rst
 
    annotate
+   annotation_logticks
+   annotation_stripes
    arrow
 
 
@@ -425,6 +445,7 @@ Themes control the visual appearance of the non-data elements the plot.
    theme_void
    theme_xkcd
 
+.. _themeables:
 
 Themeables
 ----------
@@ -574,6 +595,7 @@ to set a default theme using :func:`~plotnine.themes.theme_set`.
    :template: main.rst
 
    aspect_ratio
+   base_family
    close_all_figures
    current_theme
    dpi

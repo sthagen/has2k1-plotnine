@@ -7,14 +7,13 @@ import matplotlib.collections as mcoll
 import matplotlib.text as mtext
 import matplotlib.transforms as mtransforms
 from matplotlib.offsetbox import (TextArea, HPacker, VPacker)
-from matplotlib.offsetbox import AuxTransformBox
+from matplotlib.offsetbox import AuxTransformBox, DrawingArea
 from matplotlib.colors import ListedColormap
 from mizani.bounds import rescale
 
-from ..aes import rename_aesthetics
+from ..mapping.aes import rename_aesthetics
 from ..exceptions import PlotnineWarning
 from ..scales.scale import scale_continuous
-from ..utils import ColoredDrawingArea
 from .guide import guide
 
 
@@ -27,7 +26,8 @@ class guide_colorbar(guide):
     barwidth : float
         Width (in pixels) of the colorbar.
     barheight : float
-        Height (in pixels) of the colorbar.
+        Height (in pixels) of the colorbar. The height is multiplied by
+        a factor of 5.
     nbin : int
         Number of bins for drawing a colorbar. A larger value yields
         a smoother colorbar. Default is 20.
@@ -46,8 +46,8 @@ class guide_colorbar(guide):
 
     """
     # bar
-    barwidth = 23
-    barheight = 23*5
+    barwidth = None
+    barheight = None
     nbin = 20  # maximum number of bins
     raster = True
 
@@ -142,14 +142,20 @@ class guide_colorbar(guide):
         """
         obverse = slice(0, None)
         reverse = slice(None, None, -1)
-        width = self.barwidth
-        height = self.barheight
         nbars = len(self.bar)
-        length = height
         direction = self.direction
         colors = self.bar['color'].tolist()
         labels = self.key['label'].tolist()
         themeable = self.theme.figure._themeable
+        _d = self._default
+
+        # 1.45 makes the default colourbar wider than the
+        # legend entry boxes.
+        width = (self.barwidth or _d('legend_key_width') or 16) * 1.45
+        height = (self.barheight or _d('legend_key_height') or 16) * 1.45
+
+        height *= 5
+        length = height
 
         # When there is more than one guide, we keep
         # record of all of them using lists
@@ -182,7 +188,7 @@ class guide_colorbar(guide):
         themeable['legend_title'].append(title_box)
 
         # colorbar and ticks #
-        da = ColoredDrawingArea(width, height, 0, 0)
+        da = DrawingArea(width, height, 0, 0)
         if self.raster:
             add_interpolated_colorbar(da, colors, direction)
         else:
@@ -205,7 +211,7 @@ class guide_colorbar(guide):
                                                    direction)
             themeable['legend_text_colorbar'].extend(legend_text)
         else:
-            labels_da = ColoredDrawingArea(0, 0)
+            labels_da = DrawingArea(0, 0)
 
         # colorbar + labels #
         if direction == 'vertical':

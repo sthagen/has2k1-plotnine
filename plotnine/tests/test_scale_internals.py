@@ -6,11 +6,15 @@ import pandas as pd
 import pytest
 
 from plotnine import ggplot, aes, geom_point, expand_limits, theme
-from plotnine import lims, element_text
-from plotnine.scales import scale_color
+from plotnine import geom_col, geom_bar, lims, element_text, annotate
+from plotnine.scales import scale_color, scale_color_manual
 from plotnine.scales import scale_identity
 from plotnine.scales import scale_manual
 from plotnine.scales import scale_xy
+from plotnine.scales.scale_xy import (scale_x_continuous,
+                                      scale_y_continuous,
+                                      scale_x_discrete,
+                                      scale_y_discrete)
 from plotnine.scales.scale_alpha import (scale_alpha_discrete,
                                          scale_alpha_continuous)
 from plotnine.scales.scale_linetype import (scale_linetype_discrete,
@@ -137,6 +141,16 @@ def test_continuous_color_palettes():
     _assert(s)
 
 
+def test_color_aliases():
+    # American and British names should refer to the same scales
+    names = ((s, s.replace('color', 'colour'))
+             for s in dir(scale_color) if s.startswith('scale_color')
+             )
+
+    for a, b in names:
+        assert getattr(scale_color, a) is getattr(scale_color, b)
+
+
 def test_fill_scale_aesthetics():
     for name in scale_color.__dict__:
         if name.startswith('scale_fill'):
@@ -151,8 +165,10 @@ def test_linetype_palettes():
     assert(len(items) == N)
     assert(all([isinstance(x, str) for x in items]))
 
-    items = s.palette(N+5)
-    assert(all([isinstance(x, str) for x in items[:N]]))
+    with pytest.warns(UserWarning):
+        # More values than palette has
+        items = s.palette(N+5)
+        assert(all([isinstance(x, str) for x in items[:N]]))
 
     with pytest.raises(PlotnineError):
         s = scale_linetype_continuous()
@@ -165,17 +181,21 @@ def test_shape_palettes():
     assert(len(items) == N)
     assert(all([isinstance(x, str) for x in items]))
 
-    items = s.palette(N+5)
-    assert(all([isinstance(x, str) for x in items[:N]]))
+    with pytest.warns(UserWarning):
+        # More values than palette has
+        items = s.palette(N+5)
+        assert(all([isinstance(x, str) for x in items[:N]]))
 
     with pytest.raises(PlotnineError):
         scale_shape_continuous()
 
 
 def test_size_palette():
-    s = scale_size_discrete()
-    items = s.palette(9)
-    assert(len(items) == 9)
+    with pytest.warns(PlotnineWarning):
+        # Warns against a discrete size scale
+        s = scale_size_discrete()
+        items = s.palette(9)
+        assert(len(items) == 9)
 
     s = scale_size_continuous(range=(1, 6))
     frac = 0.5
@@ -223,11 +243,24 @@ def test_scale_manual():
     sc = scale_manual.scale_color_manual(values)
     assert sc.palette(3) == values
 
+    # Breaks are matched with values
+    sc1 = scale_manual.scale_color_manual(
+        breaks=[True, False],
+        values=['blue', 'red']
+    )
+    sc2 = scale_manual.scale_color_manual(
+        breaks=[True, False],
+        values=['red', 'blue']
+    )
+    assert sc1.map([True, False, True, False]) == ['blue', 'red'] * 2
+    assert sc2.map([True, False, True, False]) == ['red', 'blue'] * 2
+
 
 def test_alpha_palette():
-    s = scale_alpha_discrete()
-    items = s.palette(9)
-    assert(len(items) == 9)
+    with pytest.warns(PlotnineWarning):
+        s = scale_alpha_discrete()
+        items = s.palette(9)
+        assert(len(items) == 9)
 
     s = scale_alpha_continuous(range=(0.1, 1))
     value = s.palette(0.5)
@@ -235,54 +268,50 @@ def test_alpha_palette():
 
 
 def test_xy_palette():
-    sc = scale_xy
-
-    s = sc.scale_x_discrete()
+    s = scale_x_discrete()
     value = s.palette(3)
     assert(value == 3)
 
-    s = sc.scale_y_discrete()
+    s = scale_y_discrete()
     value = s.palette(11.5)
     assert(value == 11.5)
 
-    s = sc.scale_x_continuous()
+    s = scale_x_continuous()
     value = s.palette(3.63)
     assert(value == 3.63)
 
-    s = sc.scale_y_continuous()
+    s = scale_y_continuous()
     value = s.palette(11.52)
     assert(value == 11.52)
 
 
 def test_xy_limits():
-    sc = scale_xy
     lst = [1, 2, 3]
     arr = np.array(lst)
     series = pd.Series(lst)
-    s1 = sc.scale_x_discrete(limits=lst)
-    s2 = sc.scale_x_discrete(limits=arr)
-    s3 = sc.scale_x_discrete(limits=series)
+    s1 = scale_x_discrete(limits=lst)
+    s2 = scale_x_discrete(limits=arr)
+    s3 = scale_x_discrete(limits=series)
     assert all(s2.limits == s1.limits)
     assert all(s3.limits == s1.limits)
 
 
 def test_setting_limits():
-    sc = scale_xy
     lst = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
-    s = sc.scale_x_continuous()
+    s = scale_x_continuous()
     s.train(lst)
     assert s.limits == (1, 10)
 
-    s = sc.scale_x_continuous(limits=(3, 7))
+    s = scale_x_continuous(limits=(3, 7))
     s.train(lst)
     assert s.limits == (3, 7)
 
-    s = sc.scale_x_continuous(limits=(3, None))
+    s = scale_x_continuous(limits=(3, None))
     s.train(lst)
     assert s.limits == (3, 10)
 
-    s = sc.scale_x_continuous(limits=(None, 7))
+    s = scale_x_continuous(limits=(None, 7))
     s.train(lst)
     assert s.limits == (1, 7)
 
@@ -291,23 +320,49 @@ def test_setting_limits():
     assert s.limits == tuple('abcdefg')
 
 
+def test_discrete_xy_scale_limits():
+    lst = list('abcd')
+    x = pd.Series(pd.Categorical(lst, ordered=True))
+
+    s = scale_x_discrete()
+    s.train(x)
+    assert s.limits == lst
+
+    s = scale_x_discrete(limits=reversed)
+    s.train(x)
+    assert s.limits == lst[::-1]
+
+
+def test_discrete_xy_scale_drop_limits():
+    df = pd.DataFrame({
+        'x': list('aaaabbbbccccddd'),
+        'c': list('112312231233123')
+    })
+
+    p = (ggplot(df)
+         + geom_bar(aes(x='x', fill='c'))
+         + scale_x_discrete(limits=list('abc'))
+         )
+    with pytest.warns(PlotnineWarning):
+        assert p == 'discrete_xy_scale_drop_limits'
+
+
 def test_setting_limits_transformed():
-    sc = scale_xy
     lst = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
-    s = sc.scale_y_continuous(trans='log10')
+    s = scale_y_continuous(trans='log10')
     s.train(lst)
     assert s.limits == (1, 10)
 
-    s = sc.scale_y_continuous(trans='log10', limits=[2, 7])
+    s = scale_y_continuous(trans='log10', limits=[2, 7])
     s.train(lst)
     assert s.limits == (np.log10(2), np.log10(7))
 
-    s = sc.scale_y_continuous(trans='log10', limits=[2, None])
+    s = scale_y_continuous(trans='log10', limits=[2, None])
     s.train(lst)
     assert s.limits == (np.log10(2), np.log10(10))
 
-    s = sc.scale_y_continuous(trans='log10', limits=[None, 7])
+    s = scale_y_continuous(trans='log10', limits=[None, 7])
     s.train(lst)
     assert s.limits == (np.log10(1), np.log10(7))
 
@@ -317,7 +372,7 @@ def test_minor_breaks():
     x = np.arange(n)
 
     # Default
-    s = scale_xy.scale_x_continuous()
+    s = scale_x_continuous()
     s.train(x)
     breaks = s.get_breaks()
     minor_breaks = s.get_minor_breaks(breaks)
@@ -326,7 +381,7 @@ def test_minor_breaks():
 
     # List
     expected_minor_breaks = [2, 4, 6, 8]
-    s = scale_xy.scale_x_continuous(minor_breaks=expected_minor_breaks)
+    s = scale_x_continuous(minor_breaks=expected_minor_breaks)
     s.train(x)
     breaks = s.get_breaks()
     minor_breaks = s.get_minor_breaks(breaks)
@@ -336,7 +391,7 @@ def test_minor_breaks():
     def func(limits):
         return np.linspace(limits[0], limits[1], n)
 
-    s = scale_xy.scale_x_continuous(minor_breaks=func)
+    s = scale_x_continuous(minor_breaks=func)
     s.train(x)
     breaks = s.get_breaks()
     minor_breaks = s.get_minor_breaks(breaks)
@@ -346,7 +401,7 @@ def test_minor_breaks():
     assert not (_breaks & set(minor_breaks))
 
     # Number of minor breaks
-    s = scale_xy.scale_x_continuous(limits=[0, 20], minor_breaks=3)
+    s = scale_x_continuous(limits=[0, 20], minor_breaks=3)
     minor_breaks = s.get_minor_breaks(major=[0, 10, 20])
     expected_minor_breaks = [2.5, 5, 7.5, 12.5, 15, 17.5]
     assert np.allclose(minor_breaks, expected_minor_breaks, rtol=1e-12)
@@ -393,13 +448,12 @@ def test_make_scale_and_datetimes():
 
 
 def test_scale_continous_breaks():
-    sc = scale_xy
     x = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     breaks = [2, 4, 6, 8, 10]
 
     # Array breaks should not trip up the conditional checks
-    s1 = sc.scale_x_continuous(breaks=breaks, limits=(1, 10))
-    s2 = sc.scale_x_continuous(breaks=np.array(breaks), limits=(1, 10))
+    s1 = scale_x_continuous(breaks=breaks, limits=(1, 10))
+    s2 = scale_x_continuous(breaks=np.array(breaks), limits=(1, 10))
     s1.train(x)
     s2.train(x)
     assert list(s1.get_breaks()) == list(s2.get_breaks())
@@ -416,7 +470,7 @@ def test_scale_without_a_mapping():
         p.draw_test()
 
 
-def scale_scale_discrete_mapping_nulls():
+def test_scale_discrete_mapping_nulls():
     a = np.array([1, 2, 3], dtype=object)
 
     sc = _scale_manual([1, 2, 3, 4, 5])
@@ -430,8 +484,18 @@ def scale_scale_discrete_mapping_nulls():
     res = sc.map([1, 2, 3])
     expected = np.array([1, np.nan, 3])
     assert res[0] == expected[0]
-    assert res[1] is expected[1]
+    assert all(np.isnan([res[1], expected[1]]))
     assert res[2] == expected[2]
+
+
+def test_scale_continuous_mapping_nulls():
+    # Handling of nans
+    sc = scale_color.scale_fill_gradient(
+        'yellow', 'blue', na_value='green'
+    )
+    sc.train([1, 10])
+    res = sc.map([1, 5, np.nan, 10])
+    assert res[2] == 'green'
 
 
 def test_multiple_aesthetics():
@@ -462,7 +526,8 @@ def test_missing_manual_dict_aesthetic():
          + geom_point(size=3)
          + scale_manual.scale_color_manual(values)
          )
-    assert p + _theme == 'missing_manual_dict_aesthetic'
+    with pytest.warns(PlotnineWarning):
+        assert p + _theme == 'missing_manual_dict_aesthetic'
 
 
 def test_missing_data_discrete_scale():
@@ -564,20 +629,21 @@ def test_breaks_and_labels_outside_of_limits():
     df = pd.DataFrame({'x': range(5, 11), 'y': range(5, 11)})
     p = (ggplot(aes('x', 'y'), data=df)
          + geom_point()
-         + scale_xy.scale_x_continuous(
+         + scale_x_continuous(
              limits=[7, 9.5],
              breaks=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
              labels=['one', 'two', 'three', 'four', 'five', 'six', 'seven',
                      'eight', 'nine', 'ten', 'eleven']
          )
          )
-    assert p == 'breaks_and_labels_outside_of_limits'
+    with pytest.warns(PlotnineWarning):
+        assert p == 'breaks_and_labels_outside_of_limits'
 
 
 def test_changing_scale_transform():
     # No warning
     with pytest.warns(None):
-        scale_xy.scale_x_continuous(trans='reverse')
+        scale_x_continuous(trans='reverse')
         scale_xy.scale_x_reverse(trans='reverse')
         scale_xy.scale_x_log10(trans='log10')
 
@@ -608,3 +674,42 @@ def test_datetime_scale_limits():
          )
 
     assert p == 'datetime_scale_limits'
+
+
+def test_ordinal_scale():
+    df = pd.DataFrame({
+        'x': pd.Categorical(list('abcd'), ordered=True),
+        'y': [1, 2, 3, 4]
+    })
+
+    p = (ggplot(df)
+         + aes('x', 'y', color='-y', fill='x')
+         + geom_col(size=4)
+         + _theme
+         )
+
+    assert p + _theme == 'ordinal_scale'
+
+
+def test_layer_with_only_infs():
+    df = pd.DataFrame({'x': ['a', 'b']})
+    p = (ggplot(df, aes('x', 'x'))
+         + annotate('rect', xmin=-np.inf, xmax=np.inf, ymin=-np.inf,
+                    ymax=np.inf, fill='black', alpha=.25)
+         + geom_point(color='red', size=3)
+         )
+    p = p.build_test()
+    assert isinstance(p.scales.get_scales('x'), scale_x_discrete)
+
+
+def test_discrete_scale_exceeding_maximum_number_of_values():
+    df = pd.DataFrame({
+        # not that it's the second c that triggered a bug in scale_discrete.map
+        'x': pd.Categorical(['c', 'a', 'c', 'b', 'c']),
+        'y': [0, 1, 2, 2, 3]})
+    p = (ggplot(df, aes('x', 'y', color='x', shape='x'))
+         + geom_point()
+         + scale_color_manual(['red', 'blue'])
+         )
+    with pytest.warns(PlotnineWarning):
+        p.draw()

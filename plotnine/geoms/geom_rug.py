@@ -53,8 +53,8 @@ class geom_rug(geom):
             return
 
         rugs = []
-        xmin, xmax = panel_params['x_range']
-        ymin, ymax = panel_params['y_range']
+        xmin, xmax = panel_params.x.range
+        ymin, ymax = panel_params.y.range
         xheight = (xmax-xmin) * params['length']
         yheight = (ymax-ymin) * params['length']
 
@@ -81,9 +81,12 @@ class geom_rug(geom):
                 rugs.extend(make_line_segments(x, y, ispath=False))
 
         color = to_rgba(data['color'], data['alpha'])
-        coll = mcoll.LineCollection(rugs,
-                                    edgecolor=color,
-                                    linewidth=data['size'],
-                                    linestyle=data['linetype'],
-                                    zorder=params['zorder'])
+        coll = mcoll.LineCollection(
+            rugs,
+            edgecolor=color,
+            linewidth=data['size'],
+            linestyle=data['linetype'],
+            zorder=params['zorder'],
+            rasterized=params['raster']
+        )
         ax.add_collection(coll)

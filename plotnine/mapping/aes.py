@@ -1,6 +1,11 @@
 import re
 from copy import deepcopy
 from contextlib import suppress
+from collections.abc import Iterable
+
+import pandas as pd
+
+from .evaluation import after_stat, stage
 
 __all__ = ['aes']
 
@@ -16,10 +21,9 @@ scaled_aesthetics = {
     'linetype', 'shape', 'size', 'stroke'
 }
 
-
 NO_GROUP = -1
 
-# Calculated aesthetics searchers
+# Aesthetics modifying searchers, DEPRECATED
 STAT_RE = re.compile(r'\bstat\(')
 DOTS_RE = re.compile(r'\.\.([a-zA-Z0-9_]+)\.\.')
 
@@ -80,8 +84,8 @@ class aes(dict):
             ggplot(df, aes(x='df.index', y='beta'))
 
             # If `count` is an aesthetic calculated by a stat
-            ggplot(df, aes(x='alpha', y='stat(count)'))
-            ggplot(df, aes(x='alpha', y='stat(count/np.max(count))'))
+            ggplot(df, aes(x='alpha', y=after_stat('count')))
+            ggplot(df, aes(x='alpha', y=after_stat('count/np.max(count)')))
 
       The strings in the expression can refer to;
 
@@ -104,6 +108,24 @@ class aes(dict):
         # valid python variable name
         ggplot(df, aes(x='df.index', y='np.sin(gam ma)'))
 
+    ``aes`` has 2 internal methods you can use to transform variables being
+    mapped.
+
+        1. ``factor`` - This function turns the variable into a factor.
+            It is just an alias to ``pd.Caterogical``::
+
+                ggplot(mtcars, aes(x='factor(cyl)')) + geom_bar()
+
+        2. ``reorder`` - This function changes the order of first variable
+            based on values of the second variable::
+
+                df = pd.DataFrame({
+                    'x': ['b', 'd', 'c', 'a'],
+                    'y': [1, 2, 3, 4]
+                })
+
+                ggplot(df, aes('reorder(x, y)', 'y')) + geom_col()
+
     .. rubric:: The group aesthetic
 
     ``group`` is a special aesthetic that the user can *map* to.
@@ -112,12 +134,85 @@ class aes(dict):
     groups are sufficient. However, there may be cases were it is
     handy to map to it.
 
+    See Also
+    --------
+    :func:`after_stat` : For how to map aesthetics to variable calculated
+        by the stat
+    :func:`after_scale` : For how to alter aesthetics after the data has been
+        mapped by the scale.
+    :class:`stage` : For how to map to evaluate the mapping to aesthetics at
+        more than one stage of the plot building pipeline.
     """
 
     def __init__(self, *args, **kwargs):
         kwargs = rename_aesthetics(kwargs)
         kwargs.update(zip(('x', 'y'), args))
+        kwargs = self._convert_deprecated_expr(kwargs)
         self.update(kwargs)
+
+    def _convert_deprecated_expr(self, kwargs):
+        """
+        Convert calculated aesthetic expression mapping to use
+        the stage class.
+
+        e.g.
+        'stat(count)' to after_stat(count)
+        '..count..' to after_stat(count)
+        """
+        for name, value in kwargs.items():
+            if not isinstance(value, stage):
+                if is_calculated_aes(value):
+                    _after_stat = strip_calculated_markers(value)
+                    kwargs[name] = after_stat(_after_stat)
+        return kwargs
+
+    @property
+    def _starting(self):
+        """
+        Return the subset of aesthetics mapped from the layer data
+
+        The mapping is a dict of the form ``{name: expr}``, i.e the
+        stage class has been peeled off.
+        """
+        d = {}
+        for name, value in self.items():
+            if not isinstance(value, stage):
+                d[name] = value
+            elif isinstance(value, stage) and value.start is not None:
+                d[name] = value.start
+
+        return d
+
+    @property
+    def _calculated(self):
+        """
+        Return the subset of aesthetics that are mapped from the
+        calculated statistics
+
+        The mapping is a dict of the form ``{name: expr}``, i.e the
+        stage class has been peeled off.
+        """
+        d = {}
+        for name, value in self.items():
+            if isinstance(value, stage) and value.after_stat is not None:
+                d[name] = value.after_stat
+
+        return d
+
+    @property
+    def _scaled(self):
+        """
+        Return the subset of aesthetics mapped using layer aesthetics
+
+        The mapping is a dict of the form ``{name: expr}``, i.e the
+        stage class has been peeled off.
+        """
+        d = {}
+        for name, value in self.items():
+            if isinstance(value, stage) and value.after_scale is not None:
+                d[name] = value.after_scale
+
+        return d
 
     def __deepcopy__(self, memo):
         """
@@ -140,6 +235,9 @@ class aes(dict):
         gg.labels.update(make_labels(self))
         return gg
 
+    def copy(self):
+        return aes(**self)
+
 
 def rename_aesthetics(obj):
     """
@@ -156,7 +254,7 @@ def rename_aesthetics(obj):
         Object that contains aesthetics names
     """
     if isinstance(obj, dict):
-        for name in obj:
+        for name in tuple(obj.keys()):
             new_name = name.replace('colour', 'color')
             if name != new_name:
                 obj[new_name] = obj.pop(name)
@@ -166,25 +264,15 @@ def rename_aesthetics(obj):
     return obj
 
 
-def get_calculated_aes(aesthetics):
-    """
-    Return a list of the aesthetics that are calculated
-    """
-    calculated_aesthetics = []
-    for name, value in aesthetics.items():
-        if is_calculated_aes(value):
-            calculated_aesthetics.append(name)
-    return calculated_aesthetics
-
-
 def is_calculated_aes(ae):
     """
-    Return a True if of the aesthetics that are calculated
+    Return a True if aesthetic mapping will happen after the calculating
+    the statistics.
 
     Parameters
     ----------
     ae : object
-        Aesthetic mapping
+        Single aesthetic mapping
 
     >>> is_calculated_aes('density')
     False
@@ -214,26 +302,9 @@ def is_calculated_aes(ae):
     return False
 
 
-def stat(x):
-    """
-    Return calculated aesthetic
-
-    Aesthetics wrapped around the calc function evaluated
-    *after* the statistics have been calculated. This gives
-    the user a chance to use any aesthetic columns created
-    by the statistic.
-
-    Paremeters
-    ----------
-    x : object
-        An expression
-    """
-    return x
-
-
 def strip_stat(value):
     """
-    Remove calc function that mark calculated aesthetics
+    Remove stat function that mark calculated aesthetics
 
     Parameters
     ----------
@@ -258,8 +329,8 @@ def strip_stat(value):
     >>> strip_stat('stat(func(density) + var1)')
     func(density) + var1
 
-    >>> strip_stat('calc + var1')
-    calc + var1
+    >>> strip_stat('stat + var1')
+    stat + var1
 
     >>> strip_stat(4)
     4
@@ -354,10 +425,35 @@ def make_labels(mapping):
     """
     Convert aesthetic mapping into text labels
     """
-    labels = mapping.copy()
-    for ae in labels:
-        labels[ae] = strip_calculated_markers(labels[ae])
-    return labels
+    def _nice_label(value):
+        if isinstance(value, pd.Series):
+            return value.name
+        elif not isinstance(value, Iterable) or isinstance(value, str):
+            return str(value)
+        else:
+            return None
+
+    def _make_label(ae, value):
+        if not isinstance(value, stage):
+            return _nice_label(value)
+        elif value.start is None:
+            if value.after_stat is not None:
+                return value.after_stat
+            elif value.after_scale is not None:
+                return value.after_scale
+            else:
+                # return ''
+                raise ValueError("Unknown mapping")
+        else:
+            if value.after_stat is not None:
+                return value.after_stat
+            else:
+                return _nice_label(value)
+
+    return {
+        ae: _make_label(ae, label)
+        for ae, label in mapping.items()
+    }
 
 
 def is_valid_aesthetic(value, ae):

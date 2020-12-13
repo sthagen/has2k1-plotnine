@@ -24,6 +24,11 @@ class scale_position_discrete(scale_discrete):
     Parameters
     ----------
     {superclass_parameters}
+    limits : array_like, optional
+        Limits of the scale. For discrete scale, these are
+        the categories (unique values) of the variable.
+        For scales that deal with categoricals, these may
+        be a subset or superset of the categories.
     """
     # All positions have no guide
     guide = None
@@ -70,19 +75,33 @@ class scale_position_discrete(scale_discrete):
             limits = self.limits
         if array_kind.discrete(series):
             seq = np.arange(1, len(limits)+1)
-            return seq[match(series, limits)]
+            idx = np.asarray(match(series, limits, nomatch=len(series)))
+            try:
+                seq = seq[idx]
+            except IndexError:
+                # Deal with missing data
+                # - Insert NaN where there is no match
+                seq = np.hstack((seq.astype(object), np.nan))
+                idx = np.clip(idx, 0, len(seq)-1)
+                seq = seq[idx]
+            return seq
         return series
 
     @property
     def limits(self):
         if self.is_empty():
             return (0, 1)
-
-        if self._limits is not None:
+        elif self._limits is not None and not callable(self._limits):
             return self._limits
-        elif self.range.range:
+        elif self._limits is None:
             # discrete range
             return self.range.range
+        elif callable(self._limits):
+            limits = self._limits(self.range.range)
+            # Functions that return iterators e.g. reversed
+            if iter(limits) is limits:
+                limits = list(limits)
+            return limits
         else:
             raise PlotnineError(
                 'Lost, do not know what the limits are.')
@@ -93,11 +112,14 @@ class scale_position_discrete(scale_discrete):
             value = list(value)
         self._limits = value
 
-    def dimension(self, expand=(0, 0, 0, 0)):
+    def dimension(self, expand=(0, 0, 0, 0), limits=None):
         """
         The phyical size of the scale, if a position scale
         Unlike limits, this always returns a numeric vector of length 2
         """
+        if limits is None:
+            limits = self.limits
+
         c_range = self.range_c.range
         d_range = self.limits
 
@@ -169,6 +191,11 @@ class scale_y_discrete(scale_position_discrete):
     {superclass_parameters}
     """
     _aesthetics = ['y', 'ymin', 'ymax', 'yend']
+
+
+# Not part of the user API
+alias('scale_x_ordinal', scale_x_discrete)
+alias('scale_y_ordinal', scale_y_discrete)
 
 
 @document

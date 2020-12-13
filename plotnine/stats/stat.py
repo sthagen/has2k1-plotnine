@@ -2,7 +2,8 @@ from copy import deepcopy
 
 import pandas as pd
 
-from ..aes import get_calculated_aes
+from ..mapping import aes
+from ..layer import layer
 from ..utils import data_mapping_as_kwargs, remove_missing
 from ..utils import groupby_apply, copy_keys, uniquecols
 from ..utils import is_string, Registry, check_required_aesthetics
@@ -37,10 +38,15 @@ class stat(metaclass=Registry):
     # their default values.
     _aesthetics_doc = '{aesthetics_table}'
 
-    def __init__(self, *args, **kwargs):
-        kwargs = data_mapping_as_kwargs(args, kwargs)
+    # Plot namespace, it gets its value when the plot is being
+    # built.
+    environment = None
+
+    def __init__(self, mapping=None, data=None, **kwargs):
+        kwargs = data_mapping_as_kwargs((mapping, data), kwargs)
         self._kwargs = kwargs  # Will be used to create the geom
         self.params = copy_keys(kwargs, deepcopy(self.DEFAULT_PARAMS))
+        self.DEFAULT_AES = aes(**self.DEFAULT_AES)
         self.aes_params = {ae: kwargs[ae]
                            for ae in (self.aesthetics() &
                                       kwargs.keys())}
@@ -106,9 +112,12 @@ class stat(metaclass=Registry):
         old = self.__dict__
         new = result.__dict__
 
+        # don't make a _kwargs and environment
+        shallow = {'_kwargs', 'environment'}
         for key, item in old.items():
-            if key == '_kwargs':
+            if key in shallow:
                 new[key] = old[key]
+                memo[id(new[key])] = new[key]
             else:
                 new[key] = deepcopy(old[key], memo)
 
@@ -122,7 +131,7 @@ class stat(metaclass=Registry):
         stats should not override this method.
         """
         aesthetics = cls.REQUIRED_AES.copy()
-        calculated = get_calculated_aes(cls.DEFAULT_AES)
+        calculated = aes(**cls.DEFAULT_AES)._calculated
         for ae in set(cls.DEFAULT_AES) - set(calculated):
             aesthetics.add(ae)
         return aesthetics
@@ -308,7 +317,6 @@ class stat(metaclass=Registry):
             stats.append(df)
 
         stats = pd.concat(stats, axis=0, ignore_index=True)
-
         # Note: If the data coming in has columns with non-unique
         # values with-in group(s), this implementation loses the
         # columns. Individual stats may want to do some preparation
@@ -357,6 +365,19 @@ class stat(metaclass=Registry):
         out : ggplot
             ggplot object with added layer
         """
+        gg = gg if inplace else deepcopy(gg)
+        gg += self.to_layer()  # Add layer
+        return gg
+
+    def to_layer(self):
+        """
+        Make a layer that represents this stat
+
+        Returns
+        -------
+        out : layer
+            Layer
+        """
+        # Create, geom from stat, then layer from geom
         from ..geoms.geom import geom
-        _geom = geom.from_stat(self)
-        return _geom.__radd__(gg, inplace=inplace)
+        return layer.from_geom(geom.from_stat(self))

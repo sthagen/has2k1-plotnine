@@ -44,13 +44,13 @@ class geom_map(geom):
     REQUIRED_AES = {'geometry'}
     legend_geom = 'polygon'
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, mapping=None, data=None, **kwargs):
         if not HAS_GEOPANDAS:
             raise PlotnineError(
                 "geom_map requires geopandas. "
                 "Please install geopandas."
             )
-        geom.__init__(self, *args, **kwargs)
+        geom.__init__(self, mapping, data, **kwargs)
         # Almost all geodataframes loaded from shapefiles
         # have a geometry column.
         if 'geometry' not in self.mapping:
@@ -88,21 +88,18 @@ class geom_map(geom):
                 },
                 inplace=True)
 
-        data = pd.concat([data, bounds], axis=1, copy=False)
+        data = pd.concat([data, bounds], axis=1)
         return data
 
     def draw_panel(self, data, panel_params, coord, ax, **params):
         if not len(data):
             return data
 
-        _loc = data.columns.get_loc
-        cidx = data.index[data['color'].isnull()]
-        fidx = data.index[data['fill'].isnull()]
-        data.iloc[cidx, _loc('color')] = 'none'
-        data.iloc[fidx, _loc('fill')] = 'none'
+        data.loc[data['color'].isnull(), 'color'] = 'none'
+        data.loc[data['fill'].isnull(), 'fill'] = 'none'
         data['fill'] = to_rgba(data['fill'], data['alpha'])
 
-        geom_type = data.geometry[0].geom_type
+        geom_type = data.geometry.iloc[0].geom_type
         if geom_type in ('Polygon', 'MultiPolygon'):
             data['size'] *= SIZE_FACTOR
             patches = [PolygonPatch(g) for g in data['geometry']]
@@ -113,6 +110,7 @@ class geom_map(geom):
                 linestyle=data['linetype'],
                 linewidth=data['size'],
                 zorder=params['zorder'],
+                rasterized=params['raster']
             )
             ax.add_collection(coll)
         elif geom_type == 'Point':
@@ -125,15 +123,30 @@ class geom_map(geom):
                 gdata.reset_index(inplace=True, drop=True)
                 gdata.is_copy = None
                 geom_point.draw_group(
-                    gdata, panel_params, coord, ax, **params)
-        elif geom_type == 'LineString':
+                    gdata,
+                    panel_params,
+                    coord,
+                    ax,
+                    **params
+                )
+        elif geom_type in ('LineString', 'MultiLineString'):
             data['size'] *= SIZE_FACTOR
             data['color'] = to_rgba(data['color'], data['alpha'])
-            segments = [list(g.coords) for g in data['geometry']]
+            segments = []
+            for g in data['geometry']:
+                if g.geom_type == 'LineString':
+                    segments.append(g.coords)
+                else:
+                    segments.extend(_g.coords for _g in g.geoms)
+
             coll = LineCollection(
                 segments,
                 edgecolor=data['color'],
                 linewidth=data['size'],
                 linestyle=data['linetype'],
-                zorder=params['zorder'])
+                zorder=params['zorder'],
+                rasterized=params['raster']
+            )
             ax.add_collection(coll)
+        else:
+            raise TypeError(f"Could not plot geometry of type '{geom_type}'")

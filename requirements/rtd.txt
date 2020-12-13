@@ -1,8 +1,8 @@
 # doc
 git+https://github.com/has2k1/plotnine-examples#egg=plotnine_examples
-git+https://github.com/has2k1/numpydoc@xref-param-type#egg=xref_param_type
+numpydoc>=0.9.1
 jupyter
-sphinx>=1.6.1
+sphinx>=3.0.0
 nbsphinx
 pillow
 

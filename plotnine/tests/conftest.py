@@ -4,6 +4,7 @@ import inspect
 import shutil
 import locale
 import types
+from copy import deepcopy
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -79,11 +80,10 @@ def ggplot_equals(gg, right):
     # savefig ignores the figure face & edge colors
     facecolor = fig.get_facecolor()
     edgecolor = fig.get_edgecolor()
-    if edgecolor:
+    if facecolor:
         savefig_kwargs['facecolor'] = facecolor
     if edgecolor:
         savefig_kwargs['edgecolor'] = edgecolor
-        savefig_kwargs['frameon'] = True
 
     # Save the figure before testing whether the original image
     # actually exists. This makes creating new tests much easier,
@@ -108,7 +108,7 @@ ggplot.__eq__ = ggplot_equals
 
 def draw_test(self):
     """
-    Compare ggplot object to image determined by `right`
+    Try drawing the ggplot object
 
     Parameters
     ----------
@@ -130,6 +130,26 @@ def draw_test(self):
 
 
 ggplot.draw_test = draw_test
+
+
+def build_test(self):
+    """
+    Try building the ggplot object
+
+    Parameters
+    ----------
+    self : ggplot
+        ggplot object
+
+    This function is meant to monkey patch ggplot.build_test
+    so that tests build.
+    """
+    self = deepcopy(self)
+    self._build()
+    return self
+
+
+ggplot.build_test = build_test
 
 
 def pytest_assertrepr_compare(op, left, right):
@@ -217,7 +237,7 @@ def _setup():
     # These settings *must* be hardcoded for running the comparison
     # tests
     mpl.rcdefaults()  # Start with all defaults
-    mpl.rcParams['text.hinting'] = True
+    mpl.rcParams['text.hinting'] = 'auto'
     mpl.rcParams['text.antialiased'] = True
     mpl.rcParams['text.hinting_factor'] = 8
 

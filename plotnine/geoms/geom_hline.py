@@ -1,9 +1,11 @@
-import pandas as pd
-from contextlib import suppress
+from warnings import warn
 
-from ..utils import make_iterable
+import pandas as pd
+
+from ..utils import make_iterable, order_as_mapping_data
+from ..exceptions import PlotnineWarning
 from ..doctools import document
-from ..aes import aes
+from ..mapping import aes
 from .geom import geom
 from .geom_segment import geom_segment
 
@@ -26,21 +28,24 @@ class geom_hline(geom):
                       'na_rm': False, 'inherit_aes': False}
     legend_geom = 'path'
 
-    def __init__(self, *args, **kwargs):
-        with suppress(KeyError):
-            yintercept = make_iterable(kwargs.pop('yintercept'))
-            data = pd.DataFrame({'yintercept': yintercept})
-            kwargs['mapping'] = aes(yintercept='yintercept')
-            kwargs['data'] = data
+    def __init__(self, mapping=None, data=None, **kwargs):
+        mapping, data = order_as_mapping_data(mapping, data)
+        yintercept = kwargs.pop('yintercept', None)
+        if yintercept is not None:
+            if mapping:
+                warn("The 'yintercept' parameter has overridden "
+                     "the aes() mapping.", PlotnineWarning)
+            data = pd.DataFrame({'yintercept': make_iterable(yintercept)})
+            mapping = aes(yintercept='yintercept')
             kwargs['show_legend'] = False
 
-        geom.__init__(self, *args, **kwargs)
+        geom.__init__(self, mapping, data, **kwargs)
 
     def draw_panel(self, data, panel_params, coord, ax, **params):
         """
         Plot all groups
         """
-        ranges = coord.range(panel_params)
+        ranges = coord.backtransform_range(panel_params)
         data['y'] = data['yintercept']
         data['yend'] = data['yintercept']
         data['x'] = ranges.x[0]

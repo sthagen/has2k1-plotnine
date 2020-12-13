@@ -3,8 +3,9 @@ from contextlib import suppress
 from warnings import warn
 
 import numpy as np
+import pandas.api.types as pdtypes
 
-from ..aes import aes_to_scale
+from ..mapping.aes import aes_to_scale
 from ..exceptions import PlotnineError, PlotnineWarning
 from ..utils import Registry, array_kind
 
@@ -276,6 +277,8 @@ class Scales(list):
 def scale_type(series):
     if array_kind.continuous(series):
         stype = 'continuous'
+    elif array_kind.ordinal(series):
+        stype = 'ordinal'
     elif array_kind.discrete(series):
         stype = 'discrete'
     elif array_kind.datetime(series):
@@ -297,10 +300,13 @@ def make_scale(ae, series, *args, **kwargs):
     The scale is for the aesthetic ae, and args & kwargs
     are passed on to the scale creating class
     """
+    if pdtypes.is_float_dtype(series) and np.isinf(series).all():
+        raise PlotnineError("Cannot create scale for infinite data")
+
     stype = scale_type(series)
 
     # filter parameters by scale type
-    if stype == 'discrete':
+    if stype in ('discrete', 'ordinal'):
         with suppress(KeyError):
             del kwargs['trans']
 

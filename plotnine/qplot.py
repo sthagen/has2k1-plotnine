@@ -7,7 +7,7 @@ import numpy as np
 from patsy.eval import EvalEnvironment
 
 from .ggplot import ggplot
-from .aes import aes, all_aesthetics, scaled_aesthetics
+from .mapping.aes import aes, all_aesthetics, scaled_aesthetics
 from .labels import labs
 from .facets import facet_null, facet_grid, facet_wrap
 from .facets.facet_grid import parse_grid_facets
@@ -57,7 +57,7 @@ def qplot(x=None, y=None, data=None, facets=None, margins=False,
 
     Returns
     -------
-    p: ggplot
+    p : ggplot
         ggplot object
     """
     # Extract all recognizable aesthetic mappings from the parameters

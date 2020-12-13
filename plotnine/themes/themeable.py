@@ -120,6 +120,10 @@ class themeable(metaclass=RegistryHierarchyMeta):
 
         return klass(theme_element)
 
+    @classmethod
+    def registry(cls):
+        return themeable._registry
+
     def is_blank(self):
         """
         Return True if theme_element is made of element_blank
@@ -130,7 +134,10 @@ class themeable(metaclass=RegistryHierarchyMeta):
         """
         Merge properties of other into self
 
-        Raises ValueError if any them are a blank
+        Raises
+        ------
+        ValueError
+            If any of the properties are blank
         """
         if self.is_blank() or other.is_blank():
             raise ValueError('Cannot merge if there is a blank.')
@@ -653,9 +660,11 @@ class axis_text_x(themeable):
 
     def blank(self, ax):
         super(axis_text_x, self).blank(ax)
-        labels = ax.get_xticklabels()
-        for l in labels:
-            l.set_visible(False)
+        ax.xaxis.set_tick_params(
+            which='both',
+            labelbottom=False,
+            labeltop=False
+        )
 
 
 class axis_text_y(themeable):
@@ -677,9 +686,11 @@ class axis_text_y(themeable):
 
     def blank(self, ax):
         super(axis_text_y, self).blank(ax)
-        labels = ax.get_yticklabels()
-        for l in labels:
-            l.set_visible(False)
+        ax.yaxis.set_tick_params(
+            which='both',
+            labelleft=False,
+            labelright=False
+        )
 
 
 class axis_text(axis_text_x, axis_text_y):
@@ -805,13 +816,12 @@ class axis_ticks_minor_x(themeable):
         with suppress(KeyError):
             d['markeredgewidth'] = d.pop('linewidth')
 
-        for line in ax.xaxis.get_minorticklines():
-            line.set(**d)
+        for tick in ax.xaxis.get_minor_ticks():
+            tick.tick1line.set(**d)
 
     def blank(self, ax):
         super(axis_ticks_minor_x, self).blank(ax)
-        for line in ax.xaxis.get_minorticklines():
-            line.set_visible(False)
+        ax.xaxis.set_tick_params(which='minor', bottom=False)
 
 
 class axis_ticks_minor_y(themeable):
@@ -829,13 +839,12 @@ class axis_ticks_minor_y(themeable):
         with suppress(KeyError):
             d['markeredgewidth'] = d.pop('linewidth')
 
-        for line in ax.yaxis.get_minorticklines():
-            line.set(**d)
+        for tick in ax.yaxis.get_minor_ticks():
+            tick.tick1line.set(**d)
 
     def blank(self, ax):
         super(axis_ticks_minor_y, self).blank(ax)
-        for line in ax.yaxis.get_minorticklines():
-            line.set_visible(False)
+        ax.yaxis.set_tick_params(which='minor', left=False)
 
 
 class axis_ticks_major_x(themeable):
@@ -850,16 +859,16 @@ class axis_ticks_major_x(themeable):
         super(axis_ticks_major_x, self).apply(ax)
 
         d = deepcopy(self.properties)
+        del d['visible']
         with suppress(KeyError):
             d['markeredgewidth'] = d.pop('linewidth')
 
-        for line in ax.xaxis.get_majorticklines():
-            line.set(**d)
+        for tick in ax.xaxis.get_major_ticks():
+            tick.tick1line.set(**d)
 
     def blank(self, ax):
         super(axis_ticks_major_x, self).blank(ax)
-        for line in ax.xaxis.get_majorticklines():
-            line.set_visible(False)
+        ax.xaxis.set_tick_params(which='major', bottom=False)
 
 
 class axis_ticks_major_y(themeable):
@@ -874,16 +883,16 @@ class axis_ticks_major_y(themeable):
         super(axis_ticks_major_y, self).apply(ax)
 
         d = deepcopy(self.properties)
+        del d['visible']
         with suppress(KeyError):
             d['markeredgewidth'] = d.pop('linewidth')
 
-        for line in ax.yaxis.get_majorticklines():
-            line.set(**d)
+        for tick in ax.yaxis.get_major_ticks():
+            tick.tick1line.set(**d)
 
     def blank(self, ax):
         super(axis_ticks_major_y, self).blank(ax)
-        for line in ax.yaxis.get_majorticklines():
-            line.set_visible(False)
+        ax.yaxis.set_tick_params(which='major', left=False)
 
 
 class axis_ticks_major(axis_ticks_major_x, axis_ticks_major_y):

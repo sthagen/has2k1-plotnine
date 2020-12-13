@@ -1,7 +1,6 @@
 import hashlib
 import types
 from itertools import islice
-from collections import OrderedDict
 from contextlib import suppress
 from warnings import warn
 
@@ -14,7 +13,7 @@ from ..utils import ColoredDrawingArea, SIZE_FACTOR
 from ..utils import Registry, remove_missing
 from ..exceptions import PlotnineError, PlotnineWarning
 from ..geoms import geom_text
-from ..aes import rename_aesthetics
+from ..mapping.aes import rename_aesthetics
 from .guide import guide
 
 # See guides.py for terminology
@@ -70,7 +69,7 @@ class guide_legend(guide):
             aesthetic = scale.aesthetics[0]
 
         breaks = scale.get_breaks()
-        if isinstance(breaks, OrderedDict):
+        if isinstance(breaks, dict):
             if all([np.isnan(x) for x in breaks.values()]):
                 return None
         elif not len(breaks) or all(np.isnan(breaks)):
@@ -164,7 +163,14 @@ class guide_legend(guide):
                 continue
 
             data = self.key[matched].copy()
-            data = l.use_defaults(data)
+
+            # Modify aesthetics
+            try:
+                data = l.use_defaults(data)
+            except PlotnineError:
+                warn("Failed to apply `after_scale` modifications "
+                     "to the legend.", PlotnineWarning)
+                data = l.use_defaults(data, aes_modifiers={})
 
             # override.aes in guide_legend manually changes the geom
             for ae in set(self.override_aes) & set(data.columns):
