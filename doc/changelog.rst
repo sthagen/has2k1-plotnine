@@ -3,7 +3,8 @@ Changelog
 
 v0.8.0
 ------
-(not-yet-released)
+(2021-03-24)
+
 
 API Changes
 ***********
@@ -43,6 +44,23 @@ Bug Fixes
 - Fixed bug were the plotted image may have ignored theming that relied on
   some Matplotlib rcParams. (:issue:`451`)
 
+- Fixed the ``weight`` aesthetic in :class:`~plotnine.geoms.geom_boxplot`, previously
+  ignored it is now recognised. (:issue:`438`)
+
+- Fixed :class:`~plotnine.geoms.annotation_logticks` and
+  :class:`~plotnine.geoms.annotation_stripes` to work without global data and
+  aesthetics. (:issue:`469`)
+
+- Fix :class:`~plotnine.scales.scale_shape_discrete` when print many unfilled shapes
+  not to assign the same shapes to more than one group. (:issue:`473`)
+
+- Fixed bug in :class:`~plotnine.stats.stat_ellipse` where the center of the ellipse
+  assuming a multivariate t-distribution was incorrectly calculated. (:issue:`493`)
+
+- Fixed calculation of ``ndensity`` in :class:`~plotnine.stats.stat_bin`.
+  (:issue:`494`)
+
+
 Enhancements
 ************
 - Manual scales now match the values of the breaks if the breaks are given.
@@ -59,6 +77,11 @@ Enhancements
 
       from plotnine.options import set_option
       set_option('base_family', 'Comic Sans MS')
+
+- You can now add ``None`` to a ggplot, doing so returns a copy of the
+  the ggplot object. (:issue:`474`)
+
+- Better handling of multiline facet labels. (:issue:`484`)
 
 v0.7.1
 ------
@@ -133,7 +156,7 @@ Bug Fixes
 - Fixed issue where discrete position scales could not deal with fewer limits
   than those present in the data. (:issue:`342`)
 
-- Fixed issue with using custom tuple linetypes with
+- Fixed issue with using custom tuple linetypes~ with
   :class:`plotnine.scales.scale_linetype_manual`. (:issue:`352`)
 
 - Fixed :class:`plotnine.geoms.geom_map` to work with facets. (:issue:`359`)

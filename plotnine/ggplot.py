@@ -126,6 +126,10 @@ class ggplot:
             return other.__radd__(self, inplace=True)
         except TypeError:
             return other.__radd__(self)
+        except AttributeError as err:
+            if other is None:
+                return self.__add__(other)
+            raise err
 
     def __add__(self, other):
         """
@@ -142,6 +146,8 @@ class ggplot:
             for item in other:
                 self += item
             return self
+        elif other is None:
+            return deepcopy(self)
         else:
             return other.__radd__(self)
 
@@ -201,6 +207,7 @@ class ggplot:
             # setup
             figure, axs = self._create_figure()
             self._setup_parameters()
+            self.facet.strips.generate()
             self._resize_panels()
 
             # Drawing
@@ -241,6 +248,7 @@ class ggplot:
         with plot_context(self):
             self._build()
             self._setup_parameters()
+            self.facet.strips.generate()
             self._draw_layers()
             self._draw_breaks_and_labels()
             self._draw_legend()
@@ -339,6 +347,7 @@ class ggplot:
             figure=self.figure,
             axs=self.axs
         )
+        self.facet.initialise_strips()
 
         # layout
         self.layout.axs = self.axs
@@ -385,15 +394,15 @@ class ggplot:
         """
         Draw breaks and labels
         """
-        # Decorate the axes
-        #   - xaxis & yaxis breaks, labels, limits, ...
-        #   - facet labels a.k.a strip text
+        # 1. Draw facet labels a.k.a strip text
+        # 2. Decorate the axes
+        #      - xaxis & yaxis breaks, labels, limits, ...
         #
         # pidx is the panel index (location left to right, top to bottom)
+        self.facet.strips.draw()
         for pidx, layout_info in self.layout.layout.iterrows():
             ax = self.axs[pidx]
             panel_params = self.layout.panel_params[pidx]
-            self.facet.draw_label(layout_info, ax)
             self.facet.set_limits_breaks_and_labels(panel_params, ax)
 
             # Remove unnecessary ticks and labels
@@ -437,8 +446,8 @@ class ggplot:
         with suppress(KeyError):
             strip_margin_y = get_property('strip_margin_y')
 
-        right_strip_width = self.facet.strip_size('right')
-        top_strip_height = self.facet.strip_size('top')
+        right_strip_width = self.facet.strips.breadth('right')
+        top_strip_height = self.facet.strips.breadth('top')
 
         # Other than when the legend is on the right the rest of
         # the computed x, y locations are not gauranteed not to
@@ -573,16 +582,19 @@ class ggplot:
             pad = margin.get_as('b', 'in')
 
         try:
-            strip_margin_x = get_property('strip_margin_x')
+            strip_margin_y = get_property('strip_margin_y')
         except KeyError:
-            strip_margin_x = 0
+            strip_margin_y = 0
 
-        line_size = fontsize / 72.27
+        dpi = 72.27
+        line_size = fontsize / dpi
         num_lines = len(title.split('\n'))
         title_size = line_size * linespacing * num_lines
-        strip_height = self.facet.strip_size('top')
+        strip_height = self.facet.strips.breadth('top')
+        # strip_height = 5.820833333333334
+        # print(strip_height)
         # vertical adjustment
-        strip_height *= (1 + strip_margin_x)
+        strip_height *= (1 + strip_margin_y)
 
         x = 0.5
         y = top + (strip_height+title_size/2+pad)/H
@@ -712,9 +724,10 @@ class ggplot:
         if dpi is not None:
             self.theme = self.theme + theme(dpi=dpi)
 
-        fig = self.draw()
-        with plot_context(self):
+        fig, p = self.draw(return_ggplot=True)
+        with plot_context(p):
             fig.savefig(filename, **fig_kwargs)
+            plt.close(fig)
 
 
 def ggsave(plot, *arg, **kwargs):
@@ -813,6 +826,10 @@ def save_as_pdf_pages(plots, filename=None, path=None, verbose=True, **kwargs):
             # Save as a page in the PDF file
             pdf.savefig(fig, **fig_kwargs)
 
+            # To conserve memory when plotting a large number of pages,
+            # close the figure whether or not there was an exception
+            plt.close(fig)
+
 
 class plot_context:
     """
@@ -843,10 +860,13 @@ class plot_context:
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
-        if self.show:
-            plt.show()
-        if self.plot.figure is not None:
-            plt.close(self.plot.figure)
+        if exc_type is None:
+            if self.show:
+                plt.show()
+        else:
+            # There is an exception, close any figure
+            if self.plot.figure is not None:
+                plt.close(self.plot.figure)
 
         self.rc_context.__exit__(exc_type, exc_value, exc_traceback)
         self.pd_option_context.__exit__(exc_type, exc_value, exc_traceback)

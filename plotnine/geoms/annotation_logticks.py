@@ -21,6 +21,16 @@ class _geom_logticks(geom_rug):
                       'lengths': (0.036, 0.0225, 0.012), 'base': 10}
     legend_geom = 'path'
 
+    def draw_layer(self, data, layout, coord, **params):
+        """
+        Draw ticks on every panel
+        """
+        for pid in layout.layout['PANEL']:
+            ploc = pid - 1
+            panel_params = layout.panel_params[ploc]
+            ax = layout.axs[ploc]
+            self.draw_panel(data, panel_params, coord, ax, **params)
+
     @staticmethod
     def _check_log_scale(base, sides, panel_params, coord):
         """
@@ -36,7 +46,7 @@ class _geom_logticks(geom_rug):
             Sides onto which to draw the marks. Any combination
             chosen from the characters ``btlr``, for *bottom*, *top*,
             *left* or *right* side marks. If ``coord_flip()`` is used,
-            these are the sides *after* the flip.
+            these are the sides *before* the flip.
         panel_params : SimpleNamespace
             ``x`` and ``y`` view scale values.
         coord : coord
@@ -64,12 +74,12 @@ class _geom_logticks(geom_rug):
 
         if 't' in sides or 'b' in sides:
             if base_x is None:
-                if x_is_log:
+                if x_is_log and hasattr(x_scale, 'trans'):
                     base_x = x_scale.trans.base
                 else:  # no log, no defined base. See warning below.
                     base_x = 10
 
-            if not x_is_log:
+            if not hasattr(x_scale, 'trans') or not x_is_log:
                 warnings.warn(
                     "annotation_logticks for x-axis which does not have "
                     "a log scale. The logticks may not make sense.",
@@ -83,12 +93,12 @@ class _geom_logticks(geom_rug):
 
         if 'l' in sides or 'r' in sides:
             if base_y is None:
-                if y_is_log:
+                if y_is_log and hasattr(y_scale, 'trans'):
                     base_y = y_scale.trans.base
                 else:  # no log, no defined base. See warning below.
                     base_y = 10
 
-            if not y_is_log:
+            if not hasattr(y_scale, 'trans') or not y_is_log:
                 warnings.warn(
                     "annotation_logticks for y-axis which does not have "
                     "a log scale. The logticks may not make sense.",
