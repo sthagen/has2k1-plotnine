@@ -475,7 +475,7 @@ def jitter(x, factor=1, amount=None, random_state=None):
         z = 1
 
     if amount is None:
-        _x = np.round(x, 3-np.int(np.floor(np.log10(z)))).astype(np.int)
+        _x = np.round(x, 3-int(np.floor(np.log10(z)))).astype(int)
         xx = np.unique(np.sort(_x))
         d = np.diff(xx)
         if len(d):
@@ -1016,7 +1016,7 @@ def order_as_mapping_data(*args):
         if data is None or isinstance(data, aes):
             mapping, data = data, mapping
 
-    if mapping and not isinstance(mapping, aes):
+    if mapping is not None and not isinstance(mapping, aes):
         raise TypeError(
             "Unknown argument type {!r}, expected mapping/aes."
             .format(type(mapping))

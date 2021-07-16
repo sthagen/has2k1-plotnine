@@ -1,11 +1,12 @@
-from copy import deepcopy, copy
 import itertools
+import types
+from copy import deepcopy, copy
 from contextlib import suppress
 from warnings import warn
 
 import numpy as np
 import pandas as pd
-import types
+import pandas.api.types as pdtypes
 
 from .strips import strips
 from ..utils import cross_join, match
@@ -15,6 +16,7 @@ from ..scales.scales import Scales
 # For default matplotlib backend
 with suppress(ImportError):
     from matplotlib.ticker import locale, FixedFormatter
+    from matplotlib.gridspec import GridSpec
 
 
 class facet:
@@ -82,6 +84,10 @@ class facet:
     plot = None
     # Facet strips
     strips = None
+    # Control the relative size of multiple facets
+    # Use a subclass to change the default.
+    # See: facet_grid for an example
+    space = 'fixed'
 
     def __init__(self, scales='fixed', shrink=True,
                  labeller='label_value', as_table=True,
@@ -326,12 +332,48 @@ class facet:
         """
         num_panels = len(layout)
         axsarr = np.empty((self.nrow, self.ncol), dtype=object)
+        space = self.space
+        default_space = {
+            'x': [1 for x in range(self.ncol)],
+            'y': [1 for x in range(self.nrow)],
+        }
+
+        if isinstance(space, str):
+            if space == 'fixed':
+                space = default_space
+            # TODO: Implement 'free', 'free_x' & 'free_y'
+            else:
+                space = default_space
+        elif isinstance(space, dict):
+            if 'x' not in space:
+                space['x'] = default_space['x']
+            if 'y' not in space:
+                space['y'] = default_space['y']
+
+        if len(space['x']) != self.ncol:
+            raise ValueError(
+                "The number of x-ratios for the facet space sizes "
+                "should match the number of columns."
+            )
+
+        if len(space['y']) != self.nrow:
+            raise ValueError(
+                "The number of y-ratios for the facet space sizes "
+                "should match the number of rows."
+            )
+
+        gs = GridSpec(
+            self.nrow,
+            self.ncol,
+            height_ratios=space['y'],
+            width_ratios=space['x']
+        )
 
         # Create axes
         i = 1
         for row in range(self.nrow):
             for col in range(self.ncol):
-                axsarr[row, col] = fig.add_subplot(self.nrow, self.ncol, i)
+                axsarr[row, col] = fig.add_subplot(gs[i - 1])
                 i += 1
 
         # Rearrange axes
@@ -458,8 +500,13 @@ def unique_combs(df):
     Return data frame with all possible combinations
     of the values in the columns
     """
+    def _unique(s):
+        if isinstance(s.dtype, pdtypes.CategoricalDtype):
+            return s.cat.categories
+        return s.unique()
+
     # List of unique values from every column
-    lst = (x.unique() for x in (df[c] for c in df))
+    lst = (_unique(x) for _, x in df.iteritems())
     rows = list(itertools.product(*lst))
     _df = pd.DataFrame(rows, columns=df.columns)
 

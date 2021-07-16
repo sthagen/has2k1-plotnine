@@ -4,7 +4,7 @@ import pytest
 
 from plotnine import ggplot, aes, geom_point, facet_grid, facet_wrap
 from plotnine import geom_abline, annotate
-from plotnine.data import mpg
+from plotnine.data import mpg, mtcars
 from plotnine.exceptions import PlotnineWarning
 
 n = 10
@@ -122,6 +122,25 @@ def test_facet_grid_formula_without_dot():
 def test_facet_grid_scales_free_x():
     p = g + facet_grid('var1>2 ~ x%2', scales='free_x')
     assert p == 'facet_grid_scales_free_x'
+
+
+def test_facet_grid_drop_false():
+    df = mpg.copy()
+    df['drv'] = pd.Categorical(df['drv'], ['4', 'f', 'r', 'Q'])
+
+    p = (ggplot(df, aes(x='displ', y='hwy'))
+         + geom_point()
+         + facet_grid('drv ~ .', drop=False)
+         )
+    assert p == 'facet_grid_drop_false'
+
+
+def test_facet_grid_space_ratios():
+    p = (ggplot(mtcars, aes('wt', 'mpg'))
+         + geom_point()
+         + facet_grid('am ~ vs', space={'y': [1, 2], 'x': [1, 2]})
+         )
+    assert p == 'facet_grid_space_ratios'
 
 
 # Edge cases

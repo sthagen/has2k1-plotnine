@@ -1,9 +1,35 @@
 Changelog
 =========
 
+v0.8.1
+------
+(*not-yet-released*)
+
+New Features
+************
+
+- :class:`~plotnine.positions.position_dodge2` gained the ability to reverse
+  the order of the plotted groups. :issue:`515`
+
+Bug Fixes
+*********
+
+- Fixed bug in :class:`~plotnine.facets.facet_grid` and
+  :class:`~plotnine.facets.facet_wrap` where the ``drop`` parameter was
+  ignored. :issue:`510`
+
+Enhancements
+************
+
+- :class:`~plotnine.stats.stat_density` now uses a fast computation path
+  for gaussian densities with no weights. This was probably a regression.
+
 v0.8.0
 ------
 (2021-03-24)
+
+.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.4636791.svg
+   :target: https://doi.org/10.5281/zenodo.4636791
 
 
 API Changes
@@ -29,6 +55,10 @@ New Features
 - ``geoms`` gained new parameter ``raster`` for the
   :class:`~plotnine.layer.Layer`. You can use it to rasterize any layer
   when the resulting plot is of vector format e.g. ``pdf``.
+
+- Using the ``space`` parameter, :class:`~plotnine.facets.facet_grid`
+  gained the ability to have rows and columns of panels of different
+  sizes.
 
 Bug Fixes
 *********
@@ -87,6 +117,9 @@ v0.7.1
 ------
 (2020-08-05)
 
+.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.3973626.svg
+   :target: https://doi.org/10.5281/zenodo.3973626
+
 Bug Fixes
 *********
 
@@ -104,6 +137,10 @@ Bug Fixes
 v0.7.0
 ------
 (2020-06-05)
+
+.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.3878645.svg
+   :target: https://doi.org/10.5281/zenodo.3878645
+
 
 API Changes
 ***********
