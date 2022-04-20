@@ -31,10 +31,14 @@ def test_labels():
     assert gg.labels['y'] == 'ylab'
     assert gg.labels['title'] == 'title'
 
-    gg = gg + labs(x='xlab2', y='ylab2', title='title2')
+    gg = gg + labs(x='xlab2', y='ylab2', title='title2', caption='caption2')
     assert gg.labels['x'] == 'xlab2'
     assert gg.labels['y'] == 'ylab2'
     assert gg.labels['title'] == 'title2'
+    assert gg.labels['caption'] == 'caption2'
+
+    with pytest.raises(PlotnineError):
+        gg = gg + labs(z='z-axis')
 
     with pytest.raises(PlotnineError):
         gg = gg + xlab(None)
@@ -44,9 +48,6 @@ def test_labels():
 
     with pytest.raises(PlotnineError):
         gg = gg + ggtitle(None)
-
-    with pytest.raises(PlotnineError):
-        gg = gg + labs('x', 'y')
 
 
 def test_ggplot_parameters():
@@ -101,7 +102,7 @@ def test_data_transforms():
 
 
 def test_deepcopy():
-    p = ggplot(aes('x'), data=df) + geom_histogram()
+    p = ggplot(df, aes('x')) + geom_histogram()
     p2 = deepcopy(p)
     assert p is not p2
     # Not sure what we have to do for that...
@@ -225,7 +226,7 @@ def test_add_aes():
 def test_nonzero_indexed_data():
     df = pd.DataFrame({98: {'blip': 0, 'blop': 1},
                        99: {'blip': 1, 'blop': 3}}).T
-    p = ggplot(aes(x='blip', y='blop'), data=df) + geom_line()
+    p = ggplot(df, aes(x='blip', y='blop')) + geom_line()
     p.draw_test()
 
 

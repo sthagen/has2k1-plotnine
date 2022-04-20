@@ -6,6 +6,7 @@ import itertools
 import inspect
 import warnings
 from contextlib import suppress
+from typing import Callable
 from weakref import WeakValueDictionary
 from warnings import warn
 
@@ -368,7 +369,7 @@ def join_keys(x, y, by=None):
     if isinstance(by, tuple):
         by = list(by)
 
-    joint = x[by].append(y[by], ignore_index=True)
+    joint = pd.concat([x[by], y[by]], ignore_index=True)
     keys = ninteraction(joint, drop=True)
     keys = np.asarray(keys)
     nx, ny = len(x), len(y)
@@ -622,6 +623,9 @@ def groupby_apply(df, cols, func, *args, **kwargs):
     as it calls fn twice on the first dataframe. If the nested code also
     does the same thing, it can be very expensive
     """
+    if df.empty:
+        return df.copy()
+
     try:
         axis = kwargs.pop('axis')
     except KeyError:
@@ -703,7 +707,7 @@ class ColoredDrawingArea(DrawingArea):
     def __init__(self, width, height, xdescent=0.0, ydescent=0.0,
                  clip=True, color='none'):
 
-        super(ColoredDrawingArea, self).__init__(
+        super().__init__(
             width, height, xdescent, ydescent, clip=clip)
 
         self.patch = Rectangle((0, 0), width=width,
@@ -788,7 +792,7 @@ class Registry(type, metaclass=RegistryMeta):
     _registry = WeakValueDictionary()
 
     def __new__(meta, name, bases, clsdict):
-        cls = super(Registry, meta).__new__(meta, name, bases, clsdict)
+        cls = super().__new__(meta, name, bases, clsdict)
         if not clsdict.pop('__base__', False):
             meta._registry[name] = cls
             if 'alias' in clsdict:
@@ -926,17 +930,17 @@ def data_mapping_as_kwargs(args, kwargs):
     out : dict
         kwargs that includes 'data' and 'mapping' keys.
     """
-    mapping, data = order_as_mapping_data(*args)
+    data, mapping = order_as_data_mapping(*args)
 
     # check args #
     if mapping is not None and not isinstance(mapping, aes):
         raise PlotnineError(
-            "Unknown mapping of type {}".format(type(mapping))
+            f"Unknown mapping of type {type(mapping)}"
         )
 
-    if data is not None and not isinstance(data, pd.DataFrame):
+    if data is not None and not is_data_like(data):
         raise PlotnineError(
-            "Unknown data of type {}".format(type(mapping))
+            f"Unknown data of type {type(mapping)}"
         )
 
     # check kwargs #
@@ -973,9 +977,9 @@ def ungroup(data):
     return data
 
 
-def order_as_mapping_data(*args):
+def order_as_data_mapping(*args):
     """
-    Reorder args to ensure (mapping, data) order
+    Reorder args to ensure (data, mapping) order
 
     This function allow the user to pass mapping and data
     to ggplot and geom in any order.
@@ -988,7 +992,7 @@ def order_as_mapping_data(*args):
     Returns
     -------
     mapping : aes
-    data : pd.DataFrame
+    data : pd.DataFrame | callable
     *rest : tuple
     """
     n = len(args)
@@ -1002,33 +1006,50 @@ def order_as_mapping_data(*args):
             return single_arg, None
         else:
             raise TypeError(
-                "Unknown argument type {!r}, expected mapping "
-                "or dataframe.".format(single_arg)
+                f"Unknown argument type {single_arg!r}, expected "
+                "mapping or dataframe."
             )
     elif n > 2:
         raise PlotnineError(
             "Expected at most 2 positional arguments, "
-            "but I got {}.".format(n)
+            f"but I got {n}."
         )
 
-    mapping, data = (ungroup(arg) for arg in args)
-    if isinstance(mapping, pd.DataFrame):
-        if data is None or isinstance(data, aes):
-            mapping, data = data, mapping
+    data, mapping = (ungroup(arg) for arg in args)
+    if isinstance(data, aes) or is_data_like(mapping):
+        data, mapping = mapping, data
 
-    if mapping is not None and not isinstance(mapping, aes):
+    if not isinstance(mapping, aes) and mapping is not None:
         raise TypeError(
-            "Unknown argument type {!r}, expected mapping/aes."
-            .format(type(mapping))
+            f"Unknown argument type {type(mapping)!r}, "
+            "expected mapping/aes."
         )
 
-    if not isinstance(data, pd.DataFrame) and data is not None:
+    if not is_data_like(data) and data is not None:
         raise TypeError(
             "Unknown argument type {!r}, expected dataframe."
             .format(type(data))
         )
 
-    return mapping, data
+    return data, mapping
+
+
+def is_data_like(obj):
+    """
+    Return True if obj could be data
+
+    Parameters
+    ----------
+    obj : object
+        Object that could be data
+
+    Returns
+    -------
+    out : bool
+        Whether obj could represent data as expected by
+        ggplot(), geom() or stat().
+    """
+    return isinstance(obj, (pd.DataFrame, Callable))
 
 
 def interleave(*arrays):
@@ -1121,7 +1142,7 @@ def to_inches(value, units):
     try:
         return lookup[units](value)
     except KeyError:
-        raise PlotnineError("Unknown units '{}'".format(units))
+        raise PlotnineError(f"Unknown units '{units}'")
 
 
 def from_inches(value, units):
@@ -1142,7 +1163,7 @@ def from_inches(value, units):
     try:
         return lookup[units](value)
     except KeyError:
-        raise PlotnineError("Unknown units '{}'".format(units))
+        raise PlotnineError(f"Unknown units '{units}'")
 
 
 class array_kind:

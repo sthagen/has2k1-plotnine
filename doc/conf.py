@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # plotnine documentation build configuration file, created by
 # sphinx-quickstart on Wed Dec 23 22:32:29 2015.
@@ -25,7 +24,7 @@ sys.path.insert(0, CUR_PATH)
 sys.path.insert(0, PROJECT_PATH)
 
 if on_rtd:
-    import mock
+    from unittest import mock
     from pprint import pprint
     MOCK_MODULES = []
     for mod_name in MOCK_MODULES:
@@ -113,8 +112,6 @@ release = version
 # directories to ignore when looking for source files.
 exclude_patterns = [
     '_build',
-    # Deprecated
-    'generated/plotnine.themes.themeable.facet_spacing.rst'
 ]
 # The reST default role (used for this markup: `text`) to use for all
 # documents.
@@ -403,9 +400,9 @@ epub_exclude_files = ['search.html']
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3/', None),
-    'matplotlib': ('https://matplotlib.org/', None),
+    'matplotlib': ('https://matplotlib.org/stable', None),
     'numpy': ('https://numpy.org/doc/stable/', None),
-    'scipy': ('https://docs.scipy.org/doc/scipy/reference', None),
+    'scipy': ('https://docs.scipy.org/doc/scipy', None),
     'statsmodels': ('https://www.statsmodels.org/stable/', None),
     'pandas': ('https://pandas.pydata.org/pandas-docs/stable/', None),
     'sklearn': ('https://scikit-learn.org/stable/', None),
@@ -463,20 +460,30 @@ numpydoc_xref_ignore = {'type', 'optional', 'default'}
 def link_to_tutorials():
     # Linking to the directory does not work well with
     # nbsphinx. We link to the files themselves
-    from glob import glob
+    from pathlib import Path, PurePath
     from plotnine_examples.tutorials import TUTPATH
 
-    dest_dir = os.path.join(CUR_PATH, 'tutorials')
+    tut_ipynb_dir = Path(TUTPATH)
+    dest_ipynb_dir = Path(CUR_PATH) / 'tutorials'
 
-    # Unlink files from previous build
-    for old_file in glob(dest_dir + '/*.ipynb'):
-        os.unlink(old_file)
+    tut_image_dir = tut_ipynb_dir / 'images'
+    dest_image_dir = dest_ipynb_dir / 'images'
 
-    # Link files for this build
-    for file in glob(TUTPATH + '/*.ipynb'):
-        basename = os.path.basename(file)
-        dest = os.path.join(dest_dir, basename)
-        os.symlink(file, dest)
+    def _make_links(orig_dir, dest_dir, pattern):
+        dest_dir.mkdir(exist_ok=True)
+
+        # Remove any old files
+        for old_file in dest_dir.glob(pattern):
+            old_file.unlink()
+
+        # Link files for this build
+        for file in orig_dir.glob(pattern):
+            basename = PurePath(file).name
+            dest = dest_dir / basename
+            dest.symlink_to(file)
+
+    _make_links(tut_ipynb_dir, dest_ipynb_dir, '*.ipynb')
+    _make_links(tut_image_dir, dest_image_dir, '*.png')
 
 
 def setup(app):

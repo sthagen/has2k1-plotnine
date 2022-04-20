@@ -1,4 +1,5 @@
 import os
+import warnings
 
 import matplotlib.pyplot as plt
 import pytest
@@ -12,7 +13,7 @@ from plotnine.exceptions import PlotnineError, PlotnineWarning
 def p(N=3):
     """Return *N* distinct plot objects."""
     template = (
-        ggplot(aes(x='wt', y='mpg', label='name'), data=mtcars) +
+        ggplot(mtcars, aes(x='wt', y='mpg', label='name')) +
         geom_text()
         )
     for i in range(1, N+1):
@@ -24,7 +25,7 @@ def sequential_filenames():
     Generate filenames for the tests
     """
     for i in range(100):
-        yield 'filename-{}.pdf'.format(i)
+        yield f'filename-{i}.pdf'
 
 
 filename_gen = sequential_filenames()
@@ -32,7 +33,7 @@ filename_gen = sequential_filenames()
 
 def assert_file_exist(filename, msg=None):
     if not msg:
-        msg = "File {} does not exist".format(filename)
+        msg = f"File {filename} does not exist"
     assert os.path.exists(filename), msg
 
 
@@ -61,9 +62,10 @@ class TestArguments:
 
         # verbose
         fn = next(filename_gen)
-        with pytest.warns(None) as record:
+        with warnings.catch_warnings(record=True) as record:
             save_as_pdf_pages(p(), fn, verbose=False)
-        assert_exist_and_clean(fn, "save method")
+            assert_exist_and_clean(fn, "save method")
+            assert not record, "Issued an unexpected warning"
 
         res = ('filename' in str(item.message).lower()
                for item in record)

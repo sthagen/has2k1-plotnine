@@ -20,11 +20,11 @@ DPI = 72                # Default DPI for the tests
 # the test. It is limited to setting the size of the test
 # images Should a test require a larger or smaller figure
 # size, the dpi or aspect_ratio should be modified.
-test_theme = theme(figure_size=(640/DPI, 480/DPI))
+test_theme = theme(figure_size=(640/DPI, 480/DPI), dpi=DPI)
 
 if not os.path.exists(os.path.join(
         os.path.dirname(__file__), 'baseline_images')):
-    raise IOError(
+    raise OSError(
         "The baseline image directory does not exist. "
         "This is most likely because the test data is not installed. "
         "You may need to install plotnine from source to get the "
@@ -32,10 +32,10 @@ if not os.path.exists(os.path.join(
 
 
 def raise_no_baseline_image(filename):
-    raise Exception("Baseline image {} is missing".format(filename))
+    raise Exception(f"Baseline image {filename} is missing")
 
 
-def ggplot_equals(gg, right):
+def ggplot_equals(gg, name):
     """
     Compare ggplot object to image determined by `right`
 
@@ -43,53 +43,22 @@ def ggplot_equals(gg, right):
     ----------
     gg : ggplot
         ggplot object
-    right : str | tuple
-        Identifier. If a tuple, then first element is the
-        identifier and the second element is a `dict`.
-        The `dict` can have two keys
-            - tol - tolerance for the image comparison, a float.
-            - savefig_kwargs - Parameter used by MPL to save
-                               the figure. This is a `dict`.
-
-    The right looks like any one of the following::
-
-       - 'identifier'
-       - ('identifier', {'tol': 17})
-       - ('identifier', {'tol': 17, 'savefig_kwargs': {'dpi': 80}})
+    name : str
+        Identifier for the test image
 
     This function is meant to monkey patch ggplot.__eq__
     so that tests can use the `assert` statement.
     """
-    _setup()
-    if isinstance(right, (tuple, list)):
-        name, params = right
-        tol = params.get('tol', TOLERANCE)
-        _savefig_kwargs = params.get('savefig_kwargs', {})
-    else:
-        name, tol = right, TOLERANCE
-        _savefig_kwargs = {}
-
-    savefig_kwargs = {'dpi': DPI}
-    savefig_kwargs.update(_savefig_kwargs)
-
-    gg += test_theme
-    fig = gg.draw()
     test_file = inspect.stack()[1][1]
     filenames = make_test_image_filenames(name, test_file)
-
-    # savefig ignores the figure face & edge colors
-    facecolor = fig.get_facecolor()
-    edgecolor = fig.get_edgecolor()
-    if facecolor:
-        savefig_kwargs['facecolor'] = facecolor
-    if edgecolor:
-        savefig_kwargs['edgecolor'] = edgecolor
-
+    bbox_inches = 'tight' if 'caption' in gg.labels else None
     # Save the figure before testing whether the original image
     # actually exists. This makes creating new tests much easier,
     # as the result image can afterwards just be copied.
-    fig.savefig(filenames.result, **savefig_kwargs)
-    _teardown()
+    gg += test_theme
+    with _test_cleanup():
+        gg.save(filenames.result, verbose=False, bbox_inches=bbox_inches)
+
     if os.path.exists(filenames.baseline):
         shutil.copyfile(filenames.baseline, filenames.expected)
     else:
@@ -98,7 +67,7 @@ def ggplot_equals(gg, right):
         raise_no_baseline_image(filenames.baseline)
 
     err = compare_images(filenames.expected, filenames.result,
-                         tol, in_decorator=True)
+                         TOLERANCE, in_decorator=True)
     gg._err = err  # For the pytest error message
     return False if err else True
 
@@ -119,14 +88,8 @@ def draw_test(self):
     so that tests can draw and not care about cleaning up
     the MPL figure.
     """
-    try:
-        figure = self.draw()
-    except Exception as err:
-        plt.close('all')
-        raise err
-    else:
-        if figure:
-            plt.close(figure)
+    with _test_cleanup():
+        self.draw()
 
 
 ggplot.draw_test = draw_test
@@ -142,7 +105,8 @@ def build_test(self):
         ggplot object
 
     This function is meant to monkey patch ggplot.build_test
-    so that tests build.
+    so that tests can build a plot and inspect the side effects
+    on the plot object.
     """
     self = deepcopy(self)
     self._build()
@@ -154,9 +118,8 @@ ggplot.build_test = build_test
 
 def pytest_assertrepr_compare(op, left, right):
     if (isinstance(left, ggplot) and
-            isinstance(right, (str, tuple)) and
+            isinstance(right, str) and
             op == "=="):
-
         msg = ("images not close: {actual:s} vs. {expected:s} "
                "(RMS {rms:.2f})".format(**left._err))
         return [msg]
@@ -214,40 +177,38 @@ def make_test_image_filenames(name, test_file):
     return filenames
 
 
-# This is called from the cleanup decorator
-def _setup():
-    # The baseline images are created in this locale, so we should use
-    # it during all of the tests.
-    try:
-        locale.setlocale(locale.LC_ALL, str('en_US.UTF-8'))
-    except locale.Error:
+class _test_cleanup:
+    def __enter__(self):
+        # The baseline images are created in this locale, so we should use
+        # it during all of the tests.
         try:
-            locale.setlocale(locale.LC_ALL, str('English_United States.1252'))
+            locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
         except locale.Error:
-            warnings.warn(
-                "Could not set locale to English/United States. "
-                "Some date-related tests may fail")
+            try:
+                locale.setlocale(locale.LC_ALL, 'English_United States.1252')
+            except locale.Error:
+                warnings.warn(
+                    "Could not set locale to English/United States. "
+                    "Some date-related tests may fail"
+                )
 
-    plt.switch_backend('Agg')  # use Agg backend for these test
-    if mpl.get_backend().lower() != "agg":
-        msg = ("Using a wrong matplotlib backend ({0}), "
-               "which will not produce proper images")
-        raise Exception(msg.format(mpl.get_backend()))
+        # make sure we don't carry over bad plots from former tests
+        plt.close('all')
+        n_figs = len(plt.get_fignums())
+        msg = (f"No. of open figs: {n_figs}. Make sure the "
+               "figures from the previous tests are cleaned up."
+               )
+        assert n_figs == 0, msg
 
-    # These settings *must* be hardcoded for running the comparison
-    # tests
-    mpl.rcdefaults()  # Start with all defaults
-    mpl.rcParams['text.hinting'] = 'auto'
-    mpl.rcParams['text.antialiased'] = True
-    mpl.rcParams['text.hinting_factor'] = 8
+        mpl.use('Agg')
+        # These settings *must* be hardcoded for running the comparison
+        # tests
+        mpl.rcdefaults()  # Start with all defaults
+        mpl.rcParams['text.hinting'] = 'auto'
+        mpl.rcParams['text.antialiased'] = True
+        mpl.rcParams['text.hinting_factor'] = 8
+        return self
 
-    # make sure we don't carry over bad plots from former tests
-    msg = ("no of open figs: {} -> find the last test with ' "
-           "python tests.py -v' and add a '@cleanup' decorator.")
-    assert len(plt.get_fignums()) == 0, msg.format(plt.get_fignums())
-
-
-def _teardown():
-    plt.close('all')
-    # reset any warning filters set in tests
-    warnings.resetwarnings()
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        plt.close('all')
+        warnings.resetwarnings()

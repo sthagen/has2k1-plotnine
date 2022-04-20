@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 from plotnine import ggplot, aes, geom_point, facet_grid, facet_wrap
-from plotnine import geom_abline, annotate
+from plotnine import geom_abline, geom_path, annotate
 from plotnine.data import mpg, mtcars
 from plotnine.exceptions import PlotnineWarning
 
@@ -32,8 +32,6 @@ def test_facet_wrap_one_var():
     assert p3 == 'facet_wrap_one_var'
 
 
-# https://github.com/pandas-dev/pandas/issues/16276
-@pytest.mark.xfail
 def test_facet_wrap_expression():
     p = g + facet_wrap('pd.cut(var1, (0, 2, 4), include_lowest=True)')
     assert p == 'facet_wrap_expression'
@@ -91,8 +89,6 @@ def test_facet_grid_one_by_one_var():
     assert p2 == 'facet_grid_one_by_one_var'
 
 
-# https://github.com/pandas-dev/pandas/issues/16276
-@pytest.mark.xfail
 def test_facet_grid_expression():
     p = g + facet_grid(
         ['var2', 'pd.cut(var1, (0, 2, 4), include_lowest=True)'])
@@ -168,3 +164,22 @@ def test_variable_and_annotate():
          + facet_wrap('~g')
          )
     assert p == 'variable_and_annotate'
+
+
+def test_array_mapping_and_evaluation():
+    # GH548
+    # When we map to array/series of values, the aes evaluation
+    # should not mix up the values.
+    df = pd.DataFrame({
+        'x': range(12),
+        'y': range(12),
+        'g': list('abcd') * 3
+    })
+
+    # should be the same as if color='g'
+    p = (ggplot(df, aes('x', 'y', color=df['g']))
+         + geom_point(size=4)
+         + geom_path()
+         + facet_wrap('~g')
+         )
+    assert p == 'array_mapping_and_evaluation'

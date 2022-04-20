@@ -50,24 +50,31 @@ class stat_function(stat):
     DEFAULT_AES = {'y': after_stat('y')}
     CREATES = {'y'}
 
+    def __init__(self, data=None, mapping=None, **kwargs):
+        if data is None:
+            def _data_func(df):
+                if df.empty:
+                    df = pd.DataFrame({'group': [1]})
+                return df
+            data = _data_func
+
+        super().__init__(data, mapping, **kwargs)
+
+    def setup_params(self, data):
+        if not callable(self.params['fun']):
+            raise PlotnineError(
+                "stat_function requires parameter 'fun' to be "
+                "a function or any other callable object"
+            )
+        return self.params
+
     @classmethod
     def compute_group(cls, data, scales, **params):
         fun = params['fun']
         n = params['n']
         args = params['args']
         xlim = params['xlim']
-
-        try:
-            range_x = xlim or scales.x.dimension((0, 0))
-        except AttributeError:
-            raise PlotnineError(
-                "Missing 'x' aesthetic and 'xlim' is {}".format(xlim))
-
-        if not callable(fun):
-            raise PlotnineError(
-                "stat_function requires parameter 'fun' to be " +
-                "a function or any other callable object")
-
+        range_x = xlim or scales.x.dimension((0, 0))
         old_fun = fun
         if isinstance(args, (list, tuple)):
             def fun(x):

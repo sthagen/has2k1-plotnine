@@ -4,7 +4,7 @@ import sys
 
 import pandas as pd
 
-from ..mapping.aes import aes, all_aesthetics
+from ..mapping.aes import aes, ALL_AESTHETICS
 from ..geoms import geom_blank
 from ..scales.scales import make_scale
 from ..exceptions import PlotnineError
@@ -37,7 +37,7 @@ class _lim:
         elif array_kind.timedelta(series):
             self.trans = 'timedelta'
         else:
-            msg = 'Unknown type {} of limits'.format(type(limits[0]))
+            msg = f'Unknown type {type(limits[0])} of limits'
             raise TypeError(msg)
 
         self.limits = limits
@@ -173,7 +173,7 @@ class lims:
         thismodule = sys.modules[__name__]
         for ae, value in self._kwargs.items():
             try:
-                klass = getattr(thismodule, '{}lim'.format(ae))
+                klass = getattr(thismodule, f'{ae}lim')
             except AttributeError:
                 raise PlotnineError("Cannot change limits for '{}'")
 
@@ -209,7 +209,7 @@ def expand_limits(**kwargs):
         data = kwargs
 
     mapping = aes()
-    for ae in set(kwargs) & all_aesthetics:
+    for ae in set(kwargs) & ALL_AESTHETICS:
         mapping[ae] = ae
 
-    return geom_blank(mapping=mapping, data=data, inherit_aes=False)
+    return geom_blank(data=data, mapping=mapping, inherit_aes=False)

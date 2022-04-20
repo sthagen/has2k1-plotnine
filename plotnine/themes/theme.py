@@ -1,6 +1,6 @@
 from copy import copy, deepcopy
 
-from ..options import get_option, set_option
+from ..options import get_option, set_option, SUBPLOTS_ADJUST
 from ..exceptions import PlotnineError
 from .themeable import themeable, Themeables
 
@@ -19,10 +19,10 @@ default_rcparams = {
     'timezone': 'UTC',
     # Choosen to match MPL 2.0 defaults
     'savefig.dpi': 'figure',
-    'figure.subplot.left': 0.125,
-    'figure.subplot.right': 0.9,
-    'figure.subplot.top': 0.88,
-    'figure.subplot.bottom': 0.11,
+    'figure.subplot.left': SUBPLOTS_ADJUST['left'],
+    'figure.subplot.right': SUBPLOTS_ADJUST['right'],
+    'figure.subplot.top': SUBPLOTS_ADJUST['top'],
+    'figure.subplot.bottom': SUBPLOTS_ADJUST['bottom'],
 }
 
 
@@ -33,7 +33,7 @@ class theme:
     In general, only complete themes should subclass this class.
 
     Parameters
-    -----------
+    ----------
     complete : bool
         Themes that are complete will override any existing themes.
         themes that are not complete (ie. partial) will add to or
@@ -82,6 +82,7 @@ class theme:
                  legend_text_colorbar=None,
                  legend_text=None,
                  plot_title=None,
+                 plot_caption=None,
                  strip_text_x=None,
                  strip_text_y=None,
                  strip_text=None,
@@ -136,7 +137,6 @@ class theme:
                  dpi=None,
                  figure_size=None,
                  subplots_adjust=None,
-                 facet_spacing=None,
                  legend_box=None,
                  legend_box_margin=None,
                  legend_box_just=None,
@@ -195,27 +195,18 @@ class theme:
         c2 = self.rcParams == other.rcParams
         return c1 and c2
 
-    def apply_axs(self, axs):
-        """
-        Apply this theme to all the axes
-
-        Parameters
-        ----------
-        axs : iterable
-            Sequence of axes to be themed
-        """
-        for ax in axs:
-            self.apply(ax)
-
-    def apply(self, ax):
+    def apply(self, figure, axs):
         """
         Apply this theme, then apply additional modifications in order.
 
-        Subclasses that override this method should make sure that
-        the base class method is called.
+        This method will be called once with the figure object and the
+        axes after plot has completed. Subclasses that override this
+        method should make sure that the base class method is called.
         """
         for th in self.themeables.values():
-            th.apply(ax)
+            th.apply_figure(figure)
+            for ax in axs:
+                th.apply(ax)
 
     def setup_figure(self, figure):
         """
@@ -228,18 +219,6 @@ class theme:
         """
         for th in self.themeables.values():
             th.setup_figure(figure)
-
-    def apply_figure(self, figure):
-        """
-        Makes any desired changes to the figure object
-
-        This method will be called once with a figure object
-        after plot has completed. Subclasses that override this
-        method should make sure that the base class method is
-        called.
-        """
-        for th in self.themeables.values():
-            th.apply_figure(figure)
 
     @property
     def rcParams(self):

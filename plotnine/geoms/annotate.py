@@ -68,9 +68,9 @@ class annotate:
             info_tokens.append((ae, len(val)))
 
         if len(set(lengths)) > 1:
-            details = ', '.join(['{} ({})'.format(n, l)
+            details = ', '.join([f'{n} ({l})'
                                  for n, l in info_tokens])
-            msg = 'Unequal parameter lengths: {}'.format(details)
+            msg = f'Unequal parameter lengths: {details}'
             raise PlotnineError(msg)
 
         # Stop pandas from complaining about all scalars
@@ -81,20 +81,21 @@ class annotate:
 
         data = pd.DataFrame(position)
         if isinstance(geom, str):
-            geom = Registry['geom_{}'.format(geom)]
+            geom = Registry[f'geom_{geom}']
         elif not (isinstance(geom, type) and
                   issubclass(geom, geom_base_class)):
             raise PlotnineError(
                 "geom must either be a geom.geom() "
                 "descendant (e.g. plotnine.geom_point), or "
                 "a string naming a geom (e.g. 'point', 'text', "
-                "...). Was {}".format(repr(geom)))
+                f"...). Got {repr(geom)}"
+            )
 
         mappings = aes(**{ae: ae for ae in data.columns})
 
         # The positions are mapped, the rest are manual settings
-        self._annotation_geom = geom(mappings,
-                                     data=data,
+        self._annotation_geom = geom(data,
+                                     mappings,
                                      stat='identity',
                                      inherit_aes=False,
                                      show_legend=False,

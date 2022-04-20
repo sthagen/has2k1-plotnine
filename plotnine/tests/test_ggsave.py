@@ -1,4 +1,5 @@
 import os
+import warnings
 
 import matplotlib.pyplot as plt
 import pytest
@@ -9,7 +10,7 @@ from plotnine import (ggplot, aes, geom_text, geom_point, facet_wrap,
 from plotnine.data import mtcars
 from plotnine.exceptions import PlotnineError, PlotnineWarning
 
-p = (ggplot(aes(x='wt', y='mpg', label='name'), data=mtcars)
+p = (ggplot(mtcars, aes(x='wt', y='mpg', label='name'))
      + geom_text())
 
 
@@ -18,7 +19,7 @@ def sequential_filenames():
     Generate filenames for the tests
     """
     for i in range(100):
-        yield 'filename-{}.png'.format(i)
+        yield f'filename-{i}.png'
 
 
 filename_gen = sequential_filenames()
@@ -26,7 +27,7 @@ filename_gen = sequential_filenames()
 
 def assert_file_exist(filename, msg=None):
     if not msg:
-        msg = "File {} does not exist".format(filename)
+        msg = f"File {filename} does not exist"
     assert os.path.exists(filename), msg
 
 
@@ -58,17 +59,10 @@ class TestArguments:
 
         # verbose
         fn = next(filename_gen)
-        with pytest.warns(None) as record:
+        with warnings.catch_warnings(record=True) as record:
             p.save(fn, verbose=False)
-        assert_exist_and_clean(fn, "save method")
-
-        res = ('saving' in str(item.message).lower()
-               for item in record)
-        assert not any(res)
-
-        res = ('filename' in str(item.message).lower()
-               for item in record)
-        assert not any(res)
+            assert_exist_and_clean(fn, "save method")
+            assert not record, "Issued an unexpected warning"
 
     def test_filename_plot_path(self):
         fn = next(filename_gen)

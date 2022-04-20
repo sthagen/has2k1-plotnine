@@ -19,10 +19,10 @@ class Layers(list):
     """
 
     def __iadd__(self, other):
-        return Layers(super(Layers, self).__iadd__(other))
+        return Layers(super().__iadd__(other))
 
     def __add__(self, other):
-        return Layers(super(Layers, self).__add__(other))
+        return Layers(super().__add__(other))
 
     def __radd__(self, other, inplace=False):
         """
@@ -39,7 +39,7 @@ class Layers(list):
         return other
 
     def __getitem__(self, key):
-        result = super(Layers, self).__getitem__(key)
+        result = super().__getitem__(key)
         if not isinstance(key, int):
             result = Layers(result)
         return result
@@ -48,11 +48,9 @@ class Layers(list):
     def data(self):
         return [l.data for l in self]
 
-    def prepare(self, plot):
+    def setup(self, plot):
         for l in self:
-            l.make_layer_data(plot.data)
-            l.make_layer_mapping(plot.mapping)
-            l.make_layer_environments(plot.environment)
+            l.setup(plot)
 
     def setup_data(self):
         for l in self:
@@ -218,7 +216,17 @@ class layer:
 
         return result
 
-    def make_layer_data(self, plot_data):
+    def setup(self, plot):
+        """
+        Prepare layer for the plot building
+
+        Give the layer access to the data, mapping and environment
+        """
+        self._make_layer_data(plot.data)
+        self._make_layer_mapping(plot.mapping)
+        self._make_layer_environments(plot.environment)
+
+    def _make_layer_data(self, plot_data):
         """
         Generate data to be used by this layer
 
@@ -240,18 +248,19 @@ class layer:
                 _geom_name = self.geom.__class__.__name__
                 _data_name = plot_data.__class__.__name__
                 raise PlotnineError(
-                    "{} layer expects a dataframe, but it got "
-                    "{} instead.".format(_geom_name, _data_name)
+                    f"{_geom_name} layer expects a dataframe, "
+                    f"but it got {_data_name} instead."
                 )
         elif callable(self.data):
             self.data = self.data(plot_data)
             if not isinstance(self.data, pd.DataFrame):
                 raise PlotnineError(
-                    "Data function must return a dataframe")
+                    "Data function must return a dataframe"
+                )
         else:
             self.data = self.data.copy()
 
-    def make_layer_mapping(self, plot_mapping):
+    def _make_layer_mapping(self, plot_mapping):
         """
         Create the aesthetic mappings to be used by this layer
 
@@ -278,7 +287,7 @@ class layer:
                 group = f'"{group}"'
             self.mapping['group'] = stage(start=group)
 
-    def make_layer_environments(self, plot_environment):
+    def _make_layer_environments(self, plot_environment):
         """
         Create the aesthetic mappings to be used by this layer
 
@@ -308,7 +317,8 @@ class layer:
         else:
             evaled['PANEL'] = self.data['PANEL']
 
-        self.data = add_group(evaled)
+        data = add_group(evaled)
+        self.data = data.sort_values('PANEL', kind='mergesort')
 
     def compute_statistic(self, layout):
         """
@@ -365,7 +375,8 @@ class layer:
         check_required_aesthetics(
             self.geom.REQUIRED_AES,
             set(data.columns) | set(self.geom.aes_params),
-            self.geom.__class__.__name__)
+            self.geom.__class__.__name__
+        )
 
         self.data = data
 
@@ -427,7 +438,6 @@ class layer:
         """
         Prepare/modify data for plotting
         """
-        # params = self.stat.setup_params(self.data)
         self.stat.finish_layer(self.data, self.stat.params)
 
 

@@ -1,10 +1,13 @@
 import os
 
+import pytest
+
 from plotnine import ggplot, aes, geom_point, labs, facet_grid
 from plotnine import (theme, theme_538, theme_bw, theme_classic,
                       theme_dark, theme_gray, theme_light,
                       theme_linedraw, theme_matplotlib, theme_minimal,
-                      theme_seaborn, theme_void, theme_xkcd)
+                      theme_seaborn, theme_void, theme_xkcd,
+                      theme_tufte)
 from plotnine import element_line, element_text, element_blank
 from plotnine.data import mtcars
 
@@ -93,6 +96,36 @@ def test_add_element_blank():
     assert th3.apply.__name__ == 'apply'
 
 
+def test_element_line_dashed_capstyle():
+    p = (
+        ggplot(mtcars, aes(x="wt", y="mpg"))
+        + theme(
+            panel_grid=element_line(
+                linetype="dashed",
+                lineend="butt",
+                size=1.0,
+            )
+        )
+    )
+    # no exception
+    p._build()
+
+
+def test_element_line_solid_capstyle():
+    p = (
+        ggplot(mtcars, aes(x="wt", y="mpg"))
+        + theme(
+            panel_grid=element_line(
+                linetype="solid",
+                lineend="butt",
+                size=1.0,
+            )
+        )
+    )
+    # no exception
+    p._build()
+
+
 class TestThemes:
     g = (ggplot(mtcars, aes(x='wt', y='mpg', color='factor(gear)'))
          + geom_point()
@@ -143,6 +176,12 @@ class TestThemes:
 
         assert p + _theme == 'theme_minimal'
 
+    def test_theme_tufte(self):
+        p = self.g + labs(title='Theme Tufte') + theme_tufte(ticks=False)
+
+        assert p + _theme == 'theme_tufte'
+
+    @pytest.mark.xfail(reason="fails on github actions")
     def test_theme_seaborn(self):
         p = self.g + labs(title='Theme Seaborn') + theme_seaborn()
 

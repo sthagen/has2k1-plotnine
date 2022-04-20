@@ -1,19 +1,22 @@
-scipy
-statsmodels
-pandas
-matplotlib
-mizani
-geopandas
-descartes
-scikit-misc
+notebook
+
+# extra
 adjustText
+scikit-misc
+scikit-learn
+geopandas
 
-# Documentation
--r doc.txt
+# doc
+git+https://github.com/has2k1/plotnine-examples#egg=plotnine_examples
+jupyter
+nbsphinx
+numpydoc>=0.9.1
+sphinx>=3.0.0
 
-# Testing
-pyshp
-pytest-cov
-wheel
-pep8
+# testing
 flake8
+pytest-cov
+
+# release
+twine
+wheel

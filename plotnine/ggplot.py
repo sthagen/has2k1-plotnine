@@ -1,8 +1,6 @@
-# -*- coding: utf-8 -*-
 import os
 import sys
 from copy import deepcopy
-from contextlib import suppress
 from itertools import chain
 from types import SimpleNamespace as NS
 from warnings import warn
@@ -19,10 +17,10 @@ from .mapping.aes import aes, make_labels
 from .layer import Layers
 from .facets import facet_null
 from .facets.layout import Layout
-from .options import get_option
+from .options import get_option, SUBPLOTS_ADJUST
 from .themes.theme import theme, theme_get
 from .utils import (
-        to_inches, from_inches, defaults, order_as_mapping_data, ungroup
+        to_inches, from_inches, defaults, order_as_data_mapping, ungroup
         )
 from .exceptions import PlotnineError, PlotnineWarning
 from .scales.scales import Scales
@@ -42,12 +40,12 @@ class ggplot:
 
     Parameters
     ----------
-    aesthetics : aes
-        Default aesthetics for the plot. These will be used
-        by all layers unless specifically overridden.
     data :  dataframe
-        Default data for for plot. Every layer that does not
+        Default data for plot. Every layer that does not
         have data of its own will use this one.
+    mapping : aes
+        Default aesthetics mapping for the plot. These will be used
+        by all layers unless specifically overridden.
     environment : dict, ~patsy.Eval.EvalEnvironment
         If a variable defined in the aesthetic mapping is not
         found in the data, ggplot will look for it in this
@@ -55,9 +53,9 @@ class ggplot:
         in which `ggplot()` is called.
     """
 
-    def __init__(self, mapping=None, data=None, environment=None):
+    def __init__(self, data=None, mapping=None, environment=None):
         # Allow some sloppiness
-        mapping, data = order_as_mapping_data(mapping, data)
+        data, mapping = order_as_data_mapping(data, mapping)
         if mapping is None:
             mapping = aes()
 
@@ -216,10 +214,11 @@ class ggplot:
             self._draw_breaks_and_labels()
             self._draw_legend()
             self._draw_title()
+            self._draw_caption()
             self._draw_watermarks()
 
             # Artist object theming
-            self._apply_theme()
+            self.theme.apply(figure, axs)
 
             if return_ggplot:
                 output = self.figure, self
@@ -252,7 +251,7 @@ class ggplot:
             self._draw_layers()
             self._draw_breaks_and_labels()
             self._draw_legend()
-            self._apply_theme()
+            self.theme.apply(figure, axs)
 
         return self
 
@@ -277,8 +276,9 @@ class ggplot:
         # Update the label information for the plot
         layers.update_labels(self)
 
-        # Give each layer a copy of the data and the mappings
-        layers.prepare(self)
+        # Give each layer a copy of the data, the mappings and
+        # the execution environment
+        layers.setup(self)
 
         # Initialise panels, add extra data for margins & missing
         # facetting variables, and add on a PANEL variable to data
@@ -291,17 +291,17 @@ class ggplot:
         # Transform data using all scales
         layers.transform(scales)
 
+        # Make sure missing (but required) aesthetics are added
+        scales.add_missing(('x', 'y'))
+
         # Map and train positions so that statistics have access
         # to ranges and all positions are numeric
-        layout.train_position(layers, scales.x, scales.y)
+        layout.train_position(layers, scales)
         layout.map_position(layers)
 
         # Apply and map statistics
         layers.compute_statistic(layout)
         layers.map_statistic(self)
-
-        # Make sure missing (but required) aesthetics are added
-        scales.add_missing(('x', 'y'))
 
         # Prepare data in geoms
         # e.g. from y and width to ymin and ymax
@@ -314,7 +314,7 @@ class ggplot:
         # ensures that facets have control over the range of
         # a plot.
         layout.reset_position_scales()
-        layout.train_position(layers, scales.x, scales.y)
+        layout.train_position(layers, scales)
         layout.map_position(layers)
 
         # Train and map non-position scales
@@ -433,18 +433,10 @@ class ggplot:
         bottom = figure.subplotpars.bottom
         W, H = figure.get_size_inches()
         position = self.guides.position
-        get_property = self.theme.themeables.property
-        # defaults
-        spacing = 0.1
-        strip_margin_x = 0
-        strip_margin_y = 0
-
-        with suppress(KeyError):
-            spacing = get_property('legend_box_spacing')
-        with suppress(KeyError):
-            strip_margin_x = get_property('strip_margin_x')
-        with suppress(KeyError):
-            strip_margin_y = get_property('strip_margin_y')
+        _property = self.theme.themeables.property
+        spacing = _property('legend_box_spacing')
+        strip_margin_x = _property('strip_margin_x')
+        strip_margin_y = _property('strip_margin_y')
 
         right_strip_width = self.facet.strips.breadth('right')
         top_strip_height = self.facet.strips.breadth('top')
@@ -456,25 +448,25 @@ class ggplot:
         # location. This should get fixed when MPL has a better
         # layout manager.
         if position == 'right':
-            loc = 6
+            loc = 'center left'
             pad = right_strip_width*(1+strip_margin_x) + spacing
             x = right + pad/W
             y = 0.5
         elif position == 'left':
-            loc = 7
+            loc = 'center right'
             x = left - spacing/W
             y = 0.5
         elif position == 'top':
-            loc = 8
+            loc = 'lower center'
             x = 0.5
             pad = top_strip_height*(1+strip_margin_y) + spacing
             y = top + pad/H
         elif position == 'bottom':
-            loc = 9
+            loc = 'upper center'
             x = 0.5
             y = bottom - spacing/H
         else:
-            loc = 10
+            loc = 'center'
             x, y = position
 
         anchored_box = AnchoredOffsetbox(
@@ -484,7 +476,8 @@ class ggplot:
             frameon=False,
             bbox_to_anchor=(x, y),
             bbox_transform=figure.transFigure,
-            borderpad=0.)
+            borderpad=0.
+        )
 
         anchored_box.set_zorder(90.1)
         self.figure._themeable['legend_background'] = anchored_box
@@ -498,21 +491,10 @@ class ggplot:
         # This is very laboured. Should be changed when MPL
         # finally has a constraint based layout manager.
         figure = self.figure
-        get_property = self.theme.themeables.property
+        _property = self.theme.themeables.property
 
-        try:
-            margin = get_property('axis_title_x', 'margin')
-        except KeyError:
-            pad_x = 5
-        else:
-            pad_x = margin.get_as('t', 'pt')
-
-        try:
-            margin = get_property('axis_title_y', 'margin')
-        except KeyError:
-            pad_y = 5
-        else:
-            pad_y = margin.get_as('r', 'pt')
+        pad_x = _property('axis_title_x', 'margin').get_as('t', 'pt')
+        pad_y = _property('axis_title_y', 'margin').get_as('r', 'pt')
 
         # Get the axis labels (default or specified by user)
         # and let the coordinate modify them e.g. flip
@@ -550,8 +532,7 @@ class ggplot:
         # finally has a constraint based layout manager.
         figure = self.figure
         title = self.labels.get('title', '')
-        rcParams = self.theme.rcParams
-        get_property = self.theme.themeables.property
+        _property = self.theme.themeables.property
 
         # Pick suitable values in inches and convert them to
         # transFigure dimension. This gives fixed spacing
@@ -564,43 +545,58 @@ class ggplot:
         # pad/H is inches in transFigure coordinates. A fixed
         # margin value in inches prevents oblong plots from
         # getting unpredictably large spaces.
-        try:
-            fontsize = get_property('plot_title', 'size')
-        except KeyError:
-            fontsize = float(rcParams.get('font.size', 12))
 
-        try:
-            linespacing = get_property('plot_title', 'linespacing')
-        except KeyError:
-            linespacing = 1.2
-
-        try:
-            margin = get_property('plot_title', 'margin')
-        except KeyError:
-            pad = 0.09
-        else:
-            pad = margin.get_as('b', 'in')
-
-        try:
-            strip_margin_y = get_property('strip_margin_y')
-        except KeyError:
-            strip_margin_y = 0
+        linespacing = _property('plot_title', 'linespacing')
+        fontsize = _property('plot_title', 'size')
+        pad = _property('plot_title', 'margin').get_as('b', 'in')
+        ha = _property('plot_title', 'ha')
+        strip_margin_y = _property('strip_margin_y')
 
         dpi = 72.27
         line_size = fontsize / dpi
         num_lines = len(title.split('\n'))
         title_size = line_size * linespacing * num_lines
         strip_height = self.facet.strips.breadth('top')
-        # strip_height = 5.820833333333334
-        # print(strip_height)
-        # vertical adjustment
         strip_height *= (1 + strip_margin_y)
 
-        x = 0.5
+        if ha == 'left':
+            x = SUBPLOTS_ADJUST['left']
+        elif ha == 'right':
+            x = SUBPLOTS_ADJUST['right']
+        else:
+            # ha='center' is default
+            x = 0.5
+
         y = top + (strip_height+title_size/2+pad)/H
 
-        text = figure.text(x, y, title, ha='center', va='center')
+        text = figure.text(x, y, title, ha=ha, va='center')
         figure._themeable['plot_title'] = text
+
+    def _draw_caption(self):
+        """
+        Draw caption onto the figure
+        """
+        # This is very laboured. Should be changed when MPL
+        # finally has a constraint based layout manager.
+        figure = self.figure
+        caption = self.labels.get('caption', '')
+        _property = self.theme.themeables.property
+
+        # Pick suitable values in inches and convert them to
+        # transFigure dimension. This gives fixed spacing
+        # margins which work for oblong plots.
+        right = figure.subplotpars.right
+        W, H = figure.get_size_inches()
+
+        margin = _property('plot_caption', 'margin')
+        right_pad = margin.get_as('r', 'in')
+        top_pad = margin.get_as('t', 'in')
+
+        x = right - right_pad/W
+        y = 0 - top_pad/H
+
+        text = figure.text(x, y, caption, ha='right', va='top')
+        figure._themeable['plot_caption'] = text
 
     def _draw_watermarks(self):
         """
@@ -626,7 +622,7 @@ class ggplot:
             Extension e.g. png, pdf, ...
         """
         hash_token = abs(self.__hash__())
-        return 'plotnine-save-{}.{}'.format(hash_token, ext)
+        return f'plotnine-save-{hash_token}.{ext}'
 
     def _update_labels(self, layer):
         """
@@ -710,16 +706,17 @@ class ggplot:
 
         if limitsize and (width > 25 or height > 25):
             raise PlotnineError(
-                "Dimensions (width={}, height={}) exceed 25 inches "
+                f"Dimensions ({width=}, {height=}) exceed 25 inches "
                 "(height and width are specified in inches/cm/mm, "
                 "not pixels). If you are sure you want these "
-                "dimensions, use 'limitsize=False'.".format(width, height))
+                "dimensions, use 'limitsize=False'."
+            )
 
         if verbose:
-            warn("Saving {0} x {1} {2} image.".format(
-                 from_inches(width, units),
-                 from_inches(height, units), units), PlotnineWarning)
-            warn('Filename: {}'.format(filename), PlotnineWarning)
+            _w = from_inches(width, units),
+            _h = from_inches(height, units),
+            warn(f"Saving {_w} x {_h} {units} image.", PlotnineWarning)
+            warn(f'Filename: {filename}', PlotnineWarning)
 
         if dpi is not None:
             self.theme = self.theme + theme(dpi=dpi)
@@ -817,7 +814,7 @@ def save_as_pdf_pages(plots, filename=None, path=None, verbose=True, **kwargs):
         filename = os.path.join(path, filename)
 
     if verbose:
-        warn('Filename: {}'.format(filename), PlotnineWarning)
+        warn(f'Filename: {filename}', PlotnineWarning)
 
     with PdfPages(filename) as pdf:
         # Re-add the first element to the iterator, if it was removed

@@ -1,3 +1,4 @@
+import warnings
 from datetime import datetime
 
 import numpy as np
@@ -375,6 +376,30 @@ def test_setting_limits_transformed():
     assert s.limits == (np.log10(1), np.log10(7))
 
 
+def test_scale_continuous_limits_as_function():
+    def reverse(x):
+        return list(reversed(x))
+
+    x = [1, 2, 3, 4]
+    sc1 = scale_x_continuous()
+    sc2 = scale_x_continuous(limits=reverse)
+    sc1.train(x)
+    sc2.train(x)
+    assert sc1.limits == sc2.limits[::-1]
+
+
+def test_scale_discrete_limits_as_function():
+    def reverse(x):
+        return list(reversed(x))
+
+    x = ['a', 'b', 'c', 'd']
+    sc1 = scale_color.scale_color_discrete()
+    sc2 = scale_color.scale_color_discrete(limits=reverse)
+    sc1.train(x)
+    sc2.train(x)
+    assert sc1.limits == sc2.limits[::-1]
+
+
 def test_minor_breaks():
     n = 10
     x = np.arange(n)
@@ -417,7 +442,7 @@ def test_minor_breaks():
 
 def test_expand_limits():
     df = pd.DataFrame({'x': range(5, 11), 'y': range(5, 11)})
-    p = (ggplot(aes('x', 'y'), data=df)
+    p = (ggplot(df, aes('x', 'y'))
          + geom_point()
          + expand_limits(y=(0, None))
          )
@@ -550,6 +575,20 @@ def test_missing_data_discrete_scale():
     assert p + _theme == 'missing_data_discrete_scale'
 
 
+def test_missing_data_discrete_position_scale():
+    df = pd.DataFrame({
+        'a': [1, 2, 3],
+        'b': ['a', 'b', None]
+    })
+
+    p = (ggplot(df, aes('a', 'b'))
+         + geom_point(aes(fill='b'), stroke=0, size=10)
+         )
+
+    with pytest.warns(PlotnineWarning):
+        assert p + _theme == 'missing_data_discrete_position_scale'
+
+
 df = pd.DataFrame({
     'x': range(4),
     'y': range(4),
@@ -635,7 +674,7 @@ def test_legend_ordering_added_scales():
 
 def test_breaks_and_labels_outside_of_limits():
     df = pd.DataFrame({'x': range(5, 11), 'y': range(5, 11)})
-    p = (ggplot(aes('x', 'y'), data=df)
+    p = (ggplot(df, aes('x', 'y'))
          + geom_point()
          + scale_x_continuous(
              limits=[7, 9.5],
@@ -650,10 +689,11 @@ def test_breaks_and_labels_outside_of_limits():
 
 def test_changing_scale_transform():
     # No warning
-    with pytest.warns(None):
+    with warnings.catch_warnings(record=True) as record:
         scale_x_continuous(trans='reverse')
         scale_xy.scale_x_reverse(trans='reverse')
         scale_xy.scale_x_log10(trans='log10')
+        assert not record, "Issued an unexpected warning"
 
     # Warnings
     with pytest.warns(PlotnineWarning):
@@ -720,4 +760,4 @@ def test_discrete_scale_exceeding_maximum_number_of_values():
          + scale_color_manual(['red', 'blue'])
          )
     with pytest.warns(PlotnineWarning):
-        p.draw()
+        p.draw_test()

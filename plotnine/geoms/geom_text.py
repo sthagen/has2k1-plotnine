@@ -1,4 +1,5 @@
 from contextlib import suppress
+from warnings import warn
 
 from matplotlib.text import Text
 
@@ -9,7 +10,8 @@ except ImportError:
 else:
     HAS_ADJUST_TEXT = True
 
-from ..utils import to_rgba, order_as_mapping_data
+from ..exceptions import PlotnineWarning
+from ..utils import to_rgba, order_as_data_mapping
 from ..doctools import document
 from ..positions import position_nudge
 from ..exceptions import PlotnineError
@@ -46,7 +48,11 @@ class geom_text(geom):
         Parameters to :class:`adjustText.adjust_text` will repel
         overlapping texts. This parameter takes priority of over
         ``nudge_x`` and ``nudge_y``.
-        See https://github.com/Phlya/adjustText/wiki .
+
+        ``adjust_text`` does not work well when it is used in the
+        first layer of the plot, or if it is the only layer.
+        For more see the documentation at
+        https://github.com/Phlya/adjustText/wiki .
     format_string : str (default: None)
         If not :py:`None`, then the text if formatted with this
         string using :meth:`str.format`
@@ -58,6 +64,7 @@ class geom_text(geom):
 
     See Also
     --------
+    plotnine.geoms.geom_label
     matplotlib.text.Text
     matplotlib.patheffects
 
@@ -86,8 +93,8 @@ class geom_text(geom):
                       'format_string': None,
                       'path_effects': None}
 
-    def __init__(self, mapping=None, data=None, **kwargs):
-        mapping, data = order_as_mapping_data(mapping, data)
+    def __init__(self, data=None, mapping=None, **kwargs):
+        data, mapping = order_as_data_mapping(data, mapping)
         nudge_kwargs = {}
         adjust_text = kwargs.get('adjust_text', None)
         if adjust_text is None:
@@ -110,7 +117,7 @@ class geom_text(geom):
         if mapping and 'vjust' in mapping:
             mapping['va'] = mapping.pop('vjust')
 
-        geom.__init__(self, mapping, data, **kwargs)
+        geom.__init__(self, data, mapping, **kwargs)
 
     def setup_data(self, data):
         parse = self.params['parse']
@@ -122,7 +129,7 @@ class geom_text(geom):
 
         # Parse latex
         if parse:
-            data['label'] = ['${}$'.format(l) for l in data['label']]
+            data['label'] = [f'${l}$' for l in data['label']]
 
         return data
 
@@ -179,6 +186,8 @@ class geom_text(geom):
         else:
             bbox = {}
 
+        texts = []
+
         # For labels add a bbox
         for i in range(len(data)):
             kw = df.iloc[i].to_dict()
@@ -187,11 +196,18 @@ class geom_text(geom):
                 kw['bbox']['edgecolor'] = params['boxcolor'] or kw['color']
                 kw['bbox']['facecolor'] = kw.pop('facecolor')
             text_elem = ax.text(**kw)
+            texts.append(text_elem)
             if params['path_effects']:
                 text_elem.set_path_effects(params['path_effects'])
 
         if params['adjust_text']:
-            adjust_text(list(ax.texts), ax=ax, **params['adjust_text'])
+            if params['zorder'] == 1:
+                warn(
+                    "For better results with adjust_text, it should "
+                    "not be the first layer or the only layer.",
+                    PlotnineWarning
+                )
+            adjust_text(texts, ax=ax, **params['adjust_text'])
 
     @staticmethod
     def draw_legend(data, da, lyr):

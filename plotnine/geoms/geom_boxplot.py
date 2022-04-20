@@ -65,7 +65,7 @@ class geom_boxplot(geom):
                       'varwidth': False, 'notchwidth': 0.5,
                       'fatten': 2}
 
-    def __init__(self, mapping=None, data=None, **kwargs):
+    def __init__(self, data=None, mapping=None, **kwargs):
         _position = kwargs.get('position', self.DEFAULT_PARAMS['position'])
         varwidth = kwargs.get('varwidth', self.DEFAULT_PARAMS['varwidth'])
 
@@ -79,7 +79,7 @@ class geom_boxplot(geom):
                          PlotnineWarning)
                     _position.params['preserve'] = 'single'
 
-        super().__init__(mapping, data, **kwargs)
+        super().__init__(data, mapping, **kwargs)
 
     def setup_data(self, data):
         if 'width' not in data:
@@ -156,7 +156,7 @@ class geom_boxplot(geom):
         num_outliers = len(data['outliers'].iloc[0])
         if num_outliers:
             def outlier_value(param):
-                oparam = 'outlier_{}'.format(param)
+                oparam = f'outlier_{param}'
                 if params[oparam] is not None:
                     return params[oparam]
                 return data[param].iloc[0]

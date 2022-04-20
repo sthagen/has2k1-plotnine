@@ -9,14 +9,18 @@ from .evaluation import after_stat, stage
 
 __all__ = ['aes']
 
-all_aesthetics = {
+X_AESTHETICS = {'x', 'xmin', 'xmax', 'xend', 'xintercept'}
+Y_AESTHETICS = {'y', 'ymin', 'ymax', 'yend', 'yintercept'}
+
+ALL_AESTHETICS = {
     'alpha', 'angle', 'color', 'colour', 'fill', 'group', 'intercept',
     'label', 'lineheight', 'linetype', 'lower', 'middle', 'radius',
-    'sample', 'shape', 'size', 'slope', 'stroke', 'upper', 'weight', 'x',
-    'xend', 'xintercept', 'xmax', 'xmin', 'y', 'yend', 'yintercept',
-    'ymax', 'ymin'}
+    'sample', 'shape', 'size', 'slope', 'stroke', 'upper', 'weight',
+    *X_AESTHETICS,
+    *Y_AESTHETICS
+}
 
-scaled_aesthetics = {
+SCALED_AESTHETICS = {
     'x', 'y', 'alpha', 'color', 'colour', 'fill',
     'linetype', 'shape', 'size', 'stroke'
 }
@@ -112,7 +116,7 @@ class aes(dict):
     mapped.
 
         1. ``factor`` - This function turns the variable into a factor.
-            It is just an alias to ``pd.Caterogical``::
+            It is just an alias to ``pd.Categorical``::
 
                 ggplot(mtcars, aes(x='factor(cyl)')) + geom_bar()
 

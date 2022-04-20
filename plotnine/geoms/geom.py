@@ -37,9 +37,9 @@ class geom(metaclass=Registry):
     # their default values.
     _aesthetics_doc = '{aesthetics_table}'
 
-    def __init__(self, mapping=None, data=None, **kwargs):
+    def __init__(self, data=None, mapping=None, **kwargs):
         kwargs = rename_aesthetics(kwargs)
-        kwargs = data_mapping_as_kwargs((mapping, data), kwargs)
+        kwargs = data_mapping_as_kwargs((data, mapping), kwargs)
         self._kwargs = kwargs  # Will be used to create stat & layer
 
         # separate aesthetics and parameters
@@ -81,11 +81,11 @@ class geom(metaclass=Registry):
             klass = name
         elif is_string(name):
             if not name.startswith('geom_'):
-                name = 'geom_{}'.format(name)
+                name = f'geom_{name}'
             klass = Registry[name]
         else:
             raise PlotnineError(
-                'Unknown geom of type {}'.format(type(name)))
+                f'Unknown geom of type {type(name)}')
 
         return klass(stat=stat, **stat._kwargs)
 

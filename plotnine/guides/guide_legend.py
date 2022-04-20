@@ -140,7 +140,7 @@ class guide_legend(guide):
             if hasattr(layer.geom, 'draw_legend'):
                 geom = layer.geom.__class__
             else:
-                name = 'geom_{}'.format(layer.geom.legend_geom)
+                name = f'geom_{layer.geom.legend_geom}'
                 geom = Registry[name]
             return geom
 
@@ -180,7 +180,7 @@ class guide_legend(guide):
             data = remove_missing(
                 data, l.geom.params['na_rm'],
                 list(l.geom.REQUIRED_AES | l.geom.NON_MISSING_AES),
-                '{} legend'.format(l.geom.__class__.__name__))
+                f'{l.geom.__class__.__name__} legend')
             self.glayers.append(
                 types.SimpleNamespace(geom=geom, data=data, layer=l))
         if not self.glayers:
@@ -189,6 +189,7 @@ class guide_legend(guide):
 
     def _set_defaults(self):
         guide._set_defaults(self)
+        _property = self.theme.themeables.property
 
         nbreak = len(self.key)
 
@@ -259,8 +260,7 @@ class guide_legend(guide):
 
         # keysize
         if self.keywidth is None:
-            width = determine_side_length(
-                self._default('legend_key_width', 18))
+            width = determine_side_length(_property('legend_key_width'))
             if self.direction == 'vertical':
                 width[:] = width.max()
             self._keywidth = width
@@ -268,8 +268,7 @@ class guide_legend(guide):
             self._keywidth = [self.keywidth]*nbreak
 
         if self.keyheight is None:
-            height = determine_side_length(
-                self._default('legend_key_height', 18))
+            height = determine_side_length(_property('legend_key_height'))
             if self.direction == 'horizontal':
                 height[:] = height.max()
             self._keyheight = height

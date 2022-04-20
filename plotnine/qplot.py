@@ -7,14 +7,14 @@ import numpy as np
 from patsy.eval import EvalEnvironment
 
 from .ggplot import ggplot
-from .mapping.aes import aes, all_aesthetics, scaled_aesthetics
+from .mapping.aes import aes, ALL_AESTHETICS, SCALED_AESTHETICS
 from .labels import labs
 from .facets import facet_null, facet_grid, facet_wrap
 from .facets.facet_grid import parse_grid_facets
 from .facets.facet_wrap import parse_wrap_facets
 from .utils import Registry, is_string, array_kind
 from .exceptions import PlotnineError, PlotnineWarning
-from .scales import scale_x_log10, scale_y_log10
+from .scales import scale_x_log10, scale_y_log10, lims
 from .themes import theme
 
 
@@ -81,7 +81,7 @@ def qplot(x=None, y=None, data=None, facets=None, margins=False,
 
     I_env = EvalEnvironment([{'I': I}])
 
-    for ae in kwargs.keys() & all_aesthetics:
+    for ae in kwargs.keys() & ALL_AESTHETICS:
         value = kwargs[ae]
         if is_mapping(value):
             aesthetics[ae] = value
@@ -144,7 +144,7 @@ def qplot(x=None, y=None, data=None, facets=None, margins=False,
                         "Cannot infer how long x should be.")
             replace_auto(geom, 'point')
 
-    p = ggplot(aes(**aesthetics), data=data, environment=environment)
+    p = ggplot(data, aes(**aesthetics), environment=environment)
 
     def get_facet_type(facets):
         with suppress(PlotnineError):
@@ -170,7 +170,7 @@ def qplot(x=None, y=None, data=None, facets=None, margins=False,
 
     # Add geoms
     for g in geom:
-        geom_name = 'geom_{}'.format(g)
+        geom_name = f'geom_{g}'
         geom_klass = Registry[geom_name]
         stat_name = 'stat_{}'.format(geom_klass.DEFAULT_PARAMS['stat'])
         stat_klass = Registry[stat_name]
@@ -187,7 +187,7 @@ def qplot(x=None, y=None, data=None, facets=None, margins=False,
     # pd.Series objects have name attributes. In a dataframe, the
     # series have the name of the column.
     labels = {}
-    for ae in scaled_aesthetics & kwargs.keys():
+    for ae in SCALED_AESTHETICS & kwargs.keys():
         with suppress(AttributeError):
             labels[ae] = kwargs[ae].name
 
@@ -211,5 +211,11 @@ def qplot(x=None, y=None, data=None, facets=None, margins=False,
 
     if asp:
         p += theme(aspect_ratio=asp)
+
+    if xlim:
+        p += lims(x=xlim)
+
+    if ylim:
+        p += lims(y=ylim)
 
     return p

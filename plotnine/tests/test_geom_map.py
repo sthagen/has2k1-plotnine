@@ -1,101 +1,118 @@
 import numpy as np
-import shapefile
 from geopandas import GeoDataFrame
+from shapely.geometry import (
+    Point,
+    Polygon,
+    LineString,
+    MultiPoint,
+    MultiPolygon,
+    MultiLineString
+)
 
 from plotnine import ggplot, aes, geom_map, labs, theme, facet_wrap
 
 _theme = theme(subplots_adjust={'right': 0.85})
 
 
-def _point_file(test_file):
-    with shapefile.Writer(test_file, shapefile.POINT) as shp:
-        shp.field('name', 'C')
+def test_geometries():
+    # Points
+    points = [Point(0, 0), Point(0, 1), Point(1, 1), Point(1, 0)]
+    point_names = [f'point{i}' for i in range(len(points))]
+    df_point = GeoDataFrame({'names': point_names, 'geometry': points})
 
-        shp.point(0, 0)
-        shp.record('point1')
+    # LineString
+    n = 5
+    x = np.repeat(np.linspace(0, 1, n), 2)
+    y = np.tile([0.375, 0.625], n)
+    lines = [LineString(list(zip(x, y)))]
+    df_line = GeoDataFrame({'name': ['line1'], 'geometry': lines})
 
-        shp.point(0, 1)
-        shp.record('point2')
+    # MultiLineString
+    n = 5
+    x = np.repeat(np.linspace(0, 1, n), 2)
+    y = np.tile([0.375, 0.625], n) + 1
+    line = list(zip(x, y))
+    mlines = [MultiLineString([line[:5], line[5:]])]
+    df_multiline = GeoDataFrame({'name': 'multiline1', 'geometry': mlines})
 
-        shp.point(1, 1)
-        shp.record('point3')
-
-        shp.point(1, 0)
-        shp.record('point4')
-
-
-def _polygon_file(test_file):
-    with shapefile.Writer(test_file, shapefile.POLYGON) as shp:
-        shp.field('name', 'C')
-
-        shp.poly([
-            [[.25, -.25], [.25, .25], [.75, .25], [.75, -.25]],
-        ])
-        shp.record('polygon1')
-
-        shp.poly([
-            [[.25, .75], [.75, .75], [.5, 1.25]]
-        ])
-        shp.record('polygon2')
-
-
-def _polyline_file(test_file):
-    with shapefile.Writer(test_file, shapefile.POLYLINE) as shp:
-        shp.field('name', 'C')
-
-        n = 5
-        x = np.repeat(np.linspace(0, 1, n), 2)
-        y = np.tile([0.375, 0.625], n)
-        shp.line([list(zip(x, y))])
-        shp.record('line1')
-
-
-def _polylinem_file(test_file):
-    with shapefile.Writer(test_file, shapefile.POLYLINEM) as shp:
-        shp.field('name', 'C')
-
-        n = 5
-        x = np.repeat(np.linspace(0, 1, n), 2)
-        y = np.tile([0.375, 0.625], n) + 1
-        line = list(zip(x, y))
-        shp.linem([line[:5], line[5:]])
-        shp.record('linem1')
-
-
-def test_geometries(tmpdir):
-    point_file = '{}/test_file_point.shp'.format(tmpdir)
-    polygon_file = '{}/test_file_polygon.shp'.format(tmpdir)
-    polyline_file = '{}/test_file_polyline.shp'.format(tmpdir)
-    polylinem_file = '{}/test_file_polylinem.shp'.format(tmpdir)
-
-    _point_file(point_file)
-    _polygon_file(polygon_file)
-    _polyline_file(polyline_file)
-    _polylinem_file(polylinem_file)
-
-    df_point = GeoDataFrame.from_file(point_file)
-    df_polygon = GeoDataFrame.from_file(polygon_file)
-    df_polyline = GeoDataFrame.from_file(polyline_file)
-    df_polylinem = GeoDataFrame.from_file(polylinem_file)
+    #  Polygon
+    polygons = [
+        Polygon([(.25, -.25), (.25, .25), (.75, .25), (.75, -.25)]),
+        Polygon([(.25, .75), (.75, .75), (.5, 1.25)])
+    ]
+    names = [f'polygon{i}' for i in range(len(polygons))]
+    df_polygon = GeoDataFrame({'name': names, 'geometry': polygons})
 
     p = (ggplot()
          + aes(fill='geometry.bounds.miny')
          + geom_map(df_polygon)
          + geom_map(df_point, size=4)
-         + geom_map(df_polyline, size=2)
-         + geom_map(df_polylinem, size=2)
+         + geom_map(df_line, size=2)
+         + geom_map(df_multiline, size=2)
          + labs(fill='miny')
          )
 
     assert p + _theme == 'geometries'
 
 
-def test_facet_wrap(tmpdir):
-    polygon_file = '{}/test_file_polygon.shp'.format(tmpdir)
-    _polygon_file(polygon_file)
+def test_multipolygon():
+    # 2 MultiPolygon
+    # 1. 4 Solid Squares
+    # 2. 4 Squares with holes (to the upper-right of each of
+    #    the squares in 1)
+    length = 0.5
+    centers = np.array([[1, 1], [1, 2], [2, 2], [2, 1]])
+    corners = np.array([[-1, -1], [-1, 1], [1, 1], [1, -1]])
+    shift = corners * (length/2)
+    shift_holes = corners * (length/4)
+    mpolygons = [
+        MultiPolygon([(c + shift, None) for c in centers]),
+        MultiPolygon([
+            (c + length + shift, [c + length + shift_holes])
+            for c in centers
+        ])
+    ]
+    names = [f'mpolygon{i}' for i in range(len(mpolygons))]
+    df = GeoDataFrame({'name': names, 'geometry': mpolygons})
+    p = (ggplot()
+         + aes(fill='geometry.bounds.miny')
+         + geom_map(df)
+         + labs(fill='miny')
+         + theme(aspect_ratio=1)
+         )
 
-    df_polygon = GeoDataFrame.from_file(polygon_file)
-    df_polygon['shape'] = ['rectangle', 'triangle']
+    assert p + _theme == 'multipolygon'
+
+
+def test_multipoint():
+    mpoints = [
+        MultiPoint([[0.0, 0.0], [1.0, 1.0]]),
+        MultiPoint([[0.0, 1.0], [1.0, 2.0]])
+    ]
+
+    mpoint_names = [f'mpoint{i}' for i in range(len(mpoints))]
+    df = GeoDataFrame({'names': mpoint_names, 'geometry': mpoints})
+
+    p = (ggplot()
+         + aes(fill='geometry.bounds.miny')
+         + geom_map(df, size=5, color='None')
+         + labs(fill='miny')
+         )
+    assert p + _theme == 'multipoint'
+
+
+def test_facet_wrap():
+    #  Polygon
+    polygons = [
+        Polygon([(.25, -.25), (.25, .25), (.75, .25), (.75, -.25)]),
+        Polygon([(.25, .75), (.75, .75), (.5, 1.25)])
+    ]
+    names = [f'polygon{i}' for i in range(len(polygons))]
+    df_polygon = GeoDataFrame({
+        'name': names,
+        'geometry': polygons,
+        'shape': ['rectangle', 'triangle']
+    })
 
     p = (ggplot()
          + aes(fill='geometry.bounds.miny')

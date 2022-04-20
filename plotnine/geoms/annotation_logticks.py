@@ -71,6 +71,8 @@ class _geom_logticks(geom_rug):
         y_is_log = is_log(y_scale)
         if isinstance(coord, coord_flip):
             x_is_log, y_is_log = y_is_log, x_is_log
+            x_scale, y_scale = y_scale, x_scale
+            base_x, base_y = base_y, base_x
 
         if 't' in sides or 'b' in sides:
             if base_x is None:
@@ -86,10 +88,11 @@ class _geom_logticks(geom_rug):
                     PlotnineWarning)
             elif x_is_log and base_x != x_scale.trans.base:
                 warnings.warn(
-                    "The x-axis is log transformed in base {} ,"
-                    "but the annotation_logticks are computed in base {}"
-                    "".format(base_x, x_scale.trans.base),
-                    PlotnineWarning)
+                    f"The x-axis is log transformed in base {base_x} ,"
+                    "but the annotation_logticks are computed in base "
+                    f"{x_scale.trans.base}",
+                    PlotnineWarning
+                )
 
         if 'l' in sides or 'r' in sides:
             if base_y is None:
@@ -105,10 +108,11 @@ class _geom_logticks(geom_rug):
                     PlotnineWarning)
             elif y_is_log and base_y != y_scale.trans.base:
                 warnings.warn(
-                    "The y-axis is log transformed in base {} ,"
-                    "but the annotation_logticks are computed in base {}"
-                    "".format(base_y, y_scale.trans.base),
-                    PlotnineWarning)
+                    f"The y-axis is log transformed in base {base_y} ,"
+                    "but the annotation_logticks are computed in base "
+                    f"{y_scale.trans.base}",
+                    PlotnineWarning
+                )
         return base_x, base_y
 
     @staticmethod
@@ -163,18 +167,27 @@ class _geom_logticks(geom_rug):
             'alpha': params['alpha'],
             'linetype': params['linetype']
         }
+        # these are already flipped iff coord_flip
         base_x, base_y = self._check_log_scale(
             params['base'], sides, panel_params, coord)
 
         if 'b' in sides or 't' in sides:
-            tick_positions = self._calc_ticks(panel_params.x.range, base_x)
+            if isinstance(coord, coord_flip):
+                tick_range = panel_params.y.range
+            else:
+                tick_range = panel_params.x.range
+            tick_positions = self._calc_ticks(tick_range, base_x)
             for (positions, length) in zip(tick_positions, lengths):
                 data = pd.DataFrame(dict(x=positions, **_aesthetics))
                 super().draw_group(data, panel_params, coord, ax,
                                    length=length, **params)
 
         if 'l' in sides or 'r' in sides:
-            tick_positions = self._calc_ticks(panel_params.y.range, base_y)
+            if isinstance(coord, coord_flip):
+                tick_range = panel_params.x.range
+            else:
+                tick_range = panel_params.y.range
+            tick_positions = self._calc_ticks(tick_range, base_y)
             for (positions, length) in zip(tick_positions, lengths):
                 data = pd.DataFrame(dict(y=positions, **_aesthetics))
                 super().draw_group(data, panel_params, coord, ax,

@@ -1,6 +1,5 @@
 from copy import deepcopy
 from warnings import warn
-from contextlib import suppress
 
 import pandas as pd
 import numpy as np
@@ -50,7 +49,7 @@ class guides(dict):
 
         # Determined from the theme when the guides are
         # getting built
-        self.position = 'right'
+        self.position = None
         self.box_direction = None
         self.box_align = None
         self.box_margin = None
@@ -97,39 +96,29 @@ class guides(dict):
             A box that contains all the guides for the plot.
             If there are no guides, **None** is returned.
         """
-        get_property = plot.theme.themeables.property
-
-        # by default, guide boxes are vertically aligned
-        with suppress(KeyError):
-            self.box_direction = get_property('legend_box')
-        if self.box_direction is None:
-            self.box_direction = 'vertical'
-
-        with suppress(KeyError):
-            self.position = get_property('legend_position')
+        _property = plot.theme.themeables.property
+        self.box_direction = _property('legend_box')
+        self.position = _property('legend_position')
+        self.box_align = _property('legend_box_just')
+        self.box_margin = _property('legend_box_margin')
+        self.spacing = _property('legend_spacing')
 
         if self.position == 'none':
-            return
+            return  # No Legend
 
-        # justification of legend boxes
-        with suppress(KeyError):
-            self.box_align = get_property('legend_box_just')
-        if self.box_align is None:
-            if self.position in {'left', 'right'}:
-                tmp = 'left'
+        # Direction
+        if self.box_direction == 'auto':
+            if self.position in ('right', 'left'):
+                self.box_direction = 'vertical'
             else:
-                tmp = 'center'
-            self.box_align = tmp
+                self.box_direction = 'horizontal'
 
-        with suppress(KeyError):
-            self.box_margin = get_property('legend_box_margin')
-        if self.box_margin is None:
-            self.box_margin = 10
-
-        with suppress(KeyError):
-            self.spacing = get_property('legend_spacing')
-        if self.spacing is None:
-            self.spacing = 10
+        # Justification of legend boxes
+        if self.box_align == 'auto':
+            if self.position in ('right', 'left'):
+                self.box_align = 'left'
+            else:
+                self.box_align = 'right'
 
         gdefs = self.train(plot)
         if not gdefs:
@@ -183,8 +172,9 @@ class guides(dict):
                 if (guide.available_aes != 'any' and
                         scale.aesthetics[0] not in guide.available_aes):
                     raise PlotnineError(
-                        "{} cannot be used for {}".format(
-                            guide.__class__.__name__, scale.aesthetics))
+                        f"{guide.__class__.__name__} cannot be used for "
+                        f"{scale.aesthetics}"
+                    )
 
                 # title
                 if is_waive(guide.title):
@@ -194,10 +184,12 @@ class guides(dict):
                         try:
                             guide.title = str(plot.labels[output])
                         except KeyError:
-                            warn("Cannot generate legend for the {!r} "
-                                 "aesthetic. Make sure you have mapped a "
-                                 "variable to it".format(output),
-                                 PlotnineWarning)
+                            warn(
+                                f"Cannot generate legend for the {output!r} "
+                                "aesthetic. Make sure you have mapped a "
+                                "variable to it",
+                                PlotnineWarning
+                            )
                             continue
 
                 # each guide object trains scale within the object,
@@ -215,11 +207,11 @@ class guides(dict):
         Validate guide object
         """
         if is_string(guide):
-            guide = Registry['guide_{}'.format(guide)]()
+            guide = Registry[f'guide_{guide}']()
 
         if not isinstance(guide, guide_class):
             raise PlotnineError(
-                "Unknown guide: {}".format(guide))
+                f"Unknown guide: {guide}")
         return guide
 
     def merge(self, gdefs):

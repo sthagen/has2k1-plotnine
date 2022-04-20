@@ -38,13 +38,22 @@ def test_onlyx():
 def test_onlyy():
     p = qplot(y=np.arange(5))
 
-    # Small displacement in x-label on travis
-    assert p == ('range', {'tol': 8})
+    assert p == 'onlyy'
 
 
 def test_sample():
     p = qplot(sample='np.arange(5)')
     assert p == 'sample'
+
+
+def test_xlim():
+    p = qplot(x='np.arange(5)', y='np.arange(5)', xlim=(-10, 10))
+    assert p == 'xlim'
+
+
+def test_ylim():
+    p = qplot(x='np.arange(5)', y='np.arange(5)', ylim=(-10, 10))
+    assert p == 'ylim'
 
 
 def test_multiple_geoms():
