@@ -22,9 +22,6 @@ New Features
 - :class:`~plotnine.positions.position_dodge2` gained the ability to reverse
   the order of the plotted groups. (:issue:`515`)
 
-- Added :class:`~plotnine.themes.theme_tufte`, a theme that reduces the
-  distractions around plot data.
-
 - :class:`~plotnine.labels.labs` can now be used to create a ``caption``.
   This caption can be styled using the ``plot_caption`` parameter to
   :class:`~plotnine.themes.theme`.
@@ -94,6 +91,9 @@ Bug Fixes
 - Fixed :class:`~plotnine.themes.themeables.axis_ticks` so you can change
   the colour of the axis ticks. This was probably a regression due to changes
   in Matplotlib.
+
+- Fixed :class:`~plotnine.themes.themeables.panel_ontop` so that if is set to
+  ``False``, then the data visualised below the grid-lines. (:issue:`585`)
 
 Enhancements
 ************
