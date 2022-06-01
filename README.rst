@@ -95,6 +95,19 @@ Building a complex plot piece by piece.
 
    .. figure:: ./doc/images/readme-image-5.png
 
+5.2 Or professional
+
+   .. code:: python
+
+       (ggplot(mtcars, aes('wt', 'mpg', color='factor(gear)'))
+        + geom_point()
+        + stat_smooth(method='lm')
+        + facet_wrap('~gear')
+        + theme_tufte())
+
+   .. figure:: ./doc/images/readme-image-5alt.png
+
+
 Installation
 ------------
 
@@ -103,8 +116,12 @@ Official release
 .. code-block:: console
 
     # Using pip
-    $ pip install plotnine           # 1. should be sufficient for most
-    $ pip install 'plotnine[extra]'  # 2. includes extra/optional packages
+    $ pip install plotnine             # 1. should be sufficient for most
+    $ pip install 'plotnine[extra]'    # 2. includes extra/optional packages
+    $ pip install 'plotnine[test]'     # 3. testing
+    $ pip install 'plotnine[doc]'      # 4. generating docs
+    $ pip install 'plotnine[dev]'      # 5. development (making releases)
+    $ pip install 'plotnine[all]'      # 6. everyting
 
     # Or using conda
     $ conda install -c conda-forge plotnine

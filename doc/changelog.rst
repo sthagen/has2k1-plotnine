@@ -8,10 +8,11 @@ v0.9.0
 API Changes
 ***********
 
-- For the calls to ``ggplot``, ``geoms`` and ``stats``, the order of the
-  positional arguments is ``data`` then ``mapping``. In practice, you
-  can still provide one/two positional arguments in any order. However,
-  the are a few cases where old code will breaks due to duplicate parameters.
+- For the calls to ``ggplot``, the order of the positional arguments is
+  ``(data, mapping)`` and for calls ``geoms`` and ``stats`` the order
+  is ``(mapping, data)``. In practice, you can still provide one/two
+  positional arguments in any order. However, the are a few cases
+  where old code will breaks due to duplicate parameters.
 
 New Features
 ************
@@ -21,6 +22,9 @@ New Features
 
 - :class:`~plotnine.positions.position_dodge2` gained the ability to reverse
   the order of the plotted groups. (:issue:`515`)
+
+- Added :class:`~plotnine.themes.theme_tufte`, a theme that reduces the
+  distractions around plot data.
 
 - :class:`~plotnine.labels.labs` can now be used to create a ``caption``.
   This caption can be styled using the ``plot_caption`` parameter to
