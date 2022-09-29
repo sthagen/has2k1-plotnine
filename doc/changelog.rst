@@ -1,9 +1,19 @@
 Changelog
 =========
 
-Next Release
-------------
+v0.10.1
+-------
+(2022-09-10)
 
+*This is a re-release of v0.10.0*.
+
+In the previous release the project description fileformat changed
+and not all references to it were corrected. PYPI read file that did
+not exist, got no description. This release is fixes error.
+
+v0.10.0
+-------
+(2022-09-10)
 
 Bug Fixes
 *********
@@ -11,10 +21,17 @@ Bug Fixes
 - Fixed bug in :class:`~plotnine.stats.stat_bin_2d` where bins whose edges
   are zero or negative would yield the wrong plot. (:issue:`604`)
 
+- Fixed bug :class:`~plotnine.stats.stat_density_2d` which had been broken
+  by Matplotlib 1.6.0 (:issue:`619`)
+
+- Fixed :class:`~plotnine.geoms.geom_text` when using ``adjust_text`` for
+  the arrows to have the same color as the text.
+
 New Features
 ************
 
-- :class:`~plotnine.geoms.geom_ribbon` acquired new parameter `` where.
+- :class:`~plotnine.geoms.geom_ribbon` acquired new parameter ``where``
+  which can be used shade withing given limits .
 
 - Added support for objects with a ``to_pandas`` method to convert them to
   a pandas dataframe. You can now pass in `polars <https://pola.rs>`_ dataframes.

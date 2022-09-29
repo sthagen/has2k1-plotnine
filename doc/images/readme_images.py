@@ -1,11 +1,19 @@
-from plotnine import (ggplot, aes, geom_point, facet_wrap,
-                      stat_smooth, theme_xkcd, theme_tufte)
+from plotnine import (
+    ggplot,
+    aes,
+    geom_point,
+    facet_wrap,
+    stat_smooth,
+    theme_xkcd,
+    theme_tufte
+)
 from plotnine.data import mtcars
 
-kwargs = dict(width=6, height=4)
+kwargs = dict(width=6, height=4, dpi=300)
 
 p1 = (ggplot(mtcars, aes('wt', 'mpg'))
-      + geom_point())
+      + geom_point()
+      )
 p1.save('readme-image-1.png', **kwargs)
 
 p2 = p1 + aes(color='factor(gear)')
@@ -21,4 +29,4 @@ p5 = p4 + theme_xkcd()
 p5.save('readme-image-5.png', **kwargs)
 
 p5alt = p4 + theme_tufte()
-p5.save('readme-image-5alt.png', **kwargs)
+p5alt.save('readme-image-5alt.png', **kwargs)

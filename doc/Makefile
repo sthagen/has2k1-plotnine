@@ -13,7 +13,7 @@ BUILDDIR      = _build
 BOOTSWATCHTHEME = united
 brand-primary = \#9E2F68
 headings-font-weight = bold
-font-family-sans-serif = '"Lato", "proxima-nova", "Helvetica Neue", Arial, sans-serif'
+font-family-sans-serif = '"system-ui", "Segoe UI", "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"'
 
 # Put it first so that "make" without argument is like "make help".
 help:
@@ -38,15 +38,19 @@ theme:
 logo:
 	cd images; \
 	python logo.py; \
-	convert -trim -density 100 -alpha remove -background '#FFFFFF' \
+	convert -trim -density 300 -alpha remove -background '#FFFFFF' \
+	   -gravity center -scale 528x528 -extent 540x540 \
+	   -border 6 -bordercolor '#441A3F'\
+	   logo.pdf logo-540.png; \
+	convert -trim -density 300 -alpha remove -background '#FFFFFF' \
 	   -gravity center -scale 176x176 -extent 180x180 \
 	   -border 2 -bordercolor '#441A3F'\
 	   logo.pdf logo-180.png; \
-	convert -trim -density 100 -alpha remove -background '#FFFFFF' \
+	convert -trim -density 300 -alpha remove -background '#FFFFFF' \
 	   -gravity center -scale 32x32 \
 	   -border 2 -bordercolor '#441A3F'\
 	   logo-small.pdf logo-32.png; \
-	convert -trim -density 100 -alpha remove -background '#FFFFFF' \
+	convert -trim -density 300 -alpha remove -background '#FFFFFF' \
 	   -gravity center -scale 32x32 \
 	   -border 2 -bordercolor '#441A3F'\
 	   logo-small.pdf favicon.ico;

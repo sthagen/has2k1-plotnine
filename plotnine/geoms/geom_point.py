@@ -3,7 +3,7 @@ import matplotlib.lines as mlines
 
 from ..utils import to_rgba, SIZE_FACTOR
 from ..doctools import document
-from ..scales.scale_shape import FILLED_SHAPES, UNFILLED_SHAPES
+from ..scales.scale_shape import FILLED_SHAPES
 from .geom import geom
 
 
@@ -60,13 +60,10 @@ class geom_point(geom):
                 fill = color
             else:
                 fill = to_rgba(data['fill'], data['alpha'])
-        elif shape in UNFILLED_SHAPES:
+        else:
+            # Assume unfilled
             fill = color
             color = None
-        else:
-            raise ValueError(
-                f"geom_point got an unknown shape: {shape}"
-            )
 
         ax.scatter(
             x=data['x'],
