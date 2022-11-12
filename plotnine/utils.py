@@ -692,6 +692,9 @@ def make_line_segments(x, y, ispath=True):
         to the next until the last. If False, then each pair
         of successive(even-odd pair) points yields a line.
     """
+    # Series objects would otherwise require .iloc
+    x = x.to_numpy() if hasattr(x, 'to_numpy') else x
+    y = y.to_numpy() if hasattr(y, 'to_numpy') else y
     if ispath:
         x = interleave(x[:-1], x[1:])
         y = interleave(y[:-1], y[1:])
@@ -1034,9 +1037,7 @@ def order_as_data_mapping(*args):
             .format(type(data))
         )
 
-    if hasattr(data, 'to_pandas'):
-        data = data.to_pandas()
-
+    data = to_pandas(data)
     return data, mapping
 
 
@@ -1057,6 +1058,25 @@ def is_data_like(obj):
     """
     return (isinstance(obj, (pd.DataFrame, Callable)) or
             hasattr(obj, 'to_pandas'))
+
+
+def to_pandas(obj):
+    """
+    Return pandas dataframe
+
+    Parameters
+    ----------
+    obj : dataframe | callable
+        A dataframe like object
+    """
+    if obj is None or isinstance(obj, (pd.DataFrame, Callable)):
+        return obj
+    elif hasattr(obj, 'to_pandas'):
+        return obj.to_pandas()
+
+    raise TypeError(
+        f"Unrecognised type of dataframe object: {type(obj)}."
+    )
 
 
 def interleave(*arrays):

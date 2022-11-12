@@ -1,10 +1,18 @@
+from __future__ import annotations
 from textwrap import dedent
+from typing import Type, Optional, Union
 import warnings
 
 
 # Show the warnings on one line, leaving out any code makes the
 # message clear
-def warning_format(message, category, filename, lineno, file=None, line=None):
+def warning_format(
+    message: Union[Warning, str],
+    category: Type[Warning],
+    filename: str,
+    lineno: int,
+    line: Optional[str] = None,
+) -> str:
     """
     Format for plotnine warnings
     """
@@ -20,11 +28,11 @@ class PlotnineError(Exception):
     Exception for ggplot errors
     """
 
-    def __init__(self, *args):
+    def __init__(self, *args: str) -> None:
         args = [dedent(arg) for arg in args]
         self.message = " ".join(args)
 
-    def __str__(self):
+    def __str__(self) -> str:
         """
         Error Message
         """
