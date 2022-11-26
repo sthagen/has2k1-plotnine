@@ -79,14 +79,8 @@ def test_ggplot_parameters():
 
 
 def test_ggplot_parameters_grouped():
-    p = ggplot(df.groupby('x'), aes('x'))
-
-    assert p.data is df
-    assert p.mapping == aes('x')
-
-    p = ggplot(data=df, mapping=aes('x'))
-    assert p.data is df
-    assert p.mapping == aes('x')
+    p = df.groupby('x') >> ggplot(aes('x'))
+    assert isinstance(p.data, pd.DataFrame)
 
 
 def test_data_transforms():
@@ -300,6 +294,23 @@ def test_adding_list_ggplot():
         coord_trans()
     ]
     g = ggplot() + lst
+    assert len(g.layers) == 2
+    assert g.labels['x'] == 'x-label'
+    assert isinstance(g.coordinates, coord_trans)
+
+
+def test_iadding_list_ggplot():
+    lst = [
+        geom_point(),
+        geom_point(aes('x+1', 'y+1')),
+        xlab('x-label'),
+        coord_trans()
+    ]
+    g = ggplot()
+    id_before = id(g)
+    g += lst
+    id_after = id(g)
+    assert id_before == id_after
     assert len(g.layers) == 2
     assert g.labels['x'] == 'x-label'
     assert isinstance(g.coordinates, coord_trans)
