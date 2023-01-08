@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import typing
 from contextlib import suppress
 
 from ..coords import coord_flip
@@ -6,6 +9,17 @@ from ..exceptions import PlotnineError
 from ..utils import SIZE_FACTOR, to_rgba
 from .geom import geom
 from .geom_path import geom_path
+from .geom_polygon import geom_polygon
+
+if typing.TYPE_CHECKING:
+    from typing import Any
+
+    import matplotlib as mpl
+    import pandas as pd
+
+    import plotnine as p9
+
+    from ..typing import ColorsLike
 
 
 @document
@@ -49,12 +63,12 @@ class geom_ribbon(geom):
     REQUIRED_AES = {'x', 'ymax', 'ymin'}
     DEFAULT_PARAMS = {'stat': 'identity', 'position': 'identity',
                       'outline_type': 'both', 'na_rm': False}
-    legend_geom = 'polygon'
+    draw_legend = staticmethod(geom_polygon.draw_legend)  # type: ignore
 
-    def handle_na(self, data):
+    def handle_na(self, data: pd.DataFrame) -> pd.DataFrame:
         return data
 
-    def setup_data(self, data):
+    def setup_data(self, data: pd.DataFrame) -> pd.DataFrame:
         # The outlines need x and y coordinates
         if self.params['outline_type'] in ('upper', 'lower', 'both'):
             if 'xmax' in data and 'x' not in data:
@@ -64,7 +78,13 @@ class geom_ribbon(geom):
         return data
 
     @staticmethod
-    def draw_group(data, panel_params, coord, ax, **params):
+    def draw_group(
+        data: pd.DataFrame,
+        panel_params: p9.iapi.panel_view,
+        coord: p9.coords.coord.coord,
+        ax: mpl.axes.Axes,
+        **params: Any
+    ) -> None:
         _x = 'y' if isinstance(coord, coord_flip) else 'x'
         data = coord.transform(data, panel_params, munch=True)
         data = data.sort_values(by=['group', _x], kind='mergesort')
@@ -80,16 +100,23 @@ class geom_ribbon(geom):
                                   ax, **params)
 
     @staticmethod
-    def draw_unit(data, panel_params, coord, ax, **params):
+    def draw_unit(
+        data: pd.DataFrame,
+        panel_params: p9.iapi.panel_view,
+        coord: p9.coords.coord.coord,
+        ax: mpl.axes.Axes,
+        **params: Any
+    ) -> None:
         size = data['size'].iloc[0] * SIZE_FACTOR
         fill = to_rgba(data['fill'], data['alpha'])
-        color = data['color']
+
+        if data['color'].isnull().all():
+            color: ColorsLike = 'none'
+        else:
+            color = data['color']
 
         if fill is None:
             fill = 'none'
-
-        if all(color.isnull()):
-            color = 'none'
 
         if isinstance(coord, coord_flip):
             fill_between = ax.fill_betweenx
@@ -129,15 +156,22 @@ class geom_ribbon(geom):
         geom_ribbon._draw_outline(data, panel_params, coord, ax, **params)
 
     @staticmethod
-    def _draw_outline(data, panel_params, coord, ax, **params):
+    def _draw_outline(
+        data: pd.DataFrame,
+        panel_params: p9.iapi.panel_view,
+        coord: p9.coords.coord.coord,
+        ax: mpl.axes.Axes,
+        **params: Any
+    ) -> None:
         outline_type = params['outline_type']
 
         if outline_type == 'full':
             return
 
-        x, y = 'xy'
+        x = 'x'
+        y = 'y'
         if isinstance(coord, coord_flip):
-            x, y = 'yx'
+            x, y = y, x
             data[x], data[y] = data[y], data[x]
 
         if outline_type in ('lower', 'both'):

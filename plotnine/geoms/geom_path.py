@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import typing
 from collections import Counter
 from contextlib import suppress
 from warnings import warn
@@ -12,6 +15,15 @@ from ..doctools import document
 from ..exceptions import PlotnineWarning
 from ..utils import SIZE_FACTOR, make_line_segments, match, to_rgba
 from .geom import geom
+
+if typing.TYPE_CHECKING:
+    from typing import Any, Literal, Sequence
+
+    import matplotlib as mpl
+    import numpy.typing as npt
+    import pandas as pd
+
+    import plotnine as p9
 
 
 @document
@@ -46,14 +58,16 @@ class geom_path(geom):
                       'lineend': 'butt', 'linejoin': 'round',
                       'arrow': None}
 
-    def handle_na(self, data):
-        def keep(x):
+    def handle_na(self, data: pd.DataFrame) -> pd.DataFrame:
+        def keep(x: Sequence[float]) -> npt.NDArray[np.bool_]:
             # first non-missing to last non-missing
             first = match([False], x, nomatch=1, start=0)[0]
             last = len(x) - match([False], x[::-1], nomatch=1, start=0)[0]
-            bool_idx = np.hstack([np.repeat(False, first),
-                                  np.repeat(True, last-first),
-                                  np.repeat(False, len(x)-last)])
+            bool_idx = np.hstack([
+                np.repeat(False, first),
+                np.repeat(True, last-first),
+                np.repeat(False, len(x)-last)
+            ])
             return bool_idx
 
         # Get indices where any row for the select aesthetics has
@@ -75,7 +89,14 @@ class geom_path(geom):
 
         return data
 
-    def draw_panel(self, data, panel_params, coord, ax, **params):
+    def draw_panel(
+        self,
+        data: pd.DataFrame,
+        panel_params: p9.iapi.panel_view,
+        coord: p9.coords.coord.coord,
+        ax: mpl.axes.Axes,
+        **params: Any
+    ) -> None:
         if not any(data['group'].duplicated()):
             warn("geom_path: Each group consist of only one "
                  "observation. Do you need to adjust the "
@@ -110,7 +131,13 @@ class geom_path(geom):
                 self.draw_group(gdata, panel_params, coord, ax, **params)
 
     @staticmethod
-    def draw_group(data, panel_params, coord, ax, **params):
+    def draw_group(
+        data: pd.DataFrame,
+        panel_params: p9.iapi.panel_view,
+        coord: p9.coords.coord.coord,
+        ax: mpl.axes.Axes,
+        **params: Any
+    ) -> None:
         data = coord.transform(data, panel_params, munch=True)
         data['size'] *= SIZE_FACTOR
         constant = params.pop('constant', data['group'].nunique() == 1)
@@ -126,15 +153,22 @@ class geom_path(geom):
                 ax, constant=constant, **params)
 
     @staticmethod
-    def draw_legend(data, da, lyr):
+    def draw_legend(
+        data: pd.Series[Any],
+        da: mpl.patches.DrawingArea,
+        lyr: p9.layer.layer
+    ) -> mpl.patches.DrawingArea:
         """
         Draw a horizontal line in the box
 
         Parameters
         ----------
-        data : dataframe
+        data : Series
+            Data Row
         da : DrawingArea
+            Canvas
         lyr : layer
+            Layer
 
         Returns
         -------
@@ -143,14 +177,16 @@ class geom_path(geom):
         data['size'] *= SIZE_FACTOR
         x = [0, da.width]
         y = [0.5 * da.height] * 2
-        key = mlines.Line2D(x,
-                            y,
-                            alpha=data['alpha'],
-                            linestyle=data['linetype'],
-                            linewidth=data['size'],
-                            color=data['color'],
-                            solid_capstyle='butt',
-                            antialiased=False)
+        key = mlines.Line2D(
+            x,
+            y,
+            alpha=data['alpha'],
+            linestyle=data['linetype'],
+            linewidth=data['size'],
+            color=data['color'],
+            solid_capstyle='butt',
+            antialiased=False
+        )
         da.add_artist(key)
         return da
 
@@ -176,28 +212,55 @@ class arrow:
         When it is closed, it is also filled
     """
 
-    def __init__(self, angle=30, length=0.2,
-                 ends='last', type='open'):
+    def __init__(
+        self,
+        angle: float = 30,
+        length: float = 0.2,
+        ends: Literal['first', 'last', 'both'] = 'last',
+        type: Literal['open', 'closed'] = 'open'
+    ) -> None:
         self.angle = angle
         self.length = length
         self.ends = ends
         self.type = type
 
-    def draw(self, data, panel_params, coord, ax, constant=True, **params):
+    def draw(
+        self,
+        data: pd.DataFrame,
+        panel_params: p9.iapi.panel_view,
+        coord: p9.coords.coord.coord,
+        ax: mpl.axes.Axes,
+        constant: bool = True,
+        **params: Any
+    ) -> None:
         """
         Draw arrows at the end(s) of the lines
 
         Parameters
         ----------
-        data : dict
-            plot information as required by geom.draw
-        scales : dict
-            x scale, y scale
+        data : dataframe
+            Data to be plotted by this geom. This is the
+            dataframe created in the plot_build pipeline.
+        panel_params : panel_view
+            The scale information as may be required by the
+            axes. At this point, that information is about
+            ranges, ticks and labels. Attributes are of interest
+            to the geom are::
+
+                'panel_params.x.range'  # tuple
+                'panel_params.y.range'  # tuple
+
+        coord : coord
+            Coordinate (e.g. coord_cartesian) system of the
+            geom.
         ax : axes
-            On which to draw
+            Axes on which to plot.
         constant: bool
             If the path attributes vary along the way. If false,
             the arrows are per segment of the path
+        params : dict
+            Combined parameters for the geom and stat. Also
+            includes the 'zorder'.
         """
         first = self.ends in ('first', 'both')
         last = self.ends in ('last', 'both')
@@ -213,10 +276,11 @@ class arrow:
         if not constant:
             # Get segments/points (x1, y1) -> (x2, y2)
             # for which to calculate the arrow heads
-            idx1, idx2 = [], []
+            idx1: list[int] = []
+            idx2: list[int] = []
             for _, df in data.groupby('group'):
-                idx1.extend(df.index[:-1])
-                idx2.extend(df.index[1:])
+                idx1.extend(df.index[:-1].to_list())
+                idx2.extend(df.index[1:].to_list())
 
             d = dict(
                 zorder=params['zorder'],
@@ -227,10 +291,10 @@ class arrow:
                 linestyle=data.loc[idx1, 'linetype']
             )
 
-            x1 = data.loc[idx1, 'x'].values
-            y1 = data.loc[idx1, 'y'].values
-            x2 = data.loc[idx2, 'x'].values
-            y2 = data.loc[idx2, 'y'].values
+            x1 = data.loc[idx1, 'x'].to_numpy()
+            y1 = data.loc[idx1, 'y'].to_numpy()
+            x2 = data.loc[idx2, 'x'].to_numpy()
+            y2 = data.loc[idx2, 'y'].to_numpy()
 
             if first:
                 paths = self.get_paths(x1, y1, x2, y2,
@@ -258,8 +322,10 @@ class arrow:
             if first:
                 x1, x2 = data['x'].iloc[0:2]
                 y1, y2 = data['y'].iloc[0:2]
-                x1, y1, x2, y2 = (np.array([i])
-                                  for i in (x1, y1, x2, y2))
+                x1, y1, x2, y2 = (
+                    np.array([i])
+                    for i in (x1, y1, x2, y2)
+                )
                 paths = self.get_paths(x1, y1, x2, y2,
                                        panel_params, coord, ax)
                 patch = mpatches.PathPatch(paths[0], **d)
@@ -269,14 +335,25 @@ class arrow:
                 x1, x2 = data['x'].iloc[-2:]
                 y1, y2 = data['y'].iloc[-2:]
                 x1, y1, x2, y2 = x2, y2, x1, y1
-                x1, y1, x2, y2 = (np.array([i])
-                                  for i in (x1, y1, x2, y2))
+                x1, y1, x2, y2 = (
+                    np.array([i])
+                    for i in (x1, y1, x2, y2)
+                )
                 paths = self.get_paths(x1, y1, x2, y2,
                                        panel_params, coord, ax)
                 patch = mpatches.PathPatch(paths[0], **d)
                 ax.add_artist(patch)
 
-    def get_paths(self, x1, y1, x2, y2, panel_params, coord, ax):
+    def get_paths(
+        self,
+        x1: npt.ArrayLike,
+        y1: npt.ArrayLike,
+        x2: npt.ArrayLike,
+        y2: npt.ArrayLike,
+        panel_params: p9.iapi.panel_view,
+        coord: p9.coords.coord.coord,
+        ax: mpl.axes.Axes
+    ) -> list[mpl.path.Path]:
         """
         Compute paths that create the arrow heads
 
@@ -287,6 +364,21 @@ class arrow:
             The arrow heads will be at x1, y1. If you need them
             at x2, y2 reverse the input.
 
+        panel_params : panel_view
+            The scale information as may be required by the
+            axes. At this point, that information is about
+            ranges, ticks and labels. Attributes are of interest
+            to the geom are::
+
+                'panel_params.x.range'  # tuple
+                'panel_params.y.range'  # tuple
+
+        coord : coord
+            Coordinate (e.g. coord_cartesian) system of the
+            geom.
+        ax : axes
+            Axes on which to plot.
+
         Returns
         -------
         out : list of Path
@@ -294,18 +386,12 @@ class arrow:
         """
         Path = mpath.Path
 
-        # Create reusable lists of vertices and codes
-        # arrowhead path has 3 vertices (Nones),
-        # plus dummy vertex for the STOP code
-        verts = [None, None, None,
-                 (0, 0)]
+        # The arrowhead path has 3 vertices,
+        # plus a dummy vertex for the STOP code
+        dummy = (0, 0)
 
         # codes list remains the same after initialization
-        codes = [Path.MOVETO, Path.LINETO, Path.LINETO,
-                 Path.STOP]
-
-        # Slices into the vertices list
-        slc = slice(0, 3)
+        codes = [Path.MOVETO, Path.LINETO, Path.LINETO, Path.STOP]
 
         # We need the axes dimensions so that we can
         # compute scaling factors
@@ -322,7 +408,7 @@ class arrow:
         a = self.angle * np.pi / 180
 
         # direction of arrow head
-        xdiff, ydiff = x2 - x1, y2 - y1
+        xdiff, ydiff = x2 - x1, y2 - y1  # type: ignore
         rotations = np.arctan2(ydiff/ly, xdiff/lx)
 
         # Arrow head vertices
@@ -333,14 +419,18 @@ class arrow:
 
         # create a path for each arrow head
         paths = []
-        for t in zip(v1x, v1y, x1, y1, v2x, v2y):
-            verts[slc] = [t[:2], t[2:4], t[4:]]
+        for t in zip(v1x, v1y, x1, y1, v2x, v2y):  # type: ignore
+            verts = [t[:2], t[2:4], t[4:], dummy]
             paths.append(Path(verts, codes))
 
         return paths
 
 
-def _draw_segments(data, ax, **params):
+def _draw_segments(
+    data: pd.DataFrame,
+    ax: mpl.axes.Axes,
+    **params: Any
+) -> None:
     """
     Draw independent line segments between all the
     points
@@ -350,11 +440,11 @@ def _draw_segments(data, ax, **params):
     # into segments, all in a single list.
     # Along the way the other parameters are put in
     # sequences accordingly
-    indices = []  # for attributes of starting point of each segment
-    segments = []
+    indices: list[int] = []  # for attributes of starting point of each segment
+    segments: list[float] = []
     for _, df in data.groupby('group'):
         idx = df.index
-        indices.extend(idx[:-1])  # One line from two points
+        indices.extend(idx[:-1].to_list())  # One line from two points
         x = data['x'].iloc[idx]
         y = data['y'].iloc[idx]
         segments.append(make_line_segments(x, y, ispath=True))
@@ -380,7 +470,11 @@ def _draw_segments(data, ax, **params):
     ax.add_collection(coll)
 
 
-def _draw_lines(data, ax, **params):
+def _draw_lines(
+    data: pd.DataFrame,
+    ax: mpl.axes.Axes,
+    **params: Any
+) -> None:
     """
     Draw a path with the same characteristics from the
     first point to the last point
@@ -400,7 +494,10 @@ def _draw_lines(data, ax, **params):
     ax.add_artist(lines)
 
 
-def _get_joinstyle(data, params):
+def _get_joinstyle(
+    data: pd.DataFrame,
+    params: dict[str, Any]
+) -> dict[str, Any]:
     with suppress(KeyError):
         if params['linejoin'] == 'mitre':
             params['linejoin'] = 'miter'
@@ -421,7 +518,7 @@ def _get_joinstyle(data, params):
     return d
 
 
-def _axes_get_size_inches(ax):
+def _axes_get_size_inches(ax: mpl.axes.Axes) -> tuple[float, float]:
     """
     Size of axes in inches
 

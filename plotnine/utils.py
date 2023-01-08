@@ -405,32 +405,6 @@ def uniquecols(df):
     return df
 
 
-def defaults(d1: dict[str, Any], d2: dict[str, Any]) -> dict[str, Any]:
-    """
-    Update a copy of d1 with the contents of d2 that are not in d1.
-
-    Parameters
-    ----------
-    d1 : dict[str, Any]
-        dict with the preferred values
-    d2 : dict[str, Any]
-        dict with the default values
-
-    Returns
-    -------
-    out : dict
-        Result of adding default values of d1
-    """
-    d1 = d1.copy()
-    d1.update(
-        (k, d2[k])
-        # Preserve order
-        for k in d2
-        if k not in d1
-     )
-    return d1
-
-
 def jitter(x, factor=1, amount=None, random_state=None):
     """
     Add a small amount of noise to values in an array_like
@@ -496,7 +470,13 @@ def jitter(x, factor=1, amount=None, random_state=None):
     return x + random_state.uniform(-amount, amount, len(x))
 
 
-def remove_missing(df, na_rm=False, vars=None, name='', finite=False):
+def remove_missing(
+    df: pd.DataFrame,
+    na_rm: bool = False,
+    vars: list[str] | None = None,
+    name: str = '',
+    finite: bool = False
+) -> pd.DataFrame:
     """
     Convenience function to remove missing values from a dataframe
 
@@ -515,9 +495,9 @@ def remove_missing(df, na_rm=False, vars=None, name='', finite=False):
     n = len(df)
 
     if vars is None:
-        vars = df.columns
+        vars = df.columns.to_list()
     else:
-        vars = df.columns.intersection(vars)
+        vars = df.columns.intersection(vars).to_list()
 
     if finite:
         lst = [np.inf, -np.inf]
@@ -799,7 +779,7 @@ class Registry(type, metaclass=RegistryMeta):
     When objects are deleted, they are automatically removed
     from the Registry.
     """
-    _registry: WeakValueDictionary[Any, Any] = WeakValueDictionary()
+    _registry: WeakValueDictionary[str, Any] = WeakValueDictionary()
 
     def __new__(meta, name, bases, clsdict):
         cls = super().__new__(meta, name, bases, clsdict)

@@ -3,19 +3,35 @@ from __future__ import annotations
 import typing
 
 if typing.TYPE_CHECKING:
-    from typing import Callable, Protocol
+    from typing import Callable, Literal, Protocol
 
+    import numpy as np
+    import numpy.typing as npt
     import pandas as pd
     from typing_extensions import TypeAlias
 
     import plotnine as p9
 
     class PlotAddable(Protocol):
+        """
+        Object that can be added to a ggplot object
+        """
+
         def __radd__(self, other: p9.ggplot) -> p9.ggplot:
+            """
+            Add to ggplot object
+            """
             ...
 
     class DataFrameConvertible(Protocol):
+        """
+        Object that can be converted to a DataFrame
+        """
+
         def to_pandas(self) -> pd.DataFrame:
+            """
+            Convert to pandas dataframe
+            """
             ...
 
     # Input data can be a DataFrame, a DataFrame factory or things that
@@ -33,3 +49,8 @@ if typing.TYPE_CHECKING:
         "pd.DataFrame | Callable[[pd.DataFrame], pd.DataFrame]"
     )
     LayerDataLike: TypeAlias = "LayerData | DataFrameConvertible"
+    ColorLike: TypeAlias = "str | Literal['None', 'none']"
+    ColorsLike: TypeAlias = (
+        "ColorLike | list[ColorLike] | pd.Series[ColorLike] | "
+        "npt.NDArray[np.str_]"
+    )

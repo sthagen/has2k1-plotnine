@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import typing
 from warnings import warn
 
 import matplotlib.image as mimage
@@ -9,6 +12,18 @@ from ..doctools import document
 from ..exceptions import PlotnineError, PlotnineWarning
 from ..utils import resolution
 from .geom import geom
+from .geom_polygon import geom_polygon
+
+if typing.TYPE_CHECKING:
+    from typing import Any
+
+    import matplotlib as mpl
+    import pandas as pd
+
+    import plotnine as p9
+
+    from ..mapping import aes
+    from ..typing import DataLike
 
 
 @document
@@ -56,9 +71,14 @@ class geom_raster(geom):
                       'na_rm': False, 'vjust': 0.5, 'hjust': 0.5,
                       'interpolation': None, 'filterrad': 4.0,
                       'raster': True}
-    legend_geom = 'polygon'
+    draw_legend = staticmethod(geom_polygon.draw_legend)  # type: ignore
 
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self,
+        mapping: aes | None = None,
+        data: DataLike | None = None,
+        **kwargs: Any
+    ) -> None:
         # Silently accept:
         #    1. interpolate
         #    2. bool values for interpolation
@@ -70,9 +90,9 @@ class geom_raster(geom):
             else:
                 kwargs['interpolation'] = None
 
-        super().__init__(*args, **kwargs)
+        super().__init__(mapping, data, **kwargs)
 
-    def setup_data(self, data):
+    def setup_data(self, data: pd.DataFrame) -> pd.DataFrame:
         hjust = self.params['hjust']
         vjust = self.params['vjust']
         precision = np.sqrt(np.finfo(float).eps)
@@ -109,7 +129,14 @@ class geom_raster(geom):
         data['ymax'] = data['y'] + h * vjust
         return data
 
-    def draw_panel(self, data, panel_params, coord, ax, **params):
+    def draw_panel(
+        self,
+        data: pd.DataFrame,
+        panel_params: p9.iapi.panel_view,
+        coord: p9.coords.coord.coord,
+        ax: mpl.axes.Axes,
+        **params: Any
+    ) -> None:
         """
         Plot all groups
         """

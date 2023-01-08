@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+import typing
+
 import matplotlib.lines as mlines
 import numpy as np
 
@@ -5,6 +9,14 @@ from ..doctools import document
 from ..scales.scale_shape import FILLED_SHAPES
 from ..utils import SIZE_FACTOR, to_rgba
 from .geom import geom
+
+if typing.TYPE_CHECKING:
+    from typing import Any
+
+    import matplotlib as mpl
+    import pandas as pd
+
+    import plotnine as p9
 
 
 @document
@@ -25,14 +37,27 @@ class geom_point(geom):
     DEFAULT_PARAMS = {'stat': 'identity', 'position': 'identity',
                       'na_rm': False}
 
-    def draw_panel(self, data, panel_params, coord, ax, **params):
+    def draw_panel(
+        self,
+        data: pd.DataFrame,
+        panel_params: p9.iapi.panel_view,
+        coord: p9.coords.coord.coord,
+        ax: mpl.axes.Axes,
+        **params: Any
+    ) -> None:
         """
         Plot all groups
         """
         self.draw_group(data, panel_params, coord, ax, **params)
 
     @staticmethod
-    def draw_group(data, panel_params, coord, ax, **params):
+    def draw_group(
+        data: pd.DataFrame,
+        panel_params: p9.iapi.panel_view,
+        coord: p9.coords.coord.coord,
+        ax: mpl.axes.Axes,
+        **params: Any
+    ) -> None:
         data = coord.transform(data, panel_params)
         units = 'shape'
         for _, udata in data.groupby(units, dropna=False):
@@ -41,7 +66,13 @@ class geom_point(geom):
                                  ax, **params)
 
     @staticmethod
-    def draw_unit(data, panel_params, coord, ax, **params):
+    def draw_unit(
+        data: pd.DataFrame,
+        panel_params: p9.iapi.panel_view,
+        coord: p9.coords.coord.coord,
+        ax: mpl.axes.Axes,
+        **params: Any
+    ) -> None:
         # Our size is in 'points' while scatter wants
         # 'points^2'. The stroke is outside. And pi
         # gives a large enough scaling factor
@@ -78,14 +109,18 @@ class geom_point(geom):
         )
 
     @staticmethod
-    def draw_legend(data, da, lyr):
+    def draw_legend(
+        data: pd.Series[Any],
+        da: mpl.patches.DrawingArea,
+        lyr: p9.layer.layer
+    ) -> mpl.patches.DrawingArea:
         """
         Draw a point in the box
 
         Parameters
         ----------
-        data : dataframe
-            Legend data
+        data : Series
+            Data Row
         da : DrawingArea
             Canvas
         lyr : layer

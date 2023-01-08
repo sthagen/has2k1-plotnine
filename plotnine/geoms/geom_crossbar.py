@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import typing
 from warnings import warn
 
 import matplotlib.lines as mlines
@@ -11,6 +14,14 @@ from ..utils import SIZE_FACTOR, copy_missing_columns, resolution, to_rgba
 from .geom import geom
 from .geom_polygon import geom_polygon
 from .geom_segment import geom_segment
+
+if typing.TYPE_CHECKING:
+    from typing import Any
+
+    import matplotlib as mpl
+    import numpy.typing as npt
+
+    import plotnine as p9
 
 
 @document
@@ -36,7 +47,7 @@ class geom_crossbar(geom):
     DEFAULT_PARAMS = {'stat': 'identity', 'position': 'identity',
                       'na_rm': False, 'width': 0.5, 'fatten': 2}
 
-    def setup_data(self, data):
+    def setup_data(self, data: pd.DataFrame) -> pd.DataFrame:
         if 'width' not in data:
             if self.params['width']:
                 data['width'] = self.params['width']
@@ -49,7 +60,13 @@ class geom_crossbar(geom):
         return data
 
     @staticmethod
-    def draw_group(data, panel_params, coord, ax, **params):
+    def draw_group(
+        data: pd.DataFrame,
+        panel_params: p9.iapi.panel_view,
+        coord: p9.coords.coord.coord,
+        ax: mpl.axes.Axes,
+        **params: Any
+    ) -> None:
         y = data['y']
         xmin = data['xmin']
         xmax = data['xmax']
@@ -58,11 +75,11 @@ class geom_crossbar(geom):
         group = data['group']
 
         # From violin
-        notchwidth = params.get('notchwidth')
-        ynotchupper = data.get('ynotchupper')
-        ynotchlower = data.get('ynotchlower')
+        notchwidth = typing.cast(float, params.get('notchwidth'))
+        # ynotchupper = data.get('ynotchupper')
+        # ynotchlower = data.get('ynotchlower')
 
-        def flat(*args):
+        def flat(*args: pd.Series[Any]) -> npt.NDArray[Any]:
             """Flatten list-likes"""
             return np.hstack(args)
 
@@ -75,11 +92,14 @@ class geom_crossbar(geom):
         middle['alpha'] = 1
         middle['size'] *= params['fatten']
 
-        has_notch = ynotchlower is not None and ynotchupper is not None
+        has_notch = 'ynotchupper' in data and 'ynotchlower' in data
         if has_notch:  # 10 points + 1 closing
+            ynotchupper = data['ynotchupper']
+            ynotchlower = data['ynotchlower']
+
             if (any(ynotchlower < ymin) or any(ynotchupper > ymax)):
-                warn("Notch went outside hinges."
-                     " Try setting notch=False.", PlotnineWarning)
+                warn("Notch went outside the hinges. "
+                     "Try setting notch=False.", PlotnineWarning)
 
             notchindent = (1 - notchwidth) * (xmax-xmin)/2
 
@@ -105,14 +125,18 @@ class geom_crossbar(geom):
         geom_segment.draw_group(middle, panel_params, coord, ax, **params)
 
     @staticmethod
-    def draw_legend(data, da, lyr):
+    def draw_legend(
+        data: pd.Series[Any],
+        da: mpl.patches.DrawingArea,
+        lyr: p9.layer.layer
+    ) -> mpl.patches.DrawingArea:
         """
         Draw a rectangle with a horizontal strike in the box
 
         Parameters
         ----------
-        data : dataframe
-            Data
+        data : Series
+            Data Row
         da : DrawingArea
             Canvas
         lyr : layer

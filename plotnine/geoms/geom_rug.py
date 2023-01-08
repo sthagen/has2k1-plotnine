@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+import typing
+
 import matplotlib.collections as mcoll
 import numpy as np
 
@@ -5,6 +9,15 @@ from ..coords import coord_flip
 from ..doctools import document
 from ..utils import SIZE_FACTOR, make_line_segments, to_rgba
 from .geom import geom
+from .geom_path import geom_path
+
+if typing.TYPE_CHECKING:
+    from typing import Any
+
+    import matplotlib as mpl
+    import pandas as pd
+
+    import plotnine as p9
 
 
 @document
@@ -29,10 +42,16 @@ class geom_rug(geom):
                    'linetype': 'solid'}
     DEFAULT_PARAMS = {'stat': 'identity', 'position': 'identity',
                       'na_rm': False, 'sides': 'bl', 'length': 0.03}
-    legend_geom = 'path'
+    draw_legend = staticmethod(geom_path.draw_legend)  # type: ignore
 
     @staticmethod
-    def draw_group(data, panel_params, coord, ax, **params):
+    def draw_group(
+        data: pd.DataFrame,
+        panel_params: p9.iapi.panel_view,
+        coord: p9.coords.coord.coord,
+        ax: mpl.axes.Axes,
+        **params: Any
+    ) -> None:
         data = coord.transform(data, panel_params)
         sides = params['sides']
 
@@ -60,24 +79,24 @@ class geom_rug(geom):
 
         if has_x:
             if 'b' in sides:
-                x = np.repeat(data['x'].values, 2)
+                x = np.repeat(data['x'].to_numpy(), 2)
                 y = np.tile([ymin, ymin+yheight], n)
                 rugs.extend(make_line_segments(x, y, ispath=False))
 
             if 't' in sides:
-                x = np.repeat(data['x'].values, 2)
+                x = np.repeat(data['x'].to_numpy(), 2)
                 y = np.tile([ymax-yheight, ymax], n)
                 rugs.extend(make_line_segments(x, y, ispath=False))
 
         if has_y:
             if 'l' in sides:
                 x = np.tile([xmin, xmin+xheight], n)
-                y = np.repeat(data['y'].values, 2)
+                y = np.repeat(data['y'].to_numpy(), 2)
                 rugs.extend(make_line_segments(x, y, ispath=False))
 
             if 'r' in sides:
                 x = np.tile([xmax-xheight, xmax], n)
-                y = np.repeat(data['y'].values, 2)
+                y = np.repeat(data['y'].to_numpy(), 2)
                 rugs.extend(make_line_segments(x, y, ispath=False))
 
         color = to_rgba(data['color'], data['alpha'])

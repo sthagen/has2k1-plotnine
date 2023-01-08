@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import typing
 from contextlib import suppress
 from warnings import warn
 
@@ -15,6 +18,17 @@ from ..exceptions import PlotnineError, PlotnineWarning
 from ..positions import position_nudge
 from ..utils import order_as_data_mapping, to_rgba
 from .geom import geom
+
+if typing.TYPE_CHECKING:
+    from typing import Any
+
+    import matplotlib as mpl
+    import pandas as pd
+
+    import plotnine as p9
+
+    from ..mapping import aes
+    from ..typing import DataLike
 
 
 # Note: hjust & vjust are parameters instead of aesthetics
@@ -96,7 +110,12 @@ class geom_text(geom):
                       'format_string': None,
                       'path_effects': None}
 
-    def __init__(self, mapping=None, data=None, **kwargs):
+    def __init__(
+        self,
+        mapping: aes | None = None,
+        data: DataLike | None = None,
+        **kwargs: Any
+    ) -> None:
         data, mapping = order_as_data_mapping(data, mapping)
         nudge_kwargs = {}
         adjust_text = kwargs.get('adjust_text', None)
@@ -122,7 +141,7 @@ class geom_text(geom):
 
         geom.__init__(self, mapping, data, **kwargs)
 
-    def setup_data(self, data):
+    def setup_data(self, data: pd.DataFrame) -> pd.DataFrame:
         parse = self.params['parse']
         fmt = self.params['format_string']
 
@@ -136,11 +155,24 @@ class geom_text(geom):
 
         return data
 
-    def draw_panel(self, data, panel_params, coord, ax, **params):
+    def draw_panel(
+        self,
+        data: pd.DataFrame,
+        panel_params: p9.iapi.panel_view,
+        coord: p9.coords.coord.coord,
+        ax: mpl.axes.Axes,
+        **params: Any
+    ) -> None:
         super().draw_panel(data, panel_params, coord, ax, **params)
 
     @staticmethod
-    def draw_group(data, panel_params, coord, ax, **params):
+    def draw_group(
+        data: pd.DataFrame,
+        panel_params: p9.iapi.panel_view,
+        coord: p9.coords.coord.coord,
+        ax: mpl.axes.Axes,
+        **params: Any
+    ) -> None:
         data = coord.transform(data, panel_params)
 
         # Bind color and alpha
@@ -224,14 +256,18 @@ class geom_text(geom):
             )
 
     @staticmethod
-    def draw_legend(data, da, lyr):
+    def draw_legend(
+        data: pd.Series[Any],
+        da: mpl.patches.DrawingArea,
+        lyr: p9.layer.layer
+    ) -> mpl.patches.DrawingArea:
         """
         Draw letter 'a' in the box
 
         Parameters
         ----------
-        data : dataframe
-            Legend data
+        data : Series
+            Data Row
         da : DrawingArea
             Canvas
         lyr : layer
@@ -241,15 +277,18 @@ class geom_text(geom):
         -------
         out : DrawingArea
         """
-        key = Text(x=0.5*da.width,
-                   y=0.5*da.height,
-                   text='a',
-                   alpha=data['alpha'],
-                   size=data['size'],
-                   family=lyr.geom.params['family'],
-                   color=data['color'],
-                   rotation=data['angle'],
-                   horizontalalignment='center',
-                   verticalalignment='center')
+        assert lyr.geom is not None
+        key = Text(
+            x=0.5*da.width,
+            y=0.5*da.height,
+            text='a',
+            alpha=data['alpha'],
+            size=data['size'],
+            family=lyr.geom.params['family'],
+            color=data['color'],
+            rotation=data['angle'],
+            horizontalalignment='center',
+            verticalalignment='center'
+        )
         da.add_artist(key)
         return da

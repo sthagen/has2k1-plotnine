@@ -1,34 +1,50 @@
-import types
+from __future__ import annotations
+
+import typing
 from contextlib import suppress
 
 import numpy as np
+import pandas as pd
 
 from ..exceptions import PlotnineError
+from ..iapi import labels_view, pos_scales
 from ..utils import match
+
+if typing.TYPE_CHECKING:
+    import matplotlib as mpl
+
+    import plotnine as p9
 
 
 class Layout:
+    """
+    Layout of entire plot
+    """
     #: facet
-    facet = None
+    facet: p9.facets.facet.facet
 
     #: coordinate system
-    coord = None
+    coord: p9.coords.coord.coord
 
     #: A dataframe with the layout information of the plot
-    layout = None
+    layout: pd.DataFrame
 
     #: List of x scales
-    panel_scales_x = None
+    panel_scales_x: p9.scales.scales.Scales
 
     #: List of y scales
-    panel_scales_y = None
+    panel_scales_y: p9.scales.scales.Scales
 
     #: Range & breaks information for each panel
-    panel_params = None
+    panel_params: list[p9.iapi.panel_view]
 
-    axs = None        # MPL axes
+    axs: mpl.axes.Axes       # MPL axes
 
-    def setup(self, layers, plot):
+    def setup(
+        self,
+        layers: p9.layer.Layers,
+        plot: p9.ggplot
+    ) -> None:
         """
         Create a layout for the panels
 
@@ -64,10 +80,15 @@ class Layout:
         for layer, ldata in zip(layers, data):
             layer.data = self.facet.map(ldata, self.layout)
 
-    def train_position(self, layers, scales):
+    def train_position(
+        self,
+        layers: p9.layer.Layers,
+        scales: p9.scales.scales.Scales
+    ) -> None:
         """
-        Create all the required x & y panel_scales y_scales
-        and set the ranges for each scale according to the data.
+        Create all the required x & y panel_scales
+
+        And set the ranges for each scale according to the data
 
         Notes
         -----
@@ -78,17 +99,20 @@ class Layout:
         scale and a y scale.
         """
         layout = self.layout
-        if self.panel_scales_x is None and scales.x:
+        if not hasattr(self, "panel_scales_x") and scales.x:
             result = self.facet.init_scales(layout, scales.x, None)
             self.panel_scales_x = result.x
 
-        if self.panel_scales_y is None and scales.y:
+        if not hasattr(self, "panel_scales_y") and scales.y:
             result = self.facet.init_scales(layout, None, scales.y)
             self.panel_scales_y = result.y
 
         self.facet.train_position_scales(self, layers)
 
-    def map_position(self, layers):
+    def map_position(
+        self,
+        layers: p9.layer.Layers
+    ) -> None:
         """
         Map x & y (position) aesthetics onto the scales.
 
@@ -114,7 +138,7 @@ class Layout:
                 SCALE_Y = _layout['SCALE_Y'].iloc[match_id].tolist()
                 self.panel_scales_y.map(data, y_vars, SCALE_Y)
 
-    def get_scales(self, i):
+    def get_scales(self, i: int) -> pos_scales:
         """
         Return x & y scales for panel i
 
@@ -133,8 +157,6 @@ class Layout:
         # wrapping with np.asarray prevents an exception
         # on some datasets
         bool_idx = (np.asarray(self.layout['PANEL']) == i)
-        xsc = None
-        ysc = None
 
         if self.panel_scales_x:
             idx = self.layout.loc[bool_idx, 'SCALE_X'].values[0]
@@ -144,9 +166,11 @@ class Layout:
             idx = self.layout.loc[bool_idx, 'SCALE_Y'].values[0]
             ysc = self.panel_scales_y[idx-1]
 
-        return types.SimpleNamespace(x=xsc, y=ysc)
+        assert xsc is not None, "TODO: BAD"
+        assert ysc is not None, "TODO: BAD"
+        return pos_scales(x=xsc, y=ysc)
 
-    def reset_position_scales(self):
+    def reset_position_scales(self) -> None:
         """
         Reset x and y scales
         """
@@ -159,7 +183,10 @@ class Layout:
         with suppress(AttributeError):
             self.panel_scales_y.reset()
 
-    def setup_panel_params(self, coord):
+    def setup_panel_params(
+        self,
+        coord: p9.coords.coord.coord
+    ) -> None:
         """
         Calculate the x & y range & breaks information for each panel
 
@@ -180,10 +207,14 @@ class Layout:
             i, j = i-1, j-1
             params = coord.setup_panel_params(
                 self.panel_scales_x[i],
-                self.panel_scales_y[j])
+                self.panel_scales_y[j]
+            )
             self.panel_params.append(params)
 
-    def finish_data(self, layers):
+    def finish_data(
+        self,
+        layers: p9.layer.Layers
+    ) -> None:
         """
         Modify data before it is drawn out by the geom
 
@@ -195,21 +226,22 @@ class Layout:
         for layer in layers:
             layer.data = self.facet.finish_data(layer.data, self)
 
-    def check_layout(self):
+    def check_layout(self) -> None:
         required = {'PANEL', 'SCALE_X', 'SCALE_Y'}
-        common = self.layout.columns.intersection(required)
+        common = self.layout.columns.intersection(list(required))
         if len(required) != len(common):
             raise PlotnineError(
                 "Facet layout has bad format. It must contain "
-                f"the columns '{required}'")
+                f"the columns '{required}'"
+            )
 
-    def xlabel(self, labels):
+    def xlabel(self, labels: labels_view) -> str:
         """
         Determine x-axis label
 
         Parameters
         ----------
-        labels : dict
+        labels : labels_view
             Labels as specified by the user through the ``labs`` or
             ``xlab`` calls.
 
@@ -220,16 +252,17 @@ class Layout:
         """
         if self.panel_scales_x[0].name is not None:
             return self.panel_scales_x[0].name
-        else:
-            return labels.get('x', '')
+        elif labels.x is not None:
+            return labels.x
+        return ''
 
-    def ylabel(self, labels):
+    def ylabel(self, labels: labels_view) -> str:
         """
-        Determine x-axis label
+        Determine y-axis label
 
         Parameters
         ----------
-        labels : dict
+        labels : labels_view
             Labels as specified by the user through the ``labs`` or
             ``ylab`` calls.
 
@@ -240,5 +273,25 @@ class Layout:
         """
         if self.panel_scales_y[0].name is not None:
             return self.panel_scales_y[0].name
-        else:
-            return labels.get('y', '')
+        elif labels.y is not None:
+            return labels.y
+        return ''
+
+    def set_xy_labels(self, labels: labels_view) -> labels_view:
+        """
+        Determine x & y axis labels
+
+        Parameters
+        ----------
+        labels : labels_view
+            Labels as specified by the user through the ``labs`` or
+            ``ylab`` calls.
+
+        Returns
+        -------
+        out : labels_view
+            Modified labels
+        """
+        labels.x = self.xlabel(labels)
+        labels.y = self.ylabel(labels)
+        return labels

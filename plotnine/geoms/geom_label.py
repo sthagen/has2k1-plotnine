@@ -1,7 +1,19 @@
+from __future__ import annotations
+
+import typing
+
 from matplotlib.patches import Rectangle
 
 from ..doctools import document
 from .geom_text import geom_text
+
+if typing.TYPE_CHECKING:
+    from typing import Any
+
+    import matplotlib as mpl
+    import pandas as pd
+
+    import plotnine as p9
 
 _aes = geom_text.DEFAULT_AES.copy()
 _aes['fill'] = 'white'
@@ -68,14 +80,18 @@ class geom_label(geom_text):
     DEFAULT_PARAMS = _params
 
     @staticmethod
-    def draw_legend(data, da, lyr):
+    def draw_legend(
+        data: pd.Series[Any],
+        da: mpl.patches.DrawingArea,
+        lyr: p9.layer.layer
+    ) -> mpl.patches.DrawingArea:
         """
         Draw letter 'a' in the box
 
         Parameters
         ----------
-        data : dataframe
-            Legend data
+        data : Series
+            Data Row
         da : DrawingArea
             Canvas
         lyr : layer
