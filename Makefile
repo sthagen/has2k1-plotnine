@@ -6,7 +6,7 @@ help:
 	@echo "clean-build - remove build artifacts"
 	@echo "clean-pyc - remove Python file artifacts"
 	@echo "clean-test - remove test and coverage artifacts"
-	@echo "lint - check style with flake8"
+	@echo "lint - check style with ruff"
 	@echo "test - run tests quickly with the default Python"
 	@echo "coverage - check code coverage quickly with the default Python"
 	@echo "docs - generate Sphinx HTML documentation, including API docs"
@@ -36,13 +36,13 @@ clean-test:
 	rm -fr htmlcov/
 	rm -fr tests/result_images/*
 
-flake8:
-	flake8 plotnine
+ruff:
+	ruff plotnine
 
-isort:
-	isort --check-only --quiet .
+ruff-isort:
+	ruff --select I001 --quiet plotnine
 
-lint: isort flake8
+lint: ruff ruff-isort
 
 typecheck:
 	mypy plotnine
