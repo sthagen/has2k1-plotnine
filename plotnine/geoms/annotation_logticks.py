@@ -8,42 +8,58 @@ import pandas as pd
 
 from ..coords import coord_flip
 from ..exceptions import PlotnineWarning
+from ..scales.scale import scale_continuous as ScaleContinuous
 from ..utils import log
 from .annotate import annotate
 from .geom_path import geom_path
 from .geom_rug import geom_rug
 
 if typing.TYPE_CHECKING:
-    from typing import Any, Literal, Sequence
+    from typing import Any, Literal, Optional, Sequence
 
-    import matplotlib as mpl
-    import numpy.typing as npt
+    from typing_extensions import TypeGuard
 
-    import plotnine as p9
+    from plotnine.iapi import panel_view
+    from plotnine.typing import (
+        AnyArray,
+        Axes,
+        Coord,
+        Geom,
+        Layout,
+        Scale,
+        Trans,
+        TupleFloat2,
+        TupleFloat3,
+    )
 
 
 class _geom_logticks(geom_rug):
     """
     Internal geom implementing drawing of annotation_logticks
     """
+
     DEFAULT_AES = {}
-    DEFAULT_PARAMS = {'stat': 'identity', 'position': 'identity',
-                      'na_rm': False, 'sides': 'bl', 'alpha': 1,
-                      'color': 'black', 'size': 0.5, 'linetype': 'solid',
-                      'lengths': (0.036, 0.0225, 0.012), 'base': 10}
-    draw_legend = staticmethod(geom_path.draw_legend)  # type: ignore
+    DEFAULT_PARAMS = {
+        "stat": "identity",
+        "position": "identity",
+        "na_rm": False,
+        "sides": "bl",
+        "alpha": 1,
+        "color": "black",
+        "size": 0.5,
+        "linetype": "solid",
+        "lengths": (0.036, 0.0225, 0.012),
+        "base": 10,
+    }
+    draw_legend = staticmethod(geom_path.draw_legend)
 
     def draw_layer(
-        self,
-        data: pd.DataFrame,
-        layout: p9.facets.layout.Layout,
-        coord: p9.coords.coord.coord,
-        **params: Any
-    ) -> None:
+        self, data: pd.DataFrame, layout: Layout, coord: Coord, **params: Any
+    ):
         """
         Draw ticks on every panel
         """
-        for pid in layout.layout['PANEL']:
+        for pid in layout.layout["PANEL"]:
             ploc = pid - 1
             panel_params = layout.panel_params[ploc]
             ax = layout.axs[ploc]
@@ -51,11 +67,11 @@ class _geom_logticks(geom_rug):
 
     @staticmethod
     def _check_log_scale(
-        base: float | None,
+        base: Optional[float],
         sides: str,
-        panel_params: p9.iapi.panel_view,
-        coord: p9.coords.coord.coord,
-    ) -> tuple[float, float]:
+        panel_params: panel_view,
+        coord: Coord,
+    ) -> TupleFloat2:
         """
         Check the log transforms
 
@@ -80,69 +96,56 @@ class _geom_logticks(geom_rug):
         out : tuple
             The bases (base_x, base_y) to use when generating the ticks.
         """
-        def is_log(scale: p9.scales.scale.scale) -> bool:
-            if not hasattr(scale, 'trans'):
-                return False
-            trans = scale.trans
-            return (trans.__class__.__name__.startswith('log') and
-                    hasattr(trans, 'base'))
 
-        base_x, base_y = base, base
+        def is_log_trans(t: Trans) -> bool:
+            return hasattr(t, "base") and t.__class__.__name__.startswith(
+                "log"
+            )
+
+        def get_base(sc, ubase: Optional[float]) -> float:
+            ae = sc.aesthetics[0]
+
+            if not isinstance(sc, ScaleContinuous) or not is_log_trans(
+                sc.trans
+            ):
+                warnings.warn(
+                    f"annotation_logticks for {ae}-axis which does not have "
+                    "a log scale. The logticks may not make sense.",
+                    PlotnineWarning,
+                )
+                return 10 if ubase is None else ubase
+
+            base = sc.trans.base  # pyright: ignore
+            if ubase is not None and base != ubase:
+                warnings.warn(
+                    f"The x-axis is log transformed in base={base} ,"
+                    "but the annotation_logticks are computed in base="
+                    f"{ubase}",
+                    PlotnineWarning,
+                )
+                return ubase
+            return base
+
+        base_x, base_y = 10, 10
         x_scale = panel_params.x.scale
         y_scale = panel_params.y.scale
-        x_is_log = is_log(x_scale)
-        y_is_log = is_log(y_scale)
+
         if isinstance(coord, coord_flip):
-            x_is_log, y_is_log = y_is_log, x_is_log
             x_scale, y_scale = y_scale, x_scale
             base_x, base_y = base_y, base_x
 
-        if 't' in sides or 'b' in sides:
-            if base_x is None:
-                if x_is_log and hasattr(x_scale, 'trans'):
-                    base_x = x_scale.trans.base
-                else:  # no log, no defined base. See warning below.
-                    base_x = 10
+        if "t" in sides or "b" in sides:
+            base_x = get_base(x_scale, base)
 
-            if not hasattr(x_scale, 'trans') or not x_is_log:
-                warnings.warn(
-                    "annotation_logticks for x-axis which does not have "
-                    "a log scale. The logticks may not make sense.",
-                    PlotnineWarning)
-            elif x_is_log and base_x != x_scale.trans.base:
-                warnings.warn(
-                    f"The x-axis is log transformed in base {base_x} ,"
-                    "but the annotation_logticks are computed in base "
-                    f"{x_scale.trans.base}",
-                    PlotnineWarning
-                )
+        if "l" in sides or "r" in sides:
+            base_y = get_base(y_scale, base)
 
-        if 'l' in sides or 'r' in sides:
-            if base_y is None:
-                if y_is_log and hasattr(y_scale, 'trans'):
-                    base_y = y_scale.trans.base
-                else:  # no log, no defined base. See warning below.
-                    base_y = 10
-
-            if not hasattr(y_scale, 'trans') or not y_is_log:
-                warnings.warn(
-                    "annotation_logticks for y-axis which does not have "
-                    "a log scale. The logticks may not make sense.",
-                    PlotnineWarning)
-            elif y_is_log and base_y != y_scale.trans.base:
-                warnings.warn(
-                    f"The y-axis is log transformed in base {base_y} ,"
-                    "but the annotation_logticks are computed in base "
-                    f"{y_scale.trans.base}",
-                    PlotnineWarning
-                )
-        return base_x, base_y  # type: ignore
+        return base_x, base_y
 
     @staticmethod
     def _calc_ticks(
-        value_range: tuple[float, float],
-        base: float
-    ) -> tuple[npt.NDArray[Any], npt.NDArray[Any], npt.NDArray[Any]]:
+        value_range: TupleFloat2, base: float
+    ) -> tuple[AnyArray, AnyArray, AnyArray]:
         """
         Calculate tick marks within a range
 
@@ -159,11 +162,9 @@ class _geom_logticks(geom_rug):
         out: tuple
             (major, middle, minor) tick locations
         """
-        def _minor(
-            x: Sequence[Any],
-            mid_idx: int
-        ) -> npt.NDArray[Any]:
-            return np.hstack([x[1:mid_idx], x[mid_idx+1:-1]])
+
+        def _minor(x: Sequence[Any], mid_idx: int) -> AnyArray:
+            return np.hstack([x[1:mid_idx], x[mid_idx + 1 : -1]])
 
         # * Calculate the low and high powers,
         # * Generate for all intervals in along the low-high power range
@@ -172,10 +173,10 @@ class _geom_logticks(geom_rug):
         #   them to log space.
         low = np.floor(value_range[0])
         high = np.ceil(value_range[1])
-        arr = base ** np.arange(low, float(high+1))
+        arr = base ** np.arange(low, float(high + 1))
         n_ticks = int(np.round(base) - 1)
         breaks = [
-            log(np.linspace(b1, b2, n_ticks+1), base)
+            log(np.linspace(b1, b2, n_ticks + 1), base)
             for (b1, b2) in list(zip(arr, arr[1:]))
         ]
 
@@ -194,42 +195,30 @@ class _geom_logticks(geom_rug):
     def draw_panel(
         self,
         data: pd.DataFrame,
-        panel_params: p9.iapi.panel_view,
-        coord: p9.coords.coord.coord,
-        ax: mpl.axes.Axes,
-        **params: Any
-    ) -> None:
+        panel_params: panel_view,
+        coord: Coord,
+        ax: Axes,
+        **params: Any,
+    ):
         # Any passed data is ignored, the relevant data is created
-        sides = params['sides']
-        lengths = params['lengths']
+        sides = params["sides"]
+        lengths = params["lengths"]
         _aesthetics = {
-            'size': params['size'],
-            'color': params['color'],
-            'alpha': params['alpha'],
-            'linetype': params['linetype']
+            "size": params["size"],
+            "color": params["color"],
+            "alpha": params["alpha"],
+            "linetype": params["linetype"],
         }
 
         def _draw(
-            geom: p9.geoms.geom.geom,
+            geom: Geom,
             axis: Literal["x", "y"],
-            tick_positions: tuple[
-                npt.NDArray[Any],
-                npt.NDArray[Any],
-                npt.NDArray[Any]
-            ]
-        ) -> None:
-            for (position, length) in zip(tick_positions, lengths):
-                data = pd.DataFrame({
-                    axis: position,
-                    **_aesthetics  # type: ignore
-                })
+            tick_positions: tuple[AnyArray, AnyArray, AnyArray],
+        ):
+            for position, length in zip(tick_positions, lengths):
+                data = pd.DataFrame({axis: position, **_aesthetics})
                 geom.draw_group(
-                    data,
-                    panel_params,
-                    coord,
-                    ax,
-                    length=length,
-                    **params
+                    data, panel_params, coord, ax, length=length, **params
                 )
 
         if isinstance(coord, coord_flip):
@@ -241,16 +230,16 @@ class _geom_logticks(geom_rug):
 
         # these are already flipped iff coord_flip
         base_x, base_y = self._check_log_scale(
-            params['base'], sides, panel_params, coord
+            params["base"], sides, panel_params, coord
         )
 
-        if 'b' in sides or 't' in sides:
+        if "b" in sides or "t" in sides:
             tick_positions = self._calc_ticks(tick_range_x, base_x)
-            _draw(self, 'x', tick_positions)
+            _draw(self, "x", tick_positions)
 
-        if 'l' in sides or 'r' in sides:
+        if "l" in sides or "r" in sides:
             tick_positions = self._calc_ticks(tick_range_y, base_y)
-            _draw(self, 'y', tick_positions)
+            _draw(self, "y", tick_positions)
 
 
 class annotation_logticks(annotate):
@@ -286,23 +275,29 @@ class annotation_logticks(annotate):
 
     def __init__(
         self,
-        sides: str = 'bl',
+        sides: str = "bl",
         alpha: float = 1,
-        color: str | tuple[float, ...] = 'black',
+        color: str | tuple[float, ...] = "black",
         size: float = 0.5,
-        linetype: str | tuple[float, ...] = 'solid',
-        lengths: tuple[float, float, float] = (0.036, 0.0225, 0.012),
-        base: float | None = None
-    ) -> None:
+        linetype: str | tuple[float, ...] = "solid",
+        lengths: TupleFloat3 = (0.036, 0.0225, 0.012),
+        base: float | None = None,
+    ):
         if len(lengths) != 3:
             raise ValueError(
                 "length for annotation_logticks must be a tuple of 3 floats"
             )
 
-        self._annotation_geom = _geom_logticks(sides=sides,
-                                               alpha=alpha,
-                                               color=color,
-                                               size=size,
-                                               linetype=linetype,
-                                               lengths=lengths,
-                                               base=base)
+        self._annotation_geom = _geom_logticks(
+            sides=sides,
+            alpha=alpha,
+            color=color,
+            size=size,
+            linetype=linetype,
+            lengths=lengths,
+            base=base,
+        )
+
+
+def is_continuous_scale(sc: Scale) -> TypeGuard[ScaleContinuous]:
+    return isinstance(sc, ScaleContinuous)

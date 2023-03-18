@@ -36,16 +36,29 @@ clean-test:
 	rm -fr htmlcov/
 	rm -fr tests/result_images/*
 
+update:
+	pip install --upgrade -r requirements/dev.txt
+	pre-commit autoupdate
+
 ruff:
-	ruff plotnine
+	ruff plotnine $(args)
 
 ruff-isort:
-	ruff --select I001 --quiet plotnine
+	ruff --select I001 --quiet plotnine $(args)
+
+black:
+	black . --check
+
+black-fix:
+	black .
 
 lint: ruff ruff-isort
 
+lint-fix:
+	make lint args="--fix"
+
 typecheck:
-	mypy plotnine
+	pyright
 
 test: clean-test
 	export MATPLOTLIB_BACKEND=agg
@@ -68,11 +81,13 @@ release: clean
 	bash ./tools/release.sh
 
 dist: clean
-	python setup.py sdist bdist_wheel
+	python -m build
 	ls -l dist
 
+build: dist
+
 install: clean
-	python setup.py install
+	pip install ".[extra]"
 
 develop: clean-pyc
-	python setup.py develop
+	pip install -e ".[all]"

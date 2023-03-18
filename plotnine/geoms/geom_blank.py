@@ -8,10 +8,10 @@ from .geom import geom
 if typing.TYPE_CHECKING:
     from typing import Any
 
-    import matplotlib as mpl
     import pandas as pd
 
-    import plotnine as p9
+    from plotnine.iapi import panel_view
+    from plotnine.typing import Axes, Coord
 
 
 @document
@@ -25,17 +25,21 @@ class geom_blank(geom):
     ----------
     {common_parameters}
     """
-    DEFAULT_PARAMS = {'stat': 'identity', 'position': 'identity',
-                      'na_rm': False}
+
+    DEFAULT_PARAMS = {
+        "stat": "identity",
+        "position": "identity",
+        "na_rm": False,
+    }
 
     def draw_panel(
         self,
         data: pd.DataFrame,
-        panel_params: p9.iapi.panel_view,
-        coord: p9.coords.coord.coord,
-        ax: mpl.axes.Axes,
-        **params: Any
-    ) -> None:
+        panel_params: panel_view,
+        coord: Coord,
+        ax: Axes,
+        **params: Any,
+    ):
         pass
 
     def handle_na(self, data: pd.DataFrame) -> pd.DataFrame:

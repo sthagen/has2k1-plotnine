@@ -13,10 +13,10 @@ from .geom import geom
 if typing.TYPE_CHECKING:
     from typing import Any
 
-    import matplotlib as mpl
     import pandas as pd
 
-    import plotnine as p9
+    from plotnine.iapi import panel_view
+    from plotnine.typing import Axes, Coord, DrawingArea, Layer
 
 
 @document
@@ -34,11 +34,20 @@ class geom_polygon(geom):
     -----
     All paths in the same ``group`` aesthetic value make up a polygon.
     """
-    DEFAULT_AES = {'alpha': 1, 'color': None, 'fill': '#333333',
-                   'linetype': 'solid', 'size': 0.5}
-    DEFAULT_PARAMS = {'stat': 'identity', 'position': 'identity',
-                      'na_rm': False}
-    REQUIRED_AES = {'x', 'y'}
+
+    DEFAULT_AES = {
+        "alpha": 1,
+        "color": None,
+        "fill": "#333333",
+        "linetype": "solid",
+        "size": 0.5,
+    }
+    DEFAULT_PARAMS = {
+        "stat": "identity",
+        "position": "identity",
+        "na_rm": False,
+    }
+    REQUIRED_AES = {"x", "y"}
 
     def handle_na(self, data: pd.DataFrame) -> pd.DataFrame:
         return data
@@ -46,11 +55,11 @@ class geom_polygon(geom):
     def draw_panel(
         self,
         data: pd.DataFrame,
-        panel_params: p9.iapi.panel_view,
-        coord: p9.coords.coord.coord,
-        ax: mpl.axes.Axes,
-        **params: Any
-    ) -> None:
+        panel_params: panel_view,
+        coord: Coord,
+        ax: Axes,
+        **params: Any,
+    ):
         """
         Plot all groups
         """
@@ -59,13 +68,13 @@ class geom_polygon(geom):
     @staticmethod
     def draw_group(
         data: pd.DataFrame,
-        panel_params: p9.iapi.panel_view,
-        coord: p9.coords.coord.coord,
-        ax: mpl.axes.Axes,
-        **params: Any
-    ) -> None:
+        panel_params: panel_view,
+        coord: Coord,
+        ax: Axes,
+        **params: Any,
+    ):
         data = coord.transform(data, panel_params, munch=True)
-        data['size'] *= SIZE_FACTOR
+        data["size"] *= SIZE_FACTOR
 
         # Each group is a polygon with a single facecolor
         # with potentially an edgecolor for every edge.
@@ -78,14 +87,14 @@ class geom_polygon(geom):
         # Some stats may order the data in ways that prevent
         # objects from occluding other objects. We do not want
         # to undo that order.
-        grouper = data.groupby('group', sort=False)
+        grouper = data.groupby("group", sort=False)
         for group, df in grouper:
-            fill = to_rgba(df['fill'].iloc[0], df['alpha'].iloc[0])
-            verts.append(tuple(zip(df['x'], df['y'])))
-            facecolor.append('none' if fill is None else fill)
-            edgecolor.append(df['color'].iloc[0] or 'none')
-            linestyle.append(df['linetype'].iloc[0])
-            linewidth.append(df['size'].iloc[0])
+            fill = to_rgba(df["fill"].iloc[0], df["alpha"].iloc[0])
+            verts.append(tuple(zip(df["x"], df["y"])))
+            facecolor.append("none" if fill is None else fill)
+            edgecolor.append(df["color"].iloc[0] or "none")
+            linestyle.append(df["linetype"].iloc[0])
+            linewidth.append(df["size"].iloc[0])
 
         col = PolyCollection(
             verts,
@@ -93,18 +102,16 @@ class geom_polygon(geom):
             edgecolors=edgecolor,
             linestyles=linestyle,
             linewidths=linewidth,
-            zorder=params['zorder'],
-            rasterized=params['raster'],
+            zorder=params["zorder"],
+            rasterized=params["raster"],
         )
 
         ax.add_collection(col)
 
     @staticmethod
     def draw_legend(
-        data: pd.Series[Any],
-        da: mpl.patches.DrawingArea,
-        lyr: p9.layer.layer
-    ) -> mpl.patches.DrawingArea:
+        data: pd.Series[Any], da: DrawingArea, lyr: Layer
+    ) -> DrawingArea:
         """
         Draw a rectangle in the box
 
@@ -121,27 +128,27 @@ class geom_polygon(geom):
         -------
         out : DrawingArea
         """
-        data['size'] *= SIZE_FACTOR
+        data["size"] *= SIZE_FACTOR
         # We take into account that the linewidth
         # bestrides the boundary of the rectangle
-        linewidth = np.min([data['size'], da.width/4, da.height/4])
+        linewidth = np.min([data["size"], da.width / 4, da.height / 4])
 
-        if data['color'] is None:
+        if data["color"] is None:
             linewidth = 0
 
-        facecolor = to_rgba(data['fill'], data['alpha'])
+        facecolor = to_rgba(data["fill"], data["alpha"])
         if facecolor is None:
-            facecolor = 'none'
+            facecolor = "none"
 
         rect = Rectangle(
-            (0+linewidth/2, 0+linewidth/2),
-            width=da.width-linewidth,
-            height=da.height-linewidth,
+            (0 + linewidth / 2, 0 + linewidth / 2),
+            width=da.width - linewidth,
+            height=da.height - linewidth,
             linewidth=linewidth,
-            linestyle=data['linetype'],
+            linestyle=data["linetype"],
             facecolor=facecolor,
-            edgecolor=data['color'],
-            capstyle='projecting'
+            edgecolor=data["color"],
+            capstyle="projecting",
         )
         da.add_artist(rect)
         return da

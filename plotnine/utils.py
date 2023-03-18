@@ -9,7 +9,6 @@ import itertools
 import typing
 import warnings
 from contextlib import suppress
-from typing import Any, Callable
 from warnings import warn
 from weakref import WeakValueDictionary
 
@@ -30,10 +29,13 @@ from .exceptions import PlotnineError, PlotnineWarning
 from .mapping import aes
 
 if typing.TYPE_CHECKING:
+    from typing import Any, Callable, Sequence
+
     import numpy.typing as npt
     from typing_extensions import TypeGuard
 
-    from plotnine.typing import DataLike
+    from plotnine.typing import DataLike, FloatArray, FloatArrayLike, IntArray
+
 
 # Points and lines of equal size should give the
 # same visual diameter (for points) and thickness
@@ -56,52 +58,14 @@ def is_string(obj: Any) -> TypeGuard[str]:
     return isinstance(obj, str)
 
 
-def make_iterable(val):
+def is_list_like(obj: Any) -> bool:
     """
-    Return [*val*] if *val* is not iterable
-
-    Strings are not recognized as iterables
+    Return True if *obj* is a list, tuple, series or array
     """
-    if np.iterable(val) and not is_string(val):
-        return val
-    return [val]
+    return isinstance(obj, (list, tuple, pd.Series, np.ndarray))
 
 
-def make_iterable_ntimes(val, n):
-    """
-    Return [*val*, *val*, ...] if *val* is not iterable.
-
-    If *val* is an iterable of length n, it is returned as is.
-    Strings are not recognized as iterables
-
-    Raises an exception if *val* is an iterable but has length
-    not equal to n
-    """
-    if np.iterable(val) and not is_string(val):
-        if len(val) != n:
-            raise PlotnineError(
-                '`val` is an iterable of length not equal to n.')
-        return val
-    return [val] * n
-
-
-class waiver:
-    def __repr__(self):
-        return 'waiver()'
-
-    def __deepcopy__(self, memo):
-        return self
-
-
-def is_waive(x: Any) -> TypeGuard[waiver]:
-    """
-    Return True if x object implies use
-    default and False otherwise.
-    """
-    return isinstance(x, waiver)
-
-
-def identity(*args):
+def identity(*args: Any) -> Any:
     """
     Return whatever is passed in
     """
@@ -109,11 +73,7 @@ def identity(*args):
 
 
 def match(
-    v1,
-    v2,
-    nomatch=-1,
-    incomparables=None,
-    start=0
+    v1, v2, nomatch=-1, incomparables=None, start=0
 ) -> npt.NDArray[np.int64]:
     """
     Return a vector of the positions of (first)
@@ -148,20 +108,17 @@ def match(
     if incomparables:
         skip = set(incomparables) if incomparables else set()
         lst = [
-            lookup[x]+start
-            if x not in skip and x in lookup else nomatch
+            lookup[x] + start if x not in skip and x in lookup else nomatch
             for x in v1
         ]
     else:
-        lst = [
-            lookup[x]+start
-            if x in lookup else nomatch
-            for x in v1
-        ]
+        lst = [lookup[x] + start if x in lookup else nomatch for x in v1]
     return np.array(lst)
 
 
-def _margins(vars, margins=True):
+def _margins(
+    vars: tuple[list[str], list[str]], margins: bool | list[str] = True
+):
     """
     Figure out margining variables.
 
@@ -194,7 +151,7 @@ def _margins(vars, margins=True):
         # all variables to the right
         for i, u in enumerate(_vars):
             if margins is True or u in margins:
-                lst = [u] + [v for v in _vars[i+1:]]
+                lst = [u] + list(_vars[i + 1 :])
                 dim_margins.append(lst)
         return dim_margins
 
@@ -215,7 +172,7 @@ def _margins(vars, margins=True):
 def add_margins(
     df: pd.DataFrame,
     vars: tuple[list[str], list[str]],
-    margins: bool | list[str] = True
+    margins: bool | list[str] = True,
 ) -> pd.DataFrame:
     """
     Add margins to a data frame.
@@ -244,7 +201,7 @@ def add_margins(
     for vlst in margin_vars[1:]:
         dfx = df.copy()
         for v in vlst:
-            dfx.loc[0:, v] = '(all)'
+            dfx.loc[0:, v] = "(all)"
         margin_dfs.append(dfx)
 
     merged = pd.concat(margin_dfs, axis=0)
@@ -255,17 +212,14 @@ def add_margins(
     categories = {}
     for v in itertools.chain(*vars):
         col = df[v]
-        if not pdtypes.is_categorical_dtype(df[v].dtype):
+        if not pdtypes.is_categorical_dtype(df[v]):
             col = pd.Categorical(df[v])
         categories[v] = col.categories
-        if '(all)' not in categories[v]:
-            categories[v] = categories[v].insert(
-                len(categories[v]), '(all)')
+        if "(all)" not in categories[v]:
+            categories[v] = categories[v].insert(len(categories[v]), "(all)")
 
     for v in merged.columns.intersection(list(categories.keys())):
-        merged[v] = merged[v].astype(
-           pdtypes.CategoricalDtype(categories[v])
-        )
+        merged[v] = merged[v].astype(pdtypes.CategoricalDtype(categories[v]))
 
     return merged
 
@@ -308,11 +262,10 @@ def ninteraction(df: pd.DataFrame, drop: bool = False) -> list[int]:
     # Calculate dimensions
     def len_unique(x):
         return len(np.unique(x))
-    ndistinct = ids.apply(len_unique, axis=0).values
 
-    combs = np.array(
-        np.hstack([1, np.cumprod(ndistinct[:-1])])
-    )
+    ndistinct: IntArray = ids.apply(len_unique, axis=0).to_numpy()
+
+    combs = np.array(np.hstack([1, np.cumprod(ndistinct[:-1])]))
     mat = np.array(ids)
     res = (mat - 1) @ combs.T + 1
     res = np.array(res).flatten().tolist()
@@ -323,10 +276,7 @@ def ninteraction(df: pd.DataFrame, drop: bool = False) -> list[int]:
         return list(res)
 
 
-def _id_var(
-    x: pd.Series[Any],
-    drop: bool = False
-) -> list[int]:
+def _id_var(x: pd.Series[Any], drop: bool = False) -> list[int]:
     """
     Assign ids to items in x. If two items
     are the same, they get the same id.
@@ -363,7 +313,7 @@ def _id_var(
             # x probably has NANs
             levels = multitype_sort(set(x))
 
-        lst = match(x, levels)  # type: ignore
+        lst = match(x, levels)
         lst = [item + 1 for item in lst]
 
     return lst
@@ -400,17 +350,15 @@ def join_keys(x, y, by=None):
     keys = ninteraction(joint, drop=True)
     keys = np.asarray(keys)
     nx, ny = len(x), len(y)
-    return {'x': keys[np.arange(nx)],
-            'y': keys[nx + np.arange(ny)]}
+    return {"x": keys[np.arange(nx)], "y": keys[nx + np.arange(ny)]}
 
 
 def check_required_aesthetics(required, present, name):
     missing_aes = set(required) - set(present)
 
     if missing_aes:
-        msg = '{} requires the following missing aesthetics: {}'
-        raise PlotnineError(
-            msg.format(name, ', '.join(missing_aes)))
+        msg = "{} requires the following missing aesthetics: {}"
+        raise PlotnineError(msg.format(name, ", ".join(missing_aes)))
 
 
 def uniquecols(df):
@@ -474,18 +422,18 @@ def jitter(x, factor=1, amount=None, random_state=None):
         z = 1
 
     if amount is None:
-        _x = np.round(x, 3-int(np.floor(np.log10(z)))).astype(int)
+        _x = np.round(x, 3 - int(np.floor(np.log10(z)))).astype(int)
         xx = np.unique(np.sort(_x))
         d = np.diff(xx)
         if len(d):
             d = d.min()
         elif xx != 0:
-            d = xx/10.
+            d = xx / 10.0
         else:
-            d = z/10
-        amount = factor/5. * abs(d)
+            d = z / 10
+        amount = factor / 5.0 * abs(d)
     elif amount == 0:
-        amount = factor * (z / 50.)
+        amount = factor * (z / 50.0)
 
     return x + random_state.uniform(-amount, amount, len(x))
 
@@ -493,9 +441,9 @@ def jitter(x, factor=1, amount=None, random_state=None):
 def remove_missing(
     df: pd.DataFrame,
     na_rm: bool = False,
-    vars: list[str] | None = None,
-    name: str = '',
-    finite: bool = False
+    vars: Sequence[str] | None = None,
+    name: str = "",
+    finite: bool = False,
 ) -> pd.DataFrame:
     """
     Convenience function to remove missing values from a dataframe
@@ -517,21 +465,21 @@ def remove_missing(
     if vars is None:
         vars = df.columns.to_list()
     else:
-        vars = df.columns.intersection(vars).to_list()
+        vars = df.columns.intersection(list(vars)).to_list()
 
     if finite:
         lst = [np.inf, -np.inf]
         to_replace = {v: lst for v in vars}
         df.replace(to_replace, np.nan, inplace=True)
-        txt = 'non-finite'
+        txt = "non-finite"
     else:
-        txt = 'missing'
+        txt = "missing"
 
     df = df.dropna(subset=vars)
     df.reset_index(drop=True, inplace=True)
     if len(df) < n and not na_rm:
-        msg = '{} : Removed {} rows containing {} values.'
-        warn(msg.format(name, n-len(df), txt), PlotnineWarning, stacklevel=3)
+        msg = "{} : Removed {} rows containing {} values."
+        warn(msg.format(name, n - len(df), txt), PlotnineWarning, stacklevel=3)
     return df
 
 
@@ -560,6 +508,7 @@ def to_rgba(colors, alpha):
     However :), the colors can be rgba hex values or
     list-likes and the alpha dimension will be respected.
     """
+
     def is_iterable(var):
         return np.iterable(var) and not is_string(var)
 
@@ -568,12 +517,12 @@ def to_rgba(colors, alpha):
             if len(c) == 4:
                 return True
         elif isinstance(c, str):
-            if c[0] == '#' and len(c) == 9:
+            if c[0] == "#" and len(c) == 9:
                 return True
         return False
 
     def no_color(c):
-        return c is None or c == '' or c.lower() == 'none'
+        return c is None or c == "" or c.lower() == "none"
 
     def to_rgba_hex(c, a):
         """
@@ -582,7 +531,7 @@ def to_rgba(colors, alpha):
         If color c has an alpha channel, then alpha value
         a is ignored
         """
-        if c in ('None', 'none'):
+        if c in ("None", "none"):
             return c
 
         _has_alpha = has_alpha(c)
@@ -596,7 +545,7 @@ def to_rgba(colors, alpha):
 
     if is_iterable(colors):
         if all(no_color(c) for c in colors):
-            return 'none'
+            return "none"
 
         if is_iterable(alpha):
             return [to_rgba_hex(c, a) for c, a in zip(colors, alpha)]
@@ -611,7 +560,13 @@ def to_rgba(colors, alpha):
             return to_rgba_hex(colors, alpha)
 
 
-def groupby_apply(df, cols, func, *args, **kwargs):
+def groupby_apply(
+    df: pd.DataFrame,
+    cols: str | list[str],
+    func: Callable[..., pd.DataFrame],
+    *args: tuple[Any],
+    **kwargs: Any,
+) -> pd.DataFrame:
     """
     Groupby cols and call the function fn on each grouped dataframe.
 
@@ -634,7 +589,7 @@ def groupby_apply(df, cols, func, *args, **kwargs):
         return df.copy()
 
     try:
-        axis = kwargs.pop('axis')
+        axis = kwargs.pop("axis")
     except KeyError:
         axis = 0
 
@@ -675,13 +630,16 @@ def pivot_apply(df, column, index, func, *args, **kwargs):
         Dataframe with index ``index`` and column ``column`` of
         computed/aggregate values .
     """
+
     def _func(x):
         return func(x, *args, **kwargs)
 
     return df.pivot_table(column, index, aggfunc=_func)[column]
 
 
-def make_line_segments(x, y, ispath=True):
+def make_line_segments(
+    x: FloatArrayLike, y: FloatArrayLike, ispath=True
+) -> FloatArray:
     """
     Return an (n x 2 x 2) array of n line segments
 
@@ -697,8 +655,8 @@ def make_line_segments(x, y, ispath=True):
         of successive(even-odd pair) points yields a line.
     """
     # Series objects would otherwise require .iloc
-    x = x.to_numpy() if hasattr(x, 'to_numpy') else x
-    y = y.to_numpy() if hasattr(y, 'to_numpy') else y
+    x = np.asarray(x)
+    y = np.asarray(y)
     if ispath:
         x = interleave(x[:-1], x[1:])
         y = interleave(y[:-1], y[1:])
@@ -714,18 +672,27 @@ class ColoredDrawingArea(DrawingArea):
     """
     A Drawing Area with a background color
     """
-    def __init__(self, width, height, xdescent=0.0, ydescent=0.0,
-                 clip=True, color='none'):
 
-        super().__init__(
-            width, height, xdescent, ydescent, clip=clip)
+    def __init__(
+        self,
+        width: float,
+        height: float,
+        xdescent=0.0,
+        ydescent=0.0,
+        clip=True,
+        color="none",
+    ):
+        super().__init__(width, height, xdescent, ydescent, clip=clip)
 
-        self.patch = Rectangle((0, 0), width=width,
-                               height=height,
-                               facecolor=color,
-                               edgecolor='None',
-                               linewidth=0,
-                               antialiased=False)
+        self.patch = Rectangle(
+            (0, 0),
+            width=width,
+            height=height,
+            facecolor=color,
+            edgecolor="None",
+            linewidth=0,
+            antialiased=False,
+        )
         self.add_artist(self.patch)
 
 
@@ -754,28 +721,35 @@ class RegistryMeta(type):
     """
     Make a metaclass scriptable
     """
-    def __getitem__(meta, key):
+
+    _registry: WeakValueDictionary[str, Any] = WeakValueDictionary()
+
+    # In here "self" refers to the meta class although it is never
+    # instantiated
+    def __getitem__(self, key):
         try:
-            return meta._registry[key]
+            return self._registry[key]
         except KeyError:
-            msg = ("'{}' Not in Registry. Make sure the module in "
-                   "which it is defined has been imported.")
+            msg = (
+                "'{}' Not in Registry. Make sure the module in "
+                "which it is defined has been imported."
+            )
             raise PlotnineError(msg.format(key))
 
-    def __setitem__(meta, key, value):
-        meta._registry[key] = value
+    def __setitem__(self, key, value):
+        self._registry[key] = value
 
-    def __iter__(meta):
-        return meta._registry.__iter__()
+    def __iter__(self):
+        return self._registry.__iter__()
 
-    def keys(meta):
-        return meta._registry.keys()
+    def keys(self):
+        return self._registry.keys()
 
-    def values(meta):
-        return meta._registry.values()
+    def values(self):
+        return self._registry.values()
 
-    def items(meta):
-        return meta._registry.items()
+    def items(self):
+        return self._registry.items()
 
 
 class Registry(type, metaclass=RegistryMeta):
@@ -799,15 +773,15 @@ class Registry(type, metaclass=RegistryMeta):
     When objects are deleted, they are automatically removed
     from the Registry.
     """
-    _registry: WeakValueDictionary[str, Any] = WeakValueDictionary()
 
-    def __new__(meta, name, bases, clsdict):
-        cls = super().__new__(meta, name, bases, clsdict)
-        if not clsdict.pop('__base__', False):
-            meta._registry[name] = cls
-            if 'alias' in clsdict:
-                meta._registry[cls.alias] = cls
-        return cls
+    # namespace is of the class that subclasses Registry (or a
+    # subclasses a subclass of Registry, ...) being created
+    # e.g. geom, geom_point, ...
+    def __new__(cls, name, bases, namespace):
+        sub_cls = super().__new__(cls, name, bases, namespace)
+        if not namespace.pop("__base__", False):
+            cls._registry[name] = sub_cls
+        return sub_cls
 
 
 class RegistryHierarchyMeta(type):
@@ -832,8 +806,9 @@ class RegistryHierarchyMeta(type):
     the other two if `strip_text_x` is not present or is missing
     the requested property.
     """
+
     def __init__(cls, name, bases, namespace):
-        if not hasattr(cls, '_registry'):
+        if not hasattr(cls, "_registry"):
             cls._registry = {}
             cls._hierarchy = collections.defaultdict(list)
         else:
@@ -875,8 +850,9 @@ def get_kwarg_names(func):
     Return a list of valid kwargs to function func
     """
     sig = inspect.signature(func)
-    kwonlyargs = [p.name for p in sig.parameters.values()
-                  if p.default is not p.empty]
+    kwonlyargs = [
+        p.name for p in sig.parameters.values() if p.default is not p.empty
+    ]
     return kwonlyargs
 
 
@@ -944,34 +920,34 @@ def data_mapping_as_kwargs(args, kwargs):
 
     # check kwargs #
     if mapping is not None:
-        if 'mapping' in kwargs:
+        if "mapping" in kwargs:
             raise PlotnineError("More than one mapping argument.")
         else:
-            kwargs['mapping'] = mapping
+            kwargs["mapping"] = mapping
     else:
-        if 'mapping' not in kwargs:
+        if "mapping" not in kwargs:
             mapping = aes()
 
-    if kwargs.get('mapping', None) is None:
-        kwargs['mapping'] = mapping
+    if kwargs.get("mapping", None) is None:
+        kwargs["mapping"] = mapping
 
-    if data is not None and 'data' in kwargs:
+    if data is not None and "data" in kwargs:
         raise PlotnineError("More than one data argument.")
-    elif 'data' not in kwargs:
-        kwargs['data'] = data
+    elif "data" not in kwargs:
+        kwargs["data"] = data
 
-    duplicates = set(kwargs['mapping']) & set(kwargs)
+    duplicates = set(kwargs["mapping"]) & set(kwargs)
     if duplicates:
         msg = "Aesthetics {} specified two times."
         raise PlotnineError(msg.format(duplicates))
     return kwargs
 
 
-def ungroup(data):
+def ungroup(data: DataLike) -> DataLike:
     """Return an ungrouped DataFrame, or pass the original data back."""
 
     if isinstance(data, DataFrameGroupBy):
-        return data.obj
+        return data.obj  # type: ignore
 
     return data
 
@@ -1020,9 +996,7 @@ def order_as_data_mapping(
             if data is None:
                 data = arg
             else:
-                raise TypeError(
-                    "Expected a single dataframe, found two"
-                )
+                raise TypeError("Expected a single dataframe, found two")
         elif arg is not None:
             raise TypeError(
                 f"Bad type of argument {arg!r}, expected a dataframe "
@@ -1053,7 +1027,7 @@ def is_data_like(obj: Any) -> TypeGuard[DataLike]:
     return (
         isinstance(obj, pd.DataFrame)
         or callable(obj)
-        or hasattr(obj, 'to_pandas')
+        or hasattr(obj, "to_pandas")
     )
 
 
@@ -1098,7 +1072,7 @@ def resolution(x, zero=True):
     # (unsigned) integers or an effective range of zero
     _x = x[~pd.isna(x)]
     _x = (x.min(), x.max())
-    if x.dtype.kind in ('i', 'u') or zero_range(_x):
+    if x.dtype.kind in ("i", "u") or zero_range(_x):
         return 1
 
     x = np.unique(x)
@@ -1124,9 +1098,9 @@ def cross_join(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
     # Add as lists so that the new index keeps the items in
     # the order that they are added together
     all_columns = list(pd.Index(list(df1.columns) + list(df2.columns)))
-    df1['key'] = 1
-    df2['key'] = 1
-    return pd.merge(df1, df2, on='key').loc[:, all_columns]
+    df1["key"] = 1
+    df2["key"] = 1
+    return pd.merge(df1, df2, on="key").loc[:, all_columns]
 
 
 def to_inches(value: float, units: str) -> float:
@@ -1142,9 +1116,9 @@ def to_inches(value: float, units: str) -> float:
         `['in', 'cm', 'mm']`.
     """
     lookup: dict[str, Callable[[float], float]] = {
-        'in': lambda x: x,
-        'cm': lambda x: x/2.54,
-        'mm': lambda x: x/(2.54*10)
+        "in": lambda x: x,
+        "cm": lambda x: x / 2.54,
+        "mm": lambda x: x / (2.54 * 10),
     }
     try:
         return lookup[units](value)
@@ -1165,9 +1139,9 @@ def from_inches(value: float, units: str) -> float:
         `['in', 'cm', 'mm']`.
     """
     lookup: dict[str, Callable[[float], float]] = {
-        'in': lambda x: x,
-        'cm': lambda x: x*2.54,
-        'mm': lambda x: x*2.54*10
+        "in": lambda x: x,
+        "cm": lambda x: x * 2.54,
+        "mm": lambda x: x * 2.54 * 10,
     }
     try:
         return lookup[units](value)
@@ -1191,7 +1165,7 @@ class array_kind:
         out : bool
             Whether array `arr` is discrete
         """
-        return arr.dtype.kind in 'ObUS'
+        return arr.dtype.kind in "ObUS"
 
     @staticmethod
     def continuous(arr):
@@ -1208,15 +1182,15 @@ class array_kind:
         out : bool
             Whether array `arr` is continuous
         """
-        return arr.dtype.kind in 'ifuc'
+        return arr.dtype.kind in "ifuc"
 
     @staticmethod
     def datetime(arr):
-        return arr.dtype.kind == 'M'
+        return arr.dtype.kind == "M"
 
     @staticmethod
     def timedelta(arr):
-        return arr.dtype.kind == 'm'
+        return arr.dtype.kind == "m"
 
     @staticmethod
     def ordinal(arr):
@@ -1262,7 +1236,7 @@ def log(x, base=None):
     elif base is None or base == np.e:
         return np.log(x)
     else:
-        return np.log(x)/np.log(base)
+        return np.log(x) / np.log(base)
 
 
 class ignore_warnings:
@@ -1278,6 +1252,9 @@ class ignore_warnings:
         Warning categories to ignore e.g UserWarning,
         FutureWarning, RuntimeWarning, ...
     """
+
+    _cm: warnings.catch_warnings
+
     def __init__(self, *categories):
         self.categories = categories
         self._cm = warnings.catch_warnings()
@@ -1285,7 +1262,7 @@ class ignore_warnings:
     def __enter__(self):
         self._cm.__enter__()
         for c in self.categories:
-            warnings.filterwarnings('ignore', category=c)
+            warnings.filterwarnings("ignore", category=c)
 
     def __exit__(self, type, value, traceback):
-        return self._cm.__exit__()
+        return self._cm.__exit__(type, value, traceback)

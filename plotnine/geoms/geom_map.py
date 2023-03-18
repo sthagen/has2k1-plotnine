@@ -25,14 +25,11 @@ from .geom_polygon import geom_polygon
 if typing.TYPE_CHECKING:
     from typing import Any
 
-    import matplotlib as mpl
     import numpy.typing as npt
-    import shapely
+    from shapely.geometry.polygon import LinearRing, Polygon
 
-    import plotnine as p9
-
-    from ..mapping import aes
-    from ..typing import DataLike
+    from plotnine.iapi import panel_view
+    from plotnine.typing import Aes, Axes, Coord, DataLike, DrawingArea, Layer
 
 
 @document
@@ -54,30 +51,39 @@ class geom_map(geom):
     geopandas dataframe. The dataframe should have a ``geometry``
     column.
     """
-    DEFAULT_AES = {'alpha': 1, 'color': '#111111', 'fill': '#333333',
-                   'linetype': 'solid', 'shape': 'o', 'size': 0.5,
-                   'stroke': 0.5}
-    DEFAULT_PARAMS = {'stat': 'identity', 'position': 'identity',
-                      'na_rm': False}
-    REQUIRED_AES = {'geometry'}
+
+    DEFAULT_AES = {
+        "alpha": 1,
+        "color": "#111111",
+        "fill": "#333333",
+        "linetype": "solid",
+        "shape": "o",
+        "size": 0.5,
+        "stroke": 0.5,
+    }
+    DEFAULT_PARAMS = {
+        "stat": "identity",
+        "position": "identity",
+        "na_rm": False,
+    }
+    REQUIRED_AES = {"geometry"}
 
     def __init__(
         self,
-        mapping: aes | None = None,
+        mapping: Aes | None = None,
         data: DataLike | None = None,
-        **kwargs: Any
-    ) -> None:
+        **kwargs: Any,
+    ):
         if not HAS_GEOPANDAS:
             raise PlotnineError(
-                "geom_map requires geopandas. "
-                "Please install geopandas."
+                "geom_map requires geopandas. " "Please install geopandas."
             )
         geom.__init__(self, mapping, data, **kwargs)
         # Almost all geodataframes loaded from shapefiles
         # have a geometry column.
         assert self.mapping is not None
-        if 'geometry' not in self.mapping:
-            self.mapping['geometry'] = 'geometry'
+        if "geometry" not in self.mapping:
+            self.mapping["geometry"] = "geometry"
 
     def setup_data(self, data: pd.DataFrame) -> pd.DataFrame:
         if not len(data):
@@ -86,31 +92,32 @@ class geom_map(geom):
         # Remove any NULL geometries, and remember
         # All the non-Null shapes in a shapefile are required to be
         # of the same shape type.
-        bool_idx = np.array([g is not None for g in data['geometry']])
+        bool_idx = np.array([g is not None for g in data["geometry"]])
         if not np.all(bool_idx):
             data = data.loc[bool_idx]
 
         # Add polygon limits. Scale training uses them
         try:
-            bounds = data['geometry'].bounds
+            bounds = data["geometry"].bounds
         except AttributeError:
             # The geometry is not a GeoSeries
             # Bounds calculation is extracted from
             # geopandas.base.GeoPandasBase.bounds
             bounds = pd.DataFrame(
-                np.array([x.bounds for x in data['geometry']]),
-                columns=['xmin', 'ymin', 'xmax', 'ymax'],
-                index=data.index
+                np.array([x.bounds for x in data["geometry"]]),
+                columns=["xmin", "ymin", "xmax", "ymax"],
+                index=data.index,
             )
         else:
             bounds.rename(
                 columns={
-                    'minx': 'xmin',
-                    'maxx': 'xmax',
-                    'miny': 'ymin',
-                    'maxy': 'ymax'
+                    "minx": "xmin",
+                    "maxx": "xmax",
+                    "miny": "ymin",
+                    "maxy": "ymax",
                 },
-                inplace=True)
+                inplace=True,
+            )
 
         data = pd.concat([data, bounds], axis=1)
         return data
@@ -118,49 +125,43 @@ class geom_map(geom):
     def draw_panel(
         self,
         data: pd.DataFrame,
-        panel_params: p9.iapi.panel_view,
-        coord: p9.coords.coord.coord,
-        ax: mpl.axes.Axes,
-        **params: Any
-    ) -> None:
+        panel_params: panel_view,
+        coord: Coord,
+        ax: Axes,
+        **params: Any,
+    ):
         if not len(data):
             return
 
-        data.loc[data['color'].isnull(), 'color'] = 'none'
-        data.loc[data['fill'].isnull(), 'fill'] = 'none'
-        data['fill'] = to_rgba(data['fill'], data['alpha'])
+        data.loc[data["color"].isnull(), "color"] = "none"
+        data.loc[data["fill"].isnull(), "fill"] = "none"
+        data["fill"] = to_rgba(data["fill"], data["alpha"])
 
         geom_type = data.geometry.iloc[0].geom_type
-        if geom_type in ('Polygon', 'MultiPolygon'):
-            data['size'] *= SIZE_FACTOR
-            patches = [PolygonPatch(g) for g in data['geometry']]
+        if geom_type in ("Polygon", "MultiPolygon"):
+            data["size"] *= SIZE_FACTOR
+            patches = [PolygonPatch(g) for g in data["geometry"]]
             coll = PatchCollection(
                 patches,
-                edgecolor=data['color'],
-                facecolor=data['fill'],
-                linestyle=data['linetype'],
-                linewidth=data['size'],
-                zorder=params['zorder'],
-                rasterized=params['raster']
+                edgecolor=data["color"],
+                facecolor=data["fill"],
+                linestyle=data["linetype"],
+                linewidth=data["size"],
+                zorder=params["zorder"],
+                rasterized=params["raster"],
             )
             ax.add_collection(coll)
-        elif geom_type == 'Point':
+        elif geom_type == "Point":
             # Extract point coordinates from shapely geom
             # and plot with geom_point
-            arr = np.array([list(g.coords)[0] for g in data['geometry']])
-            data['x'] = arr[:, 0]
-            data['y'] = arr[:, 1]
-            for _, gdata in data.groupby('group'):
+            arr = np.array([list(g.coords)[0] for g in data["geometry"]])
+            data["x"] = arr[:, 0]
+            data["y"] = arr[:, 1]
+            for _, gdata in data.groupby("group"):
                 gdata.reset_index(inplace=True, drop=True)
                 gdata.is_copy = None
-                geom_point.draw_group(
-                    gdata,
-                    panel_params,
-                    coord,
-                    ax,
-                    **params
-                )
-        elif geom_type == 'MultiPoint':
+                geom_point.draw_group(gdata, panel_params, coord, ax, **params)
+        elif geom_type == "MultiPoint":
             # Where n is the length of the dataframe (no. of multipoints),
             #       m is the number of all points in all multipoints
             #
@@ -168,31 +169,30 @@ class geom_map(geom):
             # - Explode the list, to create a dataframe were each point
             #      is associated with the right aesthetics (n -> m)
             # - Create x & y columns from the points (m -> m)
-            data['points'] = [
-                [p.coords[0] for p in mp.geoms]
-                for mp in data['geometry']
+            data["points"] = [
+                [p.coords[0] for p in mp.geoms] for mp in data["geometry"]
             ]
-            data = data.explode('points', ignore_index=True)
-            data['x'] = [p[0] for p in data['points']]
-            data['y'] = [p[1] for p in data['points']]
+            data = data.explode("points", ignore_index=True)
+            data["x"] = [p[0] for p in data["points"]]
+            data["y"] = [p[1] for p in data["points"]]
             geom_point.draw_group(data, panel_params, coord, ax, **params)
-        elif geom_type in ('LineString', 'MultiLineString'):
-            data['size'] *= SIZE_FACTOR
-            data['color'] = to_rgba(data['color'], data['alpha'])
+        elif geom_type in ("LineString", "MultiLineString"):
+            data["size"] *= SIZE_FACTOR
+            data["color"] = to_rgba(data["color"], data["alpha"])
             segments = []
-            for g in data['geometry']:
-                if g.geom_type == 'LineString':
+            for g in data["geometry"]:
+                if g.geom_type == "LineString":
                     segments.append(g.coords)
                 else:
                     segments.extend(_g.coords for _g in g.geoms)
 
             coll = LineCollection(
                 segments,
-                edgecolor=data['color'],
-                linewidth=data['size'],
-                linestyle=data['linetype'],
-                zorder=params['zorder'],
-                rasterized=params['raster']
+                edgecolor=data["color"],
+                linewidth=data["size"],
+                linestyle=data["linetype"],
+                zorder=params["zorder"],
+                rasterized=params["raster"],
             )
             ax.add_collection(coll)
         else:
@@ -200,10 +200,8 @@ class geom_map(geom):
 
     @staticmethod
     def draw_legend(
-        data: pd.Series[Any],
-        da: mpl.patches.DrawingArea,
-        lyr: p9.layer.layer
-    ) -> mpl.patches.DrawingArea:
+        data: pd.Series[Any], da: DrawingArea, lyr: Layer
+    ) -> DrawingArea:
         """
         Draw a rectangle in the box
 
@@ -220,14 +218,14 @@ class geom_map(geom):
         -------
         out : DrawingArea
         """
-        data['size'] = data['stroke']
-        del data['stroke']
+        data["size"] = data["stroke"]
+        del data["stroke"]
         return geom_polygon.draw_legend(data, da, lyr)
 
 
 def PolygonPatch(
-    obj: shapely.geometry.Polygon,
-) -> mpl.patches.PathPatch:
+    obj: Polygon,
+) -> PathPatch:
     """
     Return a Matplotlib patch from a Polygon/MultiPolygon Geometry
 
@@ -247,9 +245,8 @@ def PolygonPatch(
     by Sean Gillies (BSD license, https://pypi.org/project/descartes)
     which is nolonger being maintained.
     """
-    def cw_coords(
-        ring: shapely.geometry.polygon.LinearRing
-    ) -> npt.NDArray[Any]:
+
+    def cw_coords(ring: LinearRing) -> npt.NDArray[Any]:
         """
         Return Clockwise array coordinates
 
@@ -267,9 +264,7 @@ def PolygonPatch(
             return np.asarray(ring.coords)[:, :2][::-1]
         return np.asarray(ring.coords)[:, :2]
 
-    def ccw_coords(
-        ring: shapely.geometry.polygon.LinearRing
-    ) -> npt.NDArray[Any]:
+    def ccw_coords(ring: LinearRing) -> npt.NDArray[Any]:
         """
         Return Counter Clockwise array coordinates
 
@@ -292,12 +287,9 @@ def PolygonPatch(
     # in an opposite direction. So we use Clockwise for
     # the exterior/shell and Counter-Clockwise for any
     # interiors/holes
-    if obj.geom_type == 'Polygon':
+    if obj.geom_type == "Polygon":
         _exterior = [Path(cw_coords(obj.exterior))]
-        _interior = [
-            Path(ccw_coords(ring))
-            for ring in obj.interiors
-        ]
+        _interior = [Path(ccw_coords(ring)) for ring in obj.interiors]
     else:
         # A MultiPolygon has one or more Polygon geoms.
         # Concatenate the exterior of all the Polygons
@@ -305,13 +297,8 @@ def PolygonPatch(
         _exterior = []
         _interior = []
         for p in obj.geoms:
-            _exterior.append(
-                Path(cw_coords(p.exterior))
-            )
-            _interior.extend([
-                Path(ccw_coords(ring))
-                for ring in p.interiors
-            ])
+            _exterior.append(Path(cw_coords(p.exterior)))
+            _interior.extend([Path(ccw_coords(ring)) for ring in p.interiors])
 
     path = Path.make_compound_path(*_exterior, *_interior)
     return PathPatch(path)

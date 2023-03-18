@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from contourpy import contour_generator
 from mizani.breaks import extended_breaks
 
 from ..doctools import document
@@ -56,61 +57,68 @@ class stat_density_2d(stat):
     is available only when no contours are computed. `piece` is
     largely irrelevant.
     """
-    REQUIRED_AES = {'x'}
-    DEFAULT_PARAMS = {'geom': 'density_2d', 'position': 'identity',
-                      'na_rm': False, 'contour': True,
-                      'package': 'statsmodels',
-                      'kde_params': None, 'n': 64, 'levels': 5}
-    CREATES = {'y'}
+    REQUIRED_AES = {"x"}
+    DEFAULT_PARAMS = {
+        "geom": "density_2d",
+        "position": "identity",
+        "na_rm": False,
+        "contour": True,
+        "package": "statsmodels",
+        "kde_params": None,
+        "n": 64,
+        "levels": 5,
+    }
+    CREATES = {"y"}
 
     def setup_params(self, data):
         params = self.params.copy()
-        if params['kde_params'] is None:
-            params['kde_params'] = dict()
+        if params["kde_params"] is None:
+            params["kde_params"] = {}
 
-        kde_params = params['kde_params']
-        if params['package'] == 'statsmodels':
-            params['package'] = 'statsmodels-m'
-            if 'var_type' not in kde_params:
-                kde_params['var_type'] = '{}{}'.format(
-                    get_var_type(data['x']),
-                    get_var_type(data['y'])
+        kde_params = params["kde_params"]
+        if params["package"] == "statsmodels":
+            params["package"] = "statsmodels-m"
+            if "var_type" not in kde_params:
+                kde_params["var_type"] = "{}{}".format(
+                    get_var_type(data["x"]), get_var_type(data["y"])
                 )
 
         return params
 
     @classmethod
     def compute_group(cls, data, scales, **params):
-        package = params['package']
-        kde_params = params['kde_params']
+        package = params["package"]
+        kde_params = params["kde_params"]
 
-        group = data['group'].iloc[0]
+        group = data["group"].iloc[0]
         range_x = scales.x.dimension()
         range_y = scales.y.dimension()
-        x = np.linspace(range_x[0], range_x[1], params['n'])
-        y = np.linspace(range_y[0], range_y[1], params['n'])
+        x = np.linspace(range_x[0], range_x[1], params["n"])
+        y = np.linspace(range_y[0], range_y[1], params["n"])
 
         # The grid must have a "similar" shape (n, p) to the var_data
         X, Y = np.meshgrid(x, y)
-        var_data = np.array([data['x'].values, data['y'].values]).T
+        var_data = np.array([data["x"].values, data["y"].values]).T
         grid = np.array([X.flatten(), Y.flatten()]).T
         density = kde(var_data, grid, package, **kde_params)
 
-        if params['contour']:
+        if params["contour"]:
             Z = density.reshape(len(x), len(y))
-            data = contour_lines(X, Y, Z, params['levels'])
+            data = contour_lines(X, Y, Z, params["levels"])
             # Each piece should have a distinct group
-            groups = str(group) + '-00' + data['piece'].astype(str)
-            data['group'] = groups
+            groups = str(group) + "-00" + data["piece"].astype(str)
+            data["group"] = groups
         else:
-            data = pd.DataFrame({
-                'x': X.flatten(),
-                'y': Y.flatten(),
-                'density': density.flatten(),
-                'group': group,
-                'level': 1,
-                'piece': 1,
-            })
+            data = pd.DataFrame(
+                {
+                    "x": X.flatten(),
+                    "y": Y.flatten(),
+                    "density": density.flatten(),
+                    "group": group,
+                    "level": 1,
+                    "piece": 1,
+                }
+            )
 
         return data
 
@@ -125,11 +133,8 @@ def contour_lines(X, Y, Z, levels):
     Y = np.asarray(Y, dtype=np.float64)
     Z = np.asarray(Z, dtype=np.float64)
     zmin, zmax = Z.min(), Z.max()
-    mask = None
-    corner_mask = False
-    nchunk = 0
-    contour_generator = get_contour_generator(
-        X, Y, Z, mask, corner_mask, nchunk
+    cgen = contour_generator(
+        X, Y, Z, name="mpl2014", corner_mask=False, chunk_size=0
     )
 
     if isinstance(levels, int):
@@ -148,7 +153,7 @@ def contour_lines(X, Y, Z, levels):
     level_values = []
     start_pid = 1
     for level in levels:
-        vertices, _ = contour_generator.create_contour(level)
+        vertices, _ = cgen.create_contour(level)
         for pid, piece in enumerate(vertices, start=start_pid):
             n = len(piece)
             segments.append(piece)
@@ -166,35 +171,12 @@ def contour_lines(X, Y, Z, levels):
         piece = []
         level = []
 
-    data = pd.DataFrame({
-        'x': x,
-        'y': y,
-        'level': level,
-        'piece': piece,
-    })
+    data = pd.DataFrame(
+        {
+            "x": x,
+            "y": y,
+            "level": level,
+            "piece": piece,
+        }
+    )
     return data
-
-
-def get_contour_generator(X, Y, Z, mask, corner_mask, nchunk):
-    """
-    Create contour generator
-    """
-    # TODO: When min supported MPL is 3.6.0, see explore the
-    # extra features implemented in contourpy
-    try:
-        # MPL 3.6.0
-        import contourpy
-        return contourpy.contour_generator(
-            X, Y, Z,
-            name='mpl2014',
-            corner_mask=False,
-            line_type=contourpy.LineType.SeparateCode,
-            fill_type=contourpy.FillType.OuterCode,
-            chunk_size=nchunk,
-        )
-    except ImportError:
-        # MPL < 3.6.0
-        import matplotlib._contour as _contour
-        return _contour.QuadContourGenerator(
-            X, Y, Z, mask, corner_mask, nchunk
-        )

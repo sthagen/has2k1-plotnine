@@ -1,12 +1,21 @@
+from __future__ import annotations
+
+import typing
+
 from ..doctools import document
 from ..utils import alias, identity
 from .scale import scale_continuous, scale_discrete
+
+if typing.TYPE_CHECKING:
+    from typing import Literal
 
 
 class MapTrainMixin:
     """
     Override map and train methods
     """
+
+    guide: Literal["legend"] | None = None
 
     def map(self, x):
         return x
@@ -17,7 +26,7 @@ class MapTrainMixin:
         if self.guide is None:
             return
 
-        return super().train(x)
+        return super().train(x)  # pyright: ignore
 
 
 @document
@@ -31,9 +40,9 @@ class scale_color_identity(MapTrainMixin, scale_discrete):
     guide : None | 'legend'
         Whether to include a legend. Default is None.
     """
-    _aesthetics = ['color']
+
+    _aesthetics = ["color"]
     palette = staticmethod(identity)
-    guide = None
 
 
 @document
@@ -45,7 +54,8 @@ class scale_fill_identity(scale_color_identity):
     ----------
     {superclass_parameters}
     """
-    _aesthetics = ['fill']
+
+    _aesthetics = ["fill"]
 
 
 @document
@@ -59,9 +69,9 @@ class scale_shape_identity(MapTrainMixin, scale_discrete):
     guide : None | 'legend'
         Whether to include a legend. Default is None.
     """
-    _aesthetics = ['shape']
+
+    _aesthetics = ["shape"]
     palette = staticmethod(identity)
-    guide = None
 
 
 @document
@@ -75,9 +85,9 @@ class scale_linetype_identity(MapTrainMixin, scale_discrete):
     guide : None | 'legend'
         Whether to include a legend. Default is None.
     """
-    _aesthetics = ['linetype']
+
+    _aesthetics = ["linetype"]
     palette = staticmethod(identity)
-    guide = None
 
 
 @document
@@ -91,9 +101,9 @@ class scale_alpha_identity(MapTrainMixin, scale_continuous):
     guide : None | 'legend'
         Whether to include a legend. Default is None.
     """
-    _aesthetics = ['alpha']
+
+    _aesthetics = ["alpha"]
     palette = staticmethod(identity)
-    guide = None
 
 
 @document
@@ -107,10 +117,10 @@ class scale_size_identity(MapTrainMixin, scale_continuous):
     guide : None | 'legend'
         Whether to include a legend. Default is None.
     """
-    _aesthetics = ['size']
+
+    _aesthetics = ["size"]
     palette = staticmethod(identity)
-    guide = None
 
 
 # American to British spelling
-alias('scale_colour_identity', scale_color_identity)
+alias("scale_colour_identity", scale_color_identity)

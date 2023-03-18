@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import typing
 from copy import deepcopy
+from itertools import chain, repeat
 
 import pandas as pd
 
@@ -15,6 +16,7 @@ from ..utils import (
     Registry,
     copy_keys,
     data_mapping_as_kwargs,
+    is_list_like,
     is_string,
     remove_missing,
 )
@@ -22,21 +24,28 @@ from ..utils import (
 if typing.TYPE_CHECKING:
     from typing import Any
 
-    import matplotlib as mpl
     from patsy.eval import EvalEnvironment
 
-    import plotnine as p9
-
-    from ..mapping.aes import aes
-    from ..typing import DataLike
+    from plotnine.iapi import panel_view
+    from plotnine.typing import (
+        Aes,
+        Axes,
+        Coord,
+        DataLike,
+        DrawingArea,
+        Ggplot,
+        Layer,
+        Layout,
+    )
 
 
 class geom(metaclass=Registry):
     """Base class of all Geoms"""
+
     __base__ = True
 
     #: Default aesthetics for the geom
-    DEFAULT_AES: dict[str, Any] = dict()
+    DEFAULT_AES: dict[str, Any] = {}
 
     #: Required aesthetics for the geom
     REQUIRED_AES: set[str] = set()
@@ -45,37 +54,37 @@ class geom(metaclass=Registry):
     NON_MISSING_AES: set[str] = set()
 
     #: Required parameters for the geom
-    DEFAULT_PARAMS: dict[str, Any] = dict()
+    DEFAULT_PARAMS: dict[str, Any] = {}
 
     #: geom/layer specific dataframe
     data: DataLike
 
     #: mappings i.e. :py:`aes(x='col1', fill='col2')`
-    mapping: aes | None = None
+    mapping: Aes
 
-    aes_params: dict[str, Any] = dict()  # setting of aesthetic
+    aes_params: dict[str, Any] = {}  # setting of aesthetic
     params: dict[str, Any]  # parameter settings
 
     # Plot namespace, it gets its value when the plot is being
     # built.
-    environment: EvalEnvironment | None = None
+    environment: EvalEnvironment
 
     # The geom responsible for the legend if draw_legend is
     # not implemented
-    legend_geom: str = 'point'
+    legend_geom: str = "point"
 
     # Documentation for the aesthetics. It is added under the
     # documentation for mapping parameter. Use {aesthetics}
     # placeholder to insert a table for all the aesthetics and
     # their default values.
-    _aesthetics_doc: str = '{aesthetics_table}'
+    _aesthetics_doc: str = "{aesthetics_table}"
 
     def __init__(
         self,
-        mapping: aes | None = None,
+        mapping: Aes | None = None,
         data: DataLike | None = None,
-        **kwargs: Any
-    ) -> None:
+        **kwargs: Any,
+    ):
         kwargs = rename_aesthetics(kwargs)
         kwargs = data_mapping_as_kwargs((data, mapping), kwargs)
         self._kwargs = kwargs  # Will be used to create stat & layer
@@ -83,11 +92,11 @@ class geom(metaclass=Registry):
         # separate aesthetics and parameters
         self.aes_params = copy_keys(kwargs, {}, self.aesthetics())
         self.params = copy_keys(kwargs, deepcopy(self.DEFAULT_PARAMS))
-        self.mapping = kwargs['mapping']
-        self.data = kwargs['data']
+        self.mapping = kwargs["mapping"]
+        self.data = kwargs["data"]
         self._stat = stat.from_geom(self)
         self._position = position.from_geom(self)
-        self._verify_arguments(kwargs)     # geom, stat, layer
+        self._verify_arguments(kwargs)  # geom, stat, layer
 
     @staticmethod
     def from_stat(stat: stat) -> geom:
@@ -111,7 +120,7 @@ class geom(metaclass=Registry):
         PlotnineError
             If unable to create a `geom`.
         """
-        name = stat.params['geom']
+        name = stat.params["geom"]
 
         if isinstance(name, geom):
             return name
@@ -119,12 +128,11 @@ class geom(metaclass=Registry):
         if isinstance(name, type) and issubclass(name, geom):
             klass = name
         elif is_string(name):
-            if not name.startswith('geom_'):
-                name = f'geom_{name}'
+            if not name.startswith("geom_"):
+                name = f"geom_{name}"
             klass = Registry[name]
         else:
-            raise PlotnineError(
-                f'Unknown geom of type {type(name)}')
+            raise PlotnineError(f"Unknown geom of type {type(name)}")
 
         return klass(stat=stat, **stat._kwargs)
 
@@ -136,12 +144,12 @@ class geom(metaclass=Registry):
         geoms should not override this method.
         """
         main = cls.DEFAULT_AES.keys() | cls.REQUIRED_AES
-        other = {'group'}
+        other = {"group"}
         # Need to recognize both spellings
-        if 'color' in main:
-            other.add('colour')
-        if 'outlier_color' in main:
-            other.add('outlier_colour')
+        if "color" in main:
+            other.add("colour")
+        if "outlier_color" in main:
+            other.add("outlier_colour")
         return main | other
 
     def __deepcopy__(self, memo: dict[Any, Any]) -> geom:
@@ -157,7 +165,7 @@ class geom(metaclass=Registry):
         new = result.__dict__
 
         # don't make a deepcopy of data, or environment
-        shallow = {'data', '_kwargs', 'environment'}
+        shallow = {"data", "_kwargs", "environment"}
         for key, item in old.items():
             if key in shallow:
                 new[key] = old[key]
@@ -201,9 +209,7 @@ class geom(metaclass=Registry):
         return data
 
     def use_defaults(
-        self,
-        data: pd.DataFrame,
-        aes_modifiers: dict[str, Any]
+        self, data: pd.DataFrame, aes_modifiers: dict[str, Any]
     ) -> pd.DataFrame:
         """
         Combine data with defaults and set aesthetics from parameters
@@ -223,9 +229,9 @@ class geom(metaclass=Registry):
             Data used for drawing the geom.
         """
         missing_aes = (
-            self.DEFAULT_AES.keys() -
-            self.aes_params.keys() -
-            set(data.columns.to_list())
+            self.DEFAULT_AES.keys()
+            - self.aes_params.keys()
+            - set(data.columns.to_list())
         )
 
         # Not in data and not set, use default
@@ -234,10 +240,15 @@ class geom(metaclass=Registry):
 
         # Evaluate/Modify the mapped aesthetics
         evaled = evaluate(aes_modifiers, data, self.environment)
-        for ae in (evaled.columns.intersection(data.columns)):
+        for ae in evaled.columns.intersection(data.columns):
             data[ae] = evaled[ae]
 
-        # If set, use it
+        if "PANEL" in data:
+            num_panels = len(data["PANEL"].unique())
+        else:
+            num_panels = 1
+
+        # Aesthetics set as parameters to the geom/stat
         for ae, value in self.aes_params.items():
             try:
                 data[ae] = value
@@ -245,21 +256,18 @@ class geom(metaclass=Registry):
                 # sniff out the special cases, like custom
                 # tupled linetypes, shapes and colors
                 if is_valid_aesthetic(value, ae):
-                    data[ae] = [value]*len(data)
+                    data[ae] = [value] * len(data)
+                elif num_panels > 1 and is_list_like(value):
+                    data[ae] = list(chain(*repeat(value, num_panels)))
                 else:
-                    msg = ("'{}' does not look like a "
-                           "valid value for `{}`")
+                    msg = "'{}' does not look like a " "valid value for `{}`"
                     raise PlotnineError(msg.format(value, ae))
 
         return data
 
     def draw_layer(
-        self,
-        data: pd.DataFrame,
-        layout: p9.facets.layout.Layout,
-        coord: p9.coords.coord.coord,
-        **params: Any
-    ) -> None:
+        self, data: pd.DataFrame, layout: Layout, coord: Coord, **params: Any
+    ):
         """
         Draw layer across all panels
 
@@ -279,10 +287,10 @@ class geom(metaclass=Registry):
             includes the stacking order of the layer in
             the plot (*zorder*)
         """
-        for pid, pdata in data.groupby('PANEL'):
+        for pid, pdata in data.groupby("PANEL"):
             if len(pdata) == 0:
                 continue
-            ploc = pdata['PANEL'].iat[0] - 1
+            ploc = pdata["PANEL"].iat[0] - 1
             panel_params = layout.panel_params[ploc]
             ax = layout.axs[ploc]
             self.draw_panel(pdata, panel_params, coord, ax, **params)
@@ -290,11 +298,11 @@ class geom(metaclass=Registry):
     def draw_panel(
         self,
         data: pd.DataFrame,
-        panel_params: p9.iapi.panel_view,
-        coord: p9.coords.coord.coord,
-        ax: mpl.axes.Axes,
-        **params: Any
-    ) -> None:
+        panel_params: panel_view,
+        coord: Coord,
+        ax: Axes,
+        **params: Any,
+    ):
         """
         Plot all groups
 
@@ -325,18 +333,18 @@ class geom(metaclass=Registry):
             Combined parameters for the geom and stat. Also
             includes the 'zorder'.
         """
-        for _, gdata in data.groupby('group'):
+        for _, gdata in data.groupby("group"):
             gdata.reset_index(inplace=True, drop=True)
             self.draw_group(gdata, panel_params, coord, ax, **params)
 
     @staticmethod
     def draw_group(
         data: pd.DataFrame,
-        panel_params: p9.iapi.panel_view,
-        coord: p9.coords.coord.coord,
-        ax: mpl.axes.Axes,
-        **params: Any
-    ) -> None:
+        panel_params: panel_view,
+        coord: Coord,
+        ax: Axes,
+        **params: Any,
+    ):
         """
         Plot data belonging to a group.
 
@@ -369,11 +377,11 @@ class geom(metaclass=Registry):
     @staticmethod
     def draw_unit(
         data: pd.DataFrame,
-        panel_params: p9.iapi.panel_view,
-        coord: p9.coords.coord.coord,
-        ax: mpl.axes.Axes,
-        **params: Any
-    ) -> None:
+        panel_params: panel_view,
+        coord: Coord,
+        ax: Axes,
+        **params: Any,
+    ):
         """
         Plot data belonging to a unit.
 
@@ -419,7 +427,7 @@ class geom(metaclass=Registry):
         msg = "The geom should implement this method."
         raise NotImplementedError(msg)
 
-    def __radd__(self, gg: p9.ggplot) -> p9.ggplot:
+    def __radd__(self, gg: Ggplot) -> Ggplot:
         """
         Add layer representing geom object on the right
 
@@ -436,7 +444,7 @@ class geom(metaclass=Registry):
         gg += self.to_layer()  # Add layer
         return gg
 
-    def to_layer(self) -> p9.layer.layer:
+    def to_layer(self) -> Layer:
         """
         Make a layer that represents this geom
 
@@ -447,21 +455,30 @@ class geom(metaclass=Registry):
         """
         return layer.from_geom(self)
 
-    def _verify_arguments(self, kwargs: dict[str, Any]) -> None:
+    def _verify_arguments(self, kwargs: dict[str, Any]):
         """
         Verify arguments passed to the geom
         """
         geom_stat_args = kwargs.keys() | self._stat._kwargs.keys()
-        unknown = (geom_stat_args -
-                   self.aesthetics() -                 # geom aesthetics
-                   self.DEFAULT_PARAMS.keys() -        # geom parameters
-                   self._stat.aesthetics() -           # stat aesthetics
-                   self._stat.DEFAULT_PARAMS.keys() -  # stat parameters
-                   {'data', 'mapping', 'show_legend',  # layer parameters
-                    'inherit_aes', 'raster'})       # layer parameters
+        unknown = (
+            geom_stat_args
+            - self.aesthetics()
+            - self.DEFAULT_PARAMS.keys()  # geom aesthetics
+            - self._stat.aesthetics()  # geom parameters
+            - self._stat.DEFAULT_PARAMS.keys()  # stat aesthetics
+            - {  # stat parameters
+                "data",
+                "mapping",
+                "show_legend",  # layer parameters
+                "inherit_aes",
+                "raster",
+            }
+        )  # layer parameters
         if unknown:
-            msg = ("Parameters {}, are not understood by "
-                   "either the geom, stat or layer.")
+            msg = (
+                "Parameters {}, are not understood by "
+                "either the geom, stat or layer."
+            )
             raise PlotnineError(msg.format(unknown))
 
     def handle_na(self, data: pd.DataFrame) -> pd.DataFrame:
@@ -490,17 +507,15 @@ class geom(metaclass=Registry):
         """
         return remove_missing(
             data,
-            self.params['na_rm'],
+            self.params["na_rm"],
             list(self.REQUIRED_AES | self.NON_MISSING_AES),
-            self.__class__.__name__
+            self.__class__.__name__,
         )
 
     @staticmethod
     def draw_legend(
-        data: pd.Series[Any],
-        da: mpl.padches.DrawingArea,
-        lyr: p9.layer.layer
-    ) -> mpl.patches.DrawingArea:
+        data: pd.Series[Any], da: DrawingArea, lyr: Layer
+    ) -> DrawingArea:
         """
         Draw a rectangle in the box
 

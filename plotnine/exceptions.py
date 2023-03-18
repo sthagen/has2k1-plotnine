@@ -17,7 +17,7 @@ def warning_format(
     """
     Format for plotnine warnings
     """
-    fmt = '{}:{}: {}: {}\n'.format
+    fmt = "{}:{}: {}: {}\n".format
     return fmt(filename, lineno, category.__name__, message)
 
 
@@ -29,8 +29,8 @@ class PlotnineError(Exception):
     Exception for ggplot errors
     """
 
-    def __init__(self, *args: str) -> None:
-        args = [dedent(arg) for arg in args]
+    def __init__(self, *args: str):
+        args = tuple(dedent(arg) for arg in args)
         self.message = " ".join(args)
 
     def __str__(self) -> str:
@@ -44,4 +44,5 @@ class PlotnineWarning(UserWarning):
     """
     Warnings for ggplot inconsistencies
     """
+
     pass

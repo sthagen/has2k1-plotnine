@@ -10,28 +10,30 @@ from .geom_text import geom_text
 if typing.TYPE_CHECKING:
     from typing import Any
 
-    import matplotlib as mpl
     import pandas as pd
 
-    import plotnine as p9
+    from plotnine.typing import DrawingArea, Layer
+
 
 _aes = geom_text.DEFAULT_AES.copy()
-_aes['fill'] = 'white'
-
+_aes["fill"] = "white"
 
 _params = geom_text.DEFAULT_PARAMS.copy()
-_params.update({
-    # boxstyle is one of
-    #   cirle, larrow, rarrow, round, round4,
-    #   roundtooth, sawtooth, square
-    #
-    # Documentation at matplotlib.patches.BoxStyle
-    'boxstyle': 'round',
-    'boxcolor': None,
-    'label_padding': 0.25,
-    'label_r': 0.25,
-    'label_size': 0.7,
-    'tooth_size': None})
+_params.update(
+    {
+        # boxstyle is one of
+        #   cirle, larrow, rarrow, round, round4,
+        #   roundtooth, sawtooth, square
+        #
+        # Documentation at matplotlib.patches.BoxStyle
+        "boxstyle": "round",
+        "boxcolor": None,
+        "label_padding": 0.25,
+        "label_r": 0.25,
+        "label_size": 0.7,
+        "tooth_size": None,
+    }
+)
 
 
 @document
@@ -76,15 +78,14 @@ class geom_label(geom_text):
         parameters. :class:`matplotlib.patches.BoxStyle` for the
         parameters that affect the boxstyle.
     """
+
     DEFAULT_AES = _aes
     DEFAULT_PARAMS = _params
 
     @staticmethod
     def draw_legend(
-        data: pd.Series[Any],
-        da: mpl.patches.DrawingArea,
-        lyr: p9.layer.layer
-    ) -> mpl.patches.DrawingArea:
+        data: pd.Series[Any], da: DrawingArea, lyr: Layer
+    ) -> DrawingArea:
         """
         Draw letter 'a' in the box
 
@@ -101,13 +102,15 @@ class geom_label(geom_text):
         -------
         out : DrawingArea
         """
-        if data['fill']:
-            rect = Rectangle((0, 0),
-                             width=da.width,
-                             height=da.height,
-                             linewidth=0,
-                             alpha=data['alpha'],
-                             facecolor=data['fill'],
-                             capstyle='projecting')
+        if data["fill"]:
+            rect = Rectangle(
+                (0, 0),
+                width=da.width,
+                height=da.height,
+                linewidth=0,
+                alpha=data["alpha"],
+                facecolor=data["fill"],
+                capstyle="projecting",
+            )
             da.add_artist(rect)
         return geom_text.draw_legend(data, da, lyr)

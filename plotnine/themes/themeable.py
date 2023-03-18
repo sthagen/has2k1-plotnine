@@ -8,12 +8,23 @@ The scope of text covers all text in the plot, axis.title applies
 only to the axis.title. In matplotlib terms this means that a theme
 that covers text also has to cover axis.title.
 """
+from __future__ import annotations
+
+import typing
 from contextlib import suppress
 from copy import deepcopy
+from typing import Dict
 
 from ..exceptions import PlotnineError
 from ..utils import RegistryHierarchyMeta, to_rgba
-from .elements import element_blank, element_line, element_rect, element_text
+from .elements import element_base, element_blank
+
+if typing.TYPE_CHECKING:
+    from typing import Any, Mapping, Type
+
+    from matplotlib.patches import Patch
+
+    from plotnine.typing import Axes, Figure, Theme
 
 
 class themeable(metaclass=RegistryHierarchyMeta):
@@ -73,26 +84,28 @@ class themeable(metaclass=RegistryHierarchyMeta):
     A user should never create instances of class :class:`themeable` or
     subclasses of it.
     """
-    order = 0
 
-    def __init__(self, theme_element=None):
+    order = 0
+    properties: dict[str, Any]
+
+    def __init__(self, theme_element: Any = None):
         self.theme_element = theme_element
-        element_types = (element_text, element_line,
-                         element_rect, element_blank)
-        if isinstance(theme_element, element_types):
+        if isinstance(theme_element, element_base):
             self.properties = theme_element.properties
         else:
             # The specific themeable takes this value and
             # does stuff with rcParams or sets something
             # on some object attached to the axes/figure
-            self.properties = {'value': theme_element}
+            self.properties = {"value": theme_element}
 
         if isinstance(theme_element, element_blank):
-            self.apply = self.blank
+            # TODO: Check if pyright complains about reassigning
+            # functions too!
+            self.apply_ax = self.blank_ax
             self.apply_figure = self.blank_figure
 
     @staticmethod
-    def from_class_name(name, theme_element):
+    def from_class_name(name: str, theme_element: Any) -> themeable:
         """
         Create an themeable by name
 
@@ -101,16 +114,20 @@ class themeable(metaclass=RegistryHierarchyMeta):
         name : str
             Class name
         theme_element : element object
-            One of :class:`element_line`, :class:`element_rect`,
-            :class:`element_text` or :class:`element_blank`
+            A of the type required by the theme
+            For lines, text and rects it should be one of:
+            :class:`element_line`,
+            :class:`element_rect`,
+            :class:`element_text` or
+            :class:`element_blank`
 
         Returns
         -------
         out : Themeable
         """
-        msg = f"No such themeable element {name}"
+        msg = f"There no themeable element called: {name}"
         try:
-            klass = themeable._registry[name]
+            klass: Type[themeable] = themeable._registry[name]
         except KeyError:
             raise PlotnineError(msg)
 
@@ -120,16 +137,16 @@ class themeable(metaclass=RegistryHierarchyMeta):
         return klass(theme_element)
 
     @classmethod
-    def registry(cls):
+    def registry(cls) -> Mapping[str, Any]:
         return themeable._registry
 
-    def is_blank(self):
+    def is_blank(self) -> bool:
         """
         Return True if theme_element is made of element_blank
         """
         return isinstance(self.theme_element, element_blank)
 
-    def merge(self, other):
+    def merge(self, other: themeable):
         """
         Merge properties of other into self
 
@@ -139,17 +156,18 @@ class themeable(metaclass=RegistryHierarchyMeta):
             If any of the properties are blank
         """
         if self.is_blank() or other.is_blank():
-            raise ValueError('Cannot merge if there is a blank.')
+            raise ValueError("Cannot merge if there is a blank.")
         else:
             self.properties.update(other.properties)
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         "Mostly for unittesting."
-        return ((self.__class__ == other.__class__) and
-                (self.properties == other.properties))
+        c1 = type(self) is type(other)
+        c2: bool = self.properties == other.properties
+        return c1 and c2
 
     @property
-    def rcParams(self):
+    def rcParams(self) -> dict[str, Any]:
         """
         Return themeables rcparams to an rcparam dict before plotting.
 
@@ -169,24 +187,34 @@ class themeable(metaclass=RegistryHierarchyMeta):
         """
         return {}
 
-    def apply(self, ax):
+    def apply(self, theme: Theme):
+        """
+        Called by the theme to apply the themeable
+
+        Subclasses shouldn't have to override this method to customize.
+        """
+        self.apply_figure(theme.figure, theme._targets)
+        for ax in theme.axs:
+            self.apply_ax(ax)
+
+    def apply_ax(self, ax: Axes):
         """
         Called after a chart has been plotted.
 
-        Subclasses should override this method to customize the plot
+        Subclasses can override this method to customize the plot
         according to the theme.
 
         Parameters
         ----------
         ax : matplotlib.axes.Axes
 
-        This method should be implemented as super(...).apply()
+        This method should be implemented as super(...).apply_ax()
         followed by extracting the portion of the axes specific to this
         themeable then applying the properties.
         """
         pass
 
-    def apply_figure(self, figure):
+    def apply_figure(self, figure: Figure, targets: dict[str, Any]):
         """
         Apply theme to the figure
 
@@ -196,7 +224,7 @@ class themeable(metaclass=RegistryHierarchyMeta):
         """
         pass
 
-    def setup_figure(self, figure):
+    def setup_figure(self, figure: Figure):
         """
         Apply theme to the figure
 
@@ -207,27 +235,27 @@ class themeable(metaclass=RegistryHierarchyMeta):
         """
         pass
 
-    def blank(self, ax):
+    def blank_ax(self, ax: Axes):
         """
         Blank out theme elements
         """
         pass
 
-    def blank_figure(self, figure):
+    def blank_figure(self, figure: Figure, targets: dict[str, Any]):
         """
         Blank out elements on the figure
         """
         pass
 
 
-class Themeables(dict):
+class Themeables(Dict[str, themeable]):
     """
     Collection of themeables
 
     The key is the name of the class.
     """
 
-    def update(self, other):
+    def update(self, other: Themeables):
         """
         Update themeables with those from `other`
 
@@ -260,7 +288,7 @@ class Themeables(dict):
                 # could not merge blank element.
                 self[new_key] = new
 
-    def values(self):
+    def values(self) -> list[themeable]:
         """
         Return a list of themeables sorted in reverse based
         on the their depth in the inheritance hierarchy.
@@ -269,12 +297,13 @@ class Themeables(dict):
         so that they do not conflict i.e :class:`axis_line`
         applied before :class:`axis_line_x`.
         """
-        def key(th):
+
+        def key(th: themeable) -> int:
             return len(th.__class__.__mro__)
 
         return sorted(dict.values(self), key=key, reverse=True)
 
-    def property(self, name, key='value'):
+    def property(self, name: str, key: str = "value") -> Any:
         """
         Get the value a specific themeable(s) property
 
@@ -301,7 +330,7 @@ class Themeables(dict):
             If key is in not in any of themeables
         """
         hlist = themeable._hierarchy[name]
-        scalar = key == 'value'
+        scalar = key == "value"
         for th in hlist:
             with suppress(KeyError):
                 value = self[th].properties[key]
@@ -311,7 +340,7 @@ class Themeables(dict):
         msg = "'{}' is not in the properties of {} "
         raise KeyError(msg.format(key, hlist))
 
-    def is_blank(self, name):
+    def is_blank(self, name: str) -> bool:
         """
         Return True if the themeable *name* is blank
 
@@ -333,17 +362,18 @@ class Themeables(dict):
         return False
 
 
-def _blankout_rect(rect):
+def _blankout_rect(rect: Patch):
     """
     Make rect invisible
     """
     # set_visible(False) does not clear the attributes
-    rect.set_edgecolor('None')
-    rect.set_facecolor('None')
+    rect.set_edgecolor("None")
+    rect.set_facecolor("None")
     rect.set_linewidth(0)
 
 
 # element_text themeables
+
 
 class axis_title_x(themeable):
     """
@@ -353,22 +383,23 @@ class axis_title_x(themeable):
     ----------
     theme_element : element_text
     """
-    def apply_figure(self, figure):
-        super().apply_figure(figure)
+
+    def apply_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().apply_figure(figure, targets)
         properties = self.properties.copy()
         with suppress(KeyError):
-            del properties['margin']
+            del properties["margin"]
         with suppress(KeyError):
-            text = figure._themeable['axis_title_x']
+            text = targets["axis_title_x"]
             text.set(**properties)
 
-    def blank_figure(self, figure):
-        super().blank_figure(figure)
+    def blank_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().blank_figure(figure, targets)
         properties = self.properties.copy()
         with suppress(KeyError):
-            del properties['margin']
+            del properties["margin"]
         with suppress(KeyError):
-            text = figure._themeable['axis_title_x']
+            text = targets["axis_title_x"]
             text.set_visible(False)
 
 
@@ -380,19 +411,20 @@ class axis_title_y(themeable):
     ----------
     theme_element : element_text
     """
-    def apply_figure(self, figure):
-        super().apply_figure(figure)
+
+    def apply_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().apply_figure(figure, targets)
         properties = self.properties.copy()
         with suppress(KeyError):
-            del properties['margin']
+            del properties["margin"]
         with suppress(KeyError):
-            text = figure._themeable['axis_title_y']
+            text = targets["axis_title_y"]
             text.set(**properties)
 
-    def blank_figure(self, figure):
-        super().blank_figure(figure)
+    def blank_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().blank_figure(figure, targets)
         with suppress(KeyError):
-            text = figure._themeable['axis_title_y']
+            text = targets["axis_title_y"]
             text.set_visible(False)
 
 
@@ -404,6 +436,7 @@ class axis_title(axis_title_x, axis_title_y):
     ----------
     theme_element : element_text
     """
+
     pass
 
 
@@ -415,20 +448,21 @@ class legend_title(themeable):
     ----------
     theme_element : element_text
     """
-    def apply_figure(self, figure):
-        super().apply_figure(figure)
+
+    def apply_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().apply_figure(figure, targets)
         properties = self.properties.copy()
         with suppress(KeyError):
-            del properties['margin']
+            del properties["margin"]
         with suppress(KeyError):
-            textareas = figure._themeable['legend_title']
+            textareas = targets["legend_title"]
             for ta in textareas:
                 ta._text.set(**properties)
 
-    def blank_figure(self, figure):
-        super().blank_figure(figure)
+    def blank_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().blank_figure(figure, targets)
         with suppress(KeyError):
-            textareas = figure._themeable['legend_title']
+            textareas = targets["legend_title"]
             for ta in textareas:
                 ta.set_visible(False)
 
@@ -449,22 +483,23 @@ class legend_text_legend(themeable):
     using parameters **va** or **ha**), you should use
     :class:`legend_text`.
     """
-    def apply_figure(self, figure):
-        super().apply_figure(figure)
+
+    def apply_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().apply_figure(figure, targets)
         properties = self.properties.copy()
         with suppress(KeyError):
-            del properties['margin']
+            del properties["margin"]
         with suppress(KeyError):
-            texts = figure._themeable['legend_text_legend']
+            texts = targets["legend_text_legend"]
             for text in texts:
-                if not hasattr(text, '_x'):  # textarea
+                if not hasattr(text, "_x"):  # textarea
                     text = text._text
                 text.set(**properties)
 
-    def blank_figure(self, figure):
-        super().blank_figure(figure)
+    def blank_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().blank_figure(figure, targets)
         with suppress(KeyError):
-            texts = figure._themeable['legend_text_legend']
+            texts = targets["legend_text_legend"]
             for text in texts:
                 text.set_visible(False)
 
@@ -485,22 +520,23 @@ class legend_text_colorbar(themeable):
     (i.e when using parameters **va** or **ha**), you should
     use :class:`legend_text`.
     """
-    def apply_figure(self, figure):
-        super().apply_figure(figure)
+
+    def apply_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().apply_figure(figure, targets)
         properties = self.properties.copy()
         with suppress(KeyError):
-            del properties['margin']
+            del properties["margin"]
         with suppress(KeyError):
-            texts = figure._themeable['legend_text_colorbar']
+            texts = targets["legend_text_colorbar"]
             for text in texts:
-                if not hasattr(text, '_x'):  # textarea
+                if not hasattr(text, "_x"):  # textarea
                     text = text._text
                 text.set(**properties)
 
-    def blank_figure(self, figure):
-        super().blank_figure(figure)
+    def blank_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().blank_figure(figure, targets)
         with suppress(KeyError):
-            texts = figure._themeable['legend_text_colorbar']
+            texts = targets["legend_text_colorbar"]
             for text in texts:
                 text.set_visible(False)
 
@@ -526,19 +562,20 @@ class plot_title(themeable):
     ----------
     theme_element : element_text
     """
-    def apply_figure(self, figure):
-        super().apply_figure(figure)
+
+    def apply_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().apply_figure(figure, targets)
         properties = self.properties.copy()
         with suppress(KeyError):
-            del properties['margin']
+            del properties["margin"]
         with suppress(KeyError):
-            text = figure._themeable['plot_title']
+            text = targets["plot_title"]
             text.set(**properties)
 
-    def blank_figure(self, figure):
-        super().blank_figure(figure)
+    def blank_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().blank_figure(figure, targets)
         with suppress(KeyError):
-            text = figure._themeable['plot_title']
+            text = targets["plot_title"]
             text.set_visible(False)
 
 
@@ -550,19 +587,20 @@ class plot_caption(themeable):
     ----------
     theme_element : element_text
     """
-    def apply_figure(self, figure):
-        super().apply_figure(figure)
+
+    def apply_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().apply_figure(figure, targets)
         properties = self.properties.copy()
         with suppress(KeyError):
-            del properties['margin']
+            del properties["margin"]
         with suppress(KeyError):
-            text = figure._themeable['plot_caption']
+            text = targets["plot_caption"]
             text.set(**properties)
 
-    def blank_figure(self, figure):
-        super().blank_figure(figure)
+    def blank_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().blank_figure(figure, targets)
         with suppress(KeyError):
-            text = figure._themeable['plot_caption']
+            text = targets["plot_caption"]
             text.set_visible(False)
 
 
@@ -574,30 +612,31 @@ class strip_text_x(themeable):
     ----------
     theme_element : element_text
     """
-    def apply_figure(self, figure):
-        super().apply_figure(figure)
+
+    def apply_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().apply_figure(figure, targets)
         properties = self.properties.copy()
         with suppress(KeyError):
-            del properties['margin']
+            del properties["margin"]
         with suppress(KeyError):
-            texts = figure._themeable['strip_text_x']
+            texts = targets["strip_text_x"]
             for text in texts:
                 text.set(**properties)
 
         with suppress(KeyError):
-            rects = figure._themeable['strip_background_x']
+            rects = targets["strip_background_x"]
             for rect in rects:
                 rect.set_visible(True)
 
-    def blank_figure(self, figure):
-        super().blank_figure(figure)
+    def blank_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().blank_figure(figure, targets)
         with suppress(KeyError):
-            texts = figure._themeable['strip_text_x']
+            texts = targets["strip_text_x"]
             for text in texts:
                 text.set_visible(False)
 
         with suppress(KeyError):
-            rects = figure._themeable['strip_background_x']
+            rects = targets["strip_background_x"]
             for rect in rects:
                 rect.set_visible(False)
 
@@ -610,30 +649,31 @@ class strip_text_y(themeable):
     ----------
     theme_element : element_text
     """
-    def apply_figure(self, figure):
-        super().apply_figure(figure)
+
+    def apply_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().apply_figure(figure, targets)
         properties = self.properties.copy()
         with suppress(KeyError):
-            del properties['margin']
+            del properties["margin"]
         with suppress(KeyError):
-            texts = figure._themeable['strip_text_y']
+            texts = targets["strip_text_y"]
             for text in texts:
                 text.set(**properties)
 
         with suppress(KeyError):
-            rects = figure._themeable['strip_background_y']
+            rects = targets["strip_background_y"]
             for rect in rects:
                 rect.set_visible(True)
 
-    def blank_figure(self, figure):
-        super().blank_figure(figure)
+    def blank_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().blank_figure(figure, targets)
         with suppress(KeyError):
-            texts = figure._themeable['strip_text_y']
+            texts = targets["strip_text_y"]
             for text in texts:
                 text.set_visible(False)
 
         with suppress(KeyError):
-            rects = figure._themeable['strip_background_y']
+            rects = targets["strip_background_y"]
             for rect in rects:
                 rect.set_visible(False)
 
@@ -646,6 +686,7 @@ class strip_text(strip_text_x, strip_text_y):
     ----------
     theme_element : element_text
     """
+
     pass
 
 
@@ -657,6 +698,7 @@ class title(axis_title, legend_title, plot_title):
     ----------
     theme_element : element_text
     """
+
     pass
 
 
@@ -668,21 +710,20 @@ class axis_text_x(themeable):
     ----------
     theme_element : element_text
     """
-    def apply(self, ax):
-        super().apply(ax)
+
+    def apply_ax(self, ax: Axes):
+        super().apply_ax(ax)
         properties = self.properties.copy()
         with suppress(KeyError):
-            del properties['margin']
-        labels = ax.get_xticklabels()
+            del properties["margin"]
+        labels = ax.get_xticklabels()  # pyright: ignore
         for l in labels:
             l.set(**properties)
 
-    def blank(self, ax):
-        super().blank(ax)
+    def blank_ax(self, ax: Axes):
+        super().blank_ax(ax)
         ax.xaxis.set_tick_params(
-            which='both',
-            labelbottom=False,
-            labeltop=False
+            which="both", labelbottom=False, labeltop=False
         )
 
 
@@ -694,21 +735,20 @@ class axis_text_y(themeable):
     ----------
     theme_element : element_text
     """
-    def apply(self, ax):
-        super().apply(ax)
+
+    def apply_ax(self, ax: Axes):
+        super().apply_ax(ax)
         properties = self.properties.copy()
         with suppress(KeyError):
-            del properties['margin']
-        labels = ax.get_yticklabels()
+            del properties["margin"]
+        labels = ax.get_yticklabels()  # pyright: ignore
         for l in labels:
             l.set(**properties)
 
-    def blank(self, ax):
-        super().blank(ax)
+    def blank_ax(self, ax: Axes):
+        super().blank_ax(ax)
         ax.yaxis.set_tick_params(
-            which='both',
-            labelleft=False,
-            labelright=False
+            which="both", labelleft=False, labelright=False
         )
 
 
@@ -720,6 +760,7 @@ class axis_text(axis_text_x, axis_text_y):
     ----------
     theme_element : element_text
     """
+
     pass
 
 
@@ -733,33 +774,34 @@ class text(axis_text, legend_text, strip_text, title):
     """
 
     @property
-    def rcParams(self):
+    def rcParams(self) -> dict[str, Any]:
         rcParams = super().rcParams
 
-        family = self.properties.get('family')
-        style = self.properties.get('style')
-        weight = self.properties.get('weight')
-        size = self.properties.get('size')
-        color = self.properties.get('color')
+        family = self.properties.get("family")
+        style = self.properties.get("style")
+        weight = self.properties.get("weight")
+        size = self.properties.get("size")
+        color = self.properties.get("color")
 
         if family:
-            rcParams['font.family'] = family
+            rcParams["font.family"] = family
         if style:
-            rcParams['font.style'] = style
+            rcParams["font.style"] = style
         if weight:
-            rcParams['font.weight'] = weight
+            rcParams["font.weight"] = weight
         if size:
-            rcParams['font.size'] = size
-            rcParams['xtick.labelsize'] = size
-            rcParams['ytick.labelsize'] = size
-            rcParams['legend.fontsize'] = size
+            rcParams["font.size"] = size
+            rcParams["xtick.labelsize"] = size
+            rcParams["ytick.labelsize"] = size
+            rcParams["legend.fontsize"] = size
         if color:
-            rcParams['text.color'] = color
+            rcParams["text.color"] = color
 
         return rcParams
 
 
 # element_line themeables
+
 
 class axis_line_x(themeable):
     """
@@ -769,20 +811,21 @@ class axis_line_x(themeable):
     ----------
     theme_element : element_line
     """
-    position = 'bottom'
 
-    def apply(self, ax):
-        super().apply(ax)
+    position = "bottom"
+
+    def apply_ax(self, ax: Axes):
+        super().apply_ax(ax)
         with suppress(KeyError):
-            del self.properties['solid_capstyle']
+            del self.properties["solid_capstyle"]
 
-        ax.spines['top'].set_visible(False)
-        ax.spines['bottom'].set(**self.properties)
+        ax.spines["top"].set_visible(False)
+        ax.spines["bottom"].set(**self.properties)
 
-    def blank(self, ax):
-        super().blank(ax)
-        ax.spines['top'].set_visible(False)
-        ax.spines['bottom'].set_visible(False)
+    def blank_ax(self, ax: Axes):
+        super().blank_ax(ax)
+        ax.spines["top"].set_visible(False)
+        ax.spines["bottom"].set_visible(False)
 
 
 class axis_line_y(themeable):
@@ -793,20 +836,21 @@ class axis_line_y(themeable):
     ----------
     theme_element : element_line
     """
-    position = 'left'
 
-    def apply(self, ax):
-        super().apply(ax)
+    position = "left"
+
+    def apply_ax(self, ax: Axes):
+        super().apply_ax(ax)
         with suppress(KeyError):
-            del self.properties['solid_capstyle']
+            del self.properties["solid_capstyle"]
 
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set(**self.properties)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set(**self.properties)
 
-    def blank(self, ax):
-        super().blank(ax)
-        ax.spines['left'].set_visible(False)
-        ax.spines['right'].set_visible(False)
+    def blank_ax(self, ax: Axes):
+        super().blank_ax(ax)
+        ax.spines["left"].set_visible(False)
+        ax.spines["right"].set_visible(False)
 
 
 class axis_line(axis_line_x, axis_line_y):
@@ -817,6 +861,7 @@ class axis_line(axis_line_x, axis_line_y):
     ----------
     theme_element : element_line
     """
+
     pass
 
 
@@ -828,21 +873,22 @@ class axis_ticks_minor_x(themeable):
     ----------
     theme_element : element_line
     """
-    def apply(self, ax):
-        super().apply(ax)
+
+    def apply_ax(self, ax: Axes):
+        super().apply_ax(ax)
 
         d = deepcopy(self.properties)
         with suppress(KeyError):
-            d['markeredgewidth'] = d.pop('linewidth')
+            d["markeredgewidth"] = d.pop("linewidth")
         with suppress(KeyError):
-            d['markeredgecolor'] = d.pop('color')
+            d["markeredgecolor"] = d.pop("color")
 
         for tick in ax.xaxis.get_minor_ticks():
             tick.tick1line.set(**d)
 
-    def blank(self, ax):
-        super().blank(ax)
-        ax.xaxis.set_tick_params(which='minor', bottom=False)
+    def blank_ax(self, ax: Axes):
+        super().blank_ax(ax)
+        ax.xaxis.set_tick_params(which="minor", bottom=False)
 
 
 class axis_ticks_minor_y(themeable):
@@ -853,21 +899,22 @@ class axis_ticks_minor_y(themeable):
     ----------
     theme_element : element_line
     """
-    def apply(self, ax):
-        super().apply(ax)
+
+    def apply_ax(self, ax: Axes):
+        super().apply_ax(ax)
 
         d = deepcopy(self.properties)
         with suppress(KeyError):
-            d['markeredgewidth'] = d.pop('linewidth')
+            d["markeredgewidth"] = d.pop("linewidth")
         with suppress(KeyError):
-            d['markeredgecolor'] = d.pop('color')
+            d["markeredgecolor"] = d.pop("color")
 
         for tick in ax.yaxis.get_minor_ticks():
             tick.tick1line.set(**d)
 
-    def blank(self, ax):
-        super().blank(ax)
-        ax.yaxis.set_tick_params(which='minor', left=False)
+    def blank_ax(self, ax: Axes):
+        super().blank_ax(ax)
+        ax.yaxis.set_tick_params(which="minor", left=False)
 
 
 class axis_ticks_major_x(themeable):
@@ -878,22 +925,23 @@ class axis_ticks_major_x(themeable):
     ----------
     theme_element : element_line
     """
-    def apply(self, ax):
-        super().apply(ax)
+
+    def apply_ax(self, ax: Axes):
+        super().apply_ax(ax)
 
         d = deepcopy(self.properties)
-        del d['visible']
+        del d["visible"]
         with suppress(KeyError):
-            d['markeredgewidth'] = d.pop('linewidth')
+            d["markeredgewidth"] = d.pop("linewidth")
         with suppress(KeyError):
-            d['markeredgecolor'] = d.pop('color')
+            d["markeredgecolor"] = d.pop("color")
 
         for tick in ax.xaxis.get_major_ticks():
             tick.tick1line.set(**d)
 
-    def blank(self, ax):
-        super().blank(ax)
-        ax.xaxis.set_tick_params(which='major', bottom=False)
+    def blank_ax(self, ax: Axes):
+        super().blank_ax(ax)
+        ax.xaxis.set_tick_params(which="major", bottom=False)
 
 
 class axis_ticks_major_y(themeable):
@@ -904,22 +952,23 @@ class axis_ticks_major_y(themeable):
     ----------
     theme_element : element_line
     """
-    def apply(self, ax):
-        super().apply(ax)
+
+    def apply_ax(self, ax: Axes):
+        super().apply_ax(ax)
 
         d = deepcopy(self.properties)
-        del d['visible']
+        del d["visible"]
         with suppress(KeyError):
-            d['markeredgewidth'] = d.pop('linewidth')
+            d["markeredgewidth"] = d.pop("linewidth")
         with suppress(KeyError):
-            d['markeredgecolor'] = d.pop('color')
+            d["markeredgecolor"] = d.pop("color")
 
         for tick in ax.yaxis.get_major_ticks():
             tick.tick1line.set(**d)
 
-    def blank(self, ax):
-        super().blank(ax)
-        ax.yaxis.set_tick_params(which='major', left=False)
+    def blank_ax(self, ax: Axes):
+        super().blank_ax(ax)
+        ax.yaxis.set_tick_params(which="major", left=False)
 
 
 class axis_ticks_major(axis_ticks_major_x, axis_ticks_major_y):
@@ -930,6 +979,7 @@ class axis_ticks_major(axis_ticks_major_x, axis_ticks_major_y):
     ----------
     theme_element : element_line
     """
+
     pass
 
 
@@ -941,6 +991,7 @@ class axis_ticks_minor(axis_ticks_minor_x, axis_ticks_minor_y):
     ----------
     theme_element : element_line
     """
+
     pass
 
 
@@ -952,6 +1003,7 @@ class axis_ticks(axis_ticks_major, axis_ticks_minor):
     ----------
     theme_element : element_line
     """
+
     pass
 
 
@@ -963,13 +1015,14 @@ class panel_grid_major_x(themeable):
     ----------
     theme_element : element_line
     """
-    def apply(self, ax):
-        super().apply(ax)
-        ax.xaxis.grid(which='major', **self.properties)
 
-    def blank(self, ax):
-        super().blank(ax)
-        ax.grid(False, which='major', axis='x')
+    def apply_ax(self, ax: Axes):
+        super().apply_ax(ax)
+        ax.xaxis.grid(which="major", **self.properties)
+
+    def blank_ax(self, ax: Axes):
+        super().blank_ax(ax)
+        ax.grid(False, which="major", axis="x")
 
 
 class panel_grid_major_y(themeable):
@@ -980,13 +1033,14 @@ class panel_grid_major_y(themeable):
     ----------
     theme_element : element_line
     """
-    def apply(self, ax):
-        super().apply(ax)
-        ax.yaxis.grid(which='major', **self.properties)
 
-    def blank(self, ax):
-        super().blank(ax)
-        ax.grid(False, which='major', axis='y')
+    def apply_ax(self, ax: Axes):
+        super().apply_ax(ax)
+        ax.yaxis.grid(which="major", **self.properties)
+
+    def blank_ax(self, ax: Axes):
+        super().blank_ax(ax)
+        ax.grid(False, which="major", axis="y")
 
 
 class panel_grid_minor_x(themeable):
@@ -997,13 +1051,14 @@ class panel_grid_minor_x(themeable):
     ----------
     theme_element : element_line
     """
-    def apply(self, ax):
-        super().apply(ax)
-        ax.xaxis.grid(which='minor', **self.properties)
 
-    def blank(self, ax):
-        super().blank(ax)
-        ax.grid(False, which='minor', axis='x')
+    def apply_ax(self, ax: Axes):
+        super().apply_ax(ax)
+        ax.xaxis.grid(which="minor", **self.properties)
+
+    def blank_ax(self, ax: Axes):
+        super().blank_ax(ax)
+        ax.grid(False, which="minor", axis="x")
 
 
 class panel_grid_minor_y(themeable):
@@ -1014,13 +1069,14 @@ class panel_grid_minor_y(themeable):
     ----------
     theme_element : element_line
     """
-    def apply(self, ax):
-        super().apply(ax)
-        ax.yaxis.grid(which='minor', **self.properties)
 
-    def blank(self, ax):
-        super().blank(ax)
-        ax.grid(False, which='minor', axis='y')
+    def apply_ax(self, ax: Axes):
+        super().apply_ax(ax)
+        ax.yaxis.grid(which="minor", **self.properties)
+
+    def blank_ax(self, ax: Axes):
+        super().blank_ax(ax)
+        ax.grid(False, which="minor", axis="y")
 
 
 class panel_grid_major(panel_grid_major_x, panel_grid_major_y):
@@ -1031,6 +1087,7 @@ class panel_grid_major(panel_grid_major_x, panel_grid_major_y):
     ----------
     theme_element : element_line
     """
+
     pass
 
 
@@ -1042,6 +1099,7 @@ class panel_grid_minor(panel_grid_minor_x, panel_grid_minor_y):
     ----------
     theme_element : element_line
     """
+
     pass
 
 
@@ -1053,6 +1111,7 @@ class panel_grid(panel_grid_major, panel_grid_minor):
     ----------
     theme_element : element_line
     """
+
     pass
 
 
@@ -1066,33 +1125,34 @@ class line(axis_line, axis_ticks, panel_grid):
     """
 
     @property
-    def rcParams(self):
+    def rcParams(self) -> dict[str, Any]:
         rcParams = super().rcParams
-        color = self.properties.get('color')
-        linewidth = self.properties.get('linewidth')
-        linestyle = self.properties.get('linestyle')
+        color = self.properties.get("color")
+        linewidth = self.properties.get("linewidth")
+        linestyle = self.properties.get("linestyle")
         d = {}
 
         if color:
-            d['axes.edgecolor'] = color
-            d['xtick.color'] = color
-            d['ytick.color'] = color
-            d['grid.color'] = color
+            d["axes.edgecolor"] = color
+            d["xtick.color"] = color
+            d["ytick.color"] = color
+            d["grid.color"] = color
         if linewidth:
-            d['axes.linewidth'] = linewidth
-            d['xtick.major.width'] = linewidth
-            d['xtick.minor.width'] = linewidth
-            d['ytick.major.width'] = linewidth
-            d['ytick.minor.width'] = linewidth
-            d['grid.linewidth'] = linewidth
+            d["axes.linewidth"] = linewidth
+            d["xtick.major.width"] = linewidth
+            d["xtick.minor.width"] = linewidth
+            d["ytick.major.width"] = linewidth
+            d["ytick.minor.width"] = linewidth
+            d["grid.linewidth"] = linewidth
         if linestyle:
-            d['grid.linestyle'] = linestyle
+            d["grid.linestyle"] = linestyle
 
         rcParams.update(d)
         return rcParams
 
 
 # element_rect themeables
+
 
 class legend_key(themeable):
     """
@@ -1102,20 +1162,21 @@ class legend_key(themeable):
     ----------
     theme_element : element_rect
     """
-    def apply_figure(self, figure):
-        super().apply_figure(figure)
+
+    def apply_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().apply_figure(figure, targets)
         with suppress(KeyError):
             # list of lists
-            all_drawings = figure._themeable['legend_key']
+            all_drawings = targets["legend_key"]
             for drawings in all_drawings:
                 for da in drawings:
                     da.patch.set(**self.properties)
 
-    def blank_figure(self, figure):
-        super().blank_figure(figure)
+    def blank_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().blank_figure(figure, targets)
         with suppress(KeyError):
             # list of lists
-            all_drawings = figure._themeable['legend_key']
+            all_drawings = targets["legend_key"]
             for drawings in all_drawings:
                 for da in drawings:
                     _blankout_rect(da.patch)
@@ -1129,22 +1190,23 @@ class legend_background(themeable):
     ----------
     theme_element : element_rect
     """
-    def apply_figure(self, figure):
-        super().apply_figure(figure)
+
+    def apply_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().apply_figure(figure, targets)
         # anchored offset box
         with suppress(KeyError):
-            aob = figure._themeable['legend_background']
+            aob = targets["legend_background"]
             aob.patch.set(**self.properties)
             if self.properties:
                 aob._drawFrame = True
                 # some small sensible padding
                 if not aob.pad:
-                    aob.pad = .2
+                    aob.pad = 0.2
 
-    def blank_figure(self, figure):
-        super().blank_figure(figure)
+    def blank_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().blank_figure(figure, targets)
         with suppress(KeyError):
-            aob = figure._themeable['legend_background']
+            aob = targets["legend_background"]
             _blankout_rect(aob.patch)
 
 
@@ -1172,16 +1234,17 @@ class panel_background(themeable):
     ----------
     theme_element : element_rect
     """
-    def apply(self, ax):
-        super().apply(ax)
+
+    def apply_ax(self, ax: Axes):
+        super().apply_ax(ax)
         d = deepcopy(self.properties)
-        if 'facecolor' in d and 'alpha' in d:
-            d['facecolor'] = to_rgba(d['facecolor'], d['alpha'])
-            del d['alpha']
+        if "facecolor" in d and "alpha" in d:
+            d["facecolor"] = to_rgba(d["facecolor"], d["alpha"])
+            del d["alpha"]
         ax.patch.set(**d)
 
-    def blank(self, ax):
-        super().blank(ax)
+    def blank_ax(self, ax: Axes):
+        super().blank_ax(ax)
         _blankout_rect(ax.patch)
 
 
@@ -1193,24 +1256,25 @@ class panel_border(themeable):
     ----------
     theme_element : element_rect
     """
-    def apply(self, ax):
-        super().apply(ax)
+
+    def apply_ax(self, ax: Axes):
+        super().apply_ax(ax)
         d = deepcopy(self.properties)
         # Be lenient, if using element_line
         with suppress(KeyError):
-            d['edgecolor'] = d.pop('color')
+            d["edgecolor"] = d.pop("color")
 
         with suppress(KeyError):
-            del d['facecolor']
+            del d["facecolor"]
 
-        if 'edgecolor' in d and 'alpha' in d:
-            d['edgecolor'] = to_rgba(d['edgecolor'], d['alpha'])
-            del d['alpha']
+        if "edgecolor" in d and "alpha" in d:
+            d["edgecolor"] = to_rgba(d["edgecolor"], d["alpha"])
+            del d["alpha"]
 
         ax.patch.set(**d)
 
-    def blank(self, ax):
-        super().blank(ax)
+    def blank_ax(self, ax: Axes):
+        super().blank_ax(ax)
         ax.patch.set_linewidth(0)
 
 
@@ -1222,11 +1286,12 @@ class plot_background(themeable):
     ----------
     theme_element : element_rect
     """
-    def apply_figure(self, figure):
+
+    def apply_figure(self, figure: Figure, targets: dict[str, Any]):
         figure.patch.set(**self.properties)
 
-    def blank_figure(self, figure):
-        super().blank_figure(figure)
+    def blank_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().blank_figure(figure, targets)
         _blankout_rect(figure.patch)
 
 
@@ -1238,17 +1303,18 @@ class strip_background_x(themeable):
     ----------
     theme_element : element_rect
     """
-    def apply_figure(self, figure):
-        super().apply_figure(figure)
+
+    def apply_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().apply_figure(figure, targets)
         with suppress(KeyError):
-            bboxes = figure._themeable['strip_background_x']
+            bboxes = targets["strip_background_x"]
             for bbox in bboxes:
                 bbox.set(**self.properties)
 
-    def blank_figure(self, figure):
-        super().blank_figure(figure)
+    def blank_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().blank_figure(figure, targets)
         with suppress(KeyError):
-            rects = figure._themeable['strip_background_x']
+            rects = targets["strip_background_x"]
             for rect in rects:
                 _blankout_rect(rect)
 
@@ -1261,17 +1327,18 @@ class strip_background_y(themeable):
     ----------
     theme_element : element_rect
     """
-    def apply_figure(self, figure):
-        super().apply_figure(figure)
+
+    def apply_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().apply_figure(figure, targets)
         with suppress(KeyError):
-            bboxes = figure._themeable['strip_background_y']
+            bboxes = targets["strip_background_y"]
             for bbox in bboxes:
                 bbox.set(**self.properties)
 
-    def blank_figure(self, figure):
-        super().blank_figure(figure)
+    def blank_figure(self, figure: Figure, targets: dict[str, Any]):
+        super().blank_figure(figure, targets)
         with suppress(KeyError):
-            rects = figure._themeable['strip_background_y']
+            rects = targets["strip_background_y"]
             for rect in rects:
                 _blankout_rect(rect)
 
@@ -1284,12 +1351,18 @@ class strip_background(strip_background_x, strip_background_y):
     ----------
     theme_element : element_rect
     """
+
     pass
 
 
-class rect(legend_key, legend_background,
-           panel_background, panel_border,
-           plot_background, strip_background):
+class rect(
+    legend_key,
+    legend_background,
+    panel_background,
+    panel_border,
+    plot_background,
+    strip_background,
+):
     """
     All rectangle elements
 
@@ -1297,10 +1370,12 @@ class rect(legend_key, legend_background,
     ----------
     theme_element : element_rect
     """
+
     pass
 
 
 # value base themeables
+
 
 class axis_ticks_length_major(themeable):
     """
@@ -1311,12 +1386,13 @@ class axis_ticks_length_major(themeable):
     theme_element : float
         Value in points.
     """
+
     @property
-    def rcParams(self):
+    def rcParams(self) -> dict[str, Any]:
         rcParams = super().rcParams
-        val = self.properties['value']
-        rcParams['xtick.major.size'] = val
-        rcParams['ytick.major.size'] = val
+        val = self.properties["value"]
+        rcParams["xtick.major.size"] = val
+        rcParams["ytick.major.size"] = val
         return rcParams
 
 
@@ -1329,17 +1405,17 @@ class axis_ticks_length_minor(themeable):
     theme_element : float
         Value in points.
     """
+
     @property
-    def rcParams(self):
+    def rcParams(self) -> dict[str, Any]:
         rcParams = super().rcParams
-        val = self.properties['value']
-        rcParams['xtick.minor.size'] = val
-        rcParams['ytick.minor.size'] = val
+        val = self.properties["value"]
+        rcParams["xtick.minor.size"] = val
+        rcParams["ytick.minor.size"] = val
         return rcParams
 
 
-class axis_ticks_length(axis_ticks_length_major,
-                        axis_ticks_length_minor):
+class axis_ticks_length(axis_ticks_length_major, axis_ticks_length_minor):
     """
     Axis tick length
 
@@ -1348,6 +1424,7 @@ class axis_ticks_length(axis_ticks_length_major,
     theme_element : float
         Value in points.
     """
+
     pass
 
 
@@ -1360,12 +1437,13 @@ class axis_ticks_pad_major(themeable):
     theme_element : float
         Value in points.
     """
+
     @property
-    def rcParams(self):
+    def rcParams(self) -> dict[str, Any]:
         rcParams = super().rcParams
-        val = self.properties['value']
-        rcParams['xtick.major.pad'] = val
-        rcParams['ytick.major.pad'] = val
+        val = self.properties["value"]
+        rcParams["xtick.major.pad"] = val
+        rcParams["ytick.major.pad"] = val
         return rcParams
 
 
@@ -1377,17 +1455,17 @@ class axis_ticks_pad_minor(themeable):
     ----------
     theme_element : float
     """
+
     @property
-    def rcParams(self):
+    def rcParams(self) -> dict[str, Any]:
         rcParams = super().rcParams
-        val = self.properties['value']
-        rcParams['xtick.minor.pad'] = val
-        rcParams['ytick.minor.pad'] = val
+        val = self.properties["value"]
+        rcParams["xtick.minor.pad"] = val
+        rcParams["ytick.minor.pad"] = val
         return rcParams
 
 
-class axis_ticks_pad(axis_ticks_pad_major,
-                     axis_ticks_pad_minor):
+class axis_ticks_pad(axis_ticks_pad_major, axis_ticks_pad_minor):
     """
     Axis tick padding
 
@@ -1396,6 +1474,7 @@ class axis_ticks_pad(axis_ticks_pad_major,
     theme_element : float
         Value in points.
     """
+
     pass
 
 
@@ -1410,10 +1489,11 @@ class axis_ticks_direction_x(themeable):
         - ``out`` - ticks outside the panel
         - ``inout`` - ticks inside and outside the panel
     """
+
     @property
-    def rcParams(self):
+    def rcParams(self) -> dict[str, Any]:
         rcParams = super().rcParams
-        rcParams['xtick.direction'] = self.properties['value']
+        rcParams["xtick.direction"] = self.properties["value"]
         return rcParams
 
 
@@ -1428,15 +1508,15 @@ class axis_ticks_direction_y(themeable):
         - ``out`` - ticks outside the panel
         - ``inout`` - ticks inside and outside the panel
     """
+
     @property
-    def rcParams(self):
+    def rcParams(self) -> dict[str, Any]:
         rcParams = super().rcParams
-        rcParams['ytick.direction'] = self.properties['value']
+        rcParams["ytick.direction"] = self.properties["value"]
         return rcParams
 
 
-class axis_ticks_direction(axis_ticks_direction_x,
-                           axis_ticks_direction_y):
+class axis_ticks_direction(axis_ticks_direction_x, axis_ticks_direction_y):
     """
     axis tick direction
 
@@ -1447,6 +1527,7 @@ class axis_ticks_direction(axis_ticks_direction_x,
         - ``out`` - ticks outside the panel
         - ``inout`` - ticks inside and outside the panel
     """
+
     pass
 
 
@@ -1460,6 +1541,7 @@ class panel_spacing_x(themeable):
         Size in inches of the horizontal margins between the
         facet panels.
     """
+
     pass
 
 
@@ -1473,6 +1555,7 @@ class panel_spacing_y(themeable):
         Size in inches of the vertical space between the
         facet panels
     """
+
     pass
 
 
@@ -1485,6 +1568,7 @@ class panel_spacing(panel_spacing_x, panel_spacing_y):
     theme_element : float
         Size in inches of the space between the facet panels
     """
+
     pass
 
 
@@ -1500,13 +1584,13 @@ class plot_margin(themeable):
         height. Values outside that range will
         stretch the figure.
     """
-    def setup_figure(self, figure):
-        val = self.properties['value']
+
+    def setup_figure(self, figure: Figure):
+        val = self.properties["value"]
         if val is not None:
-            figure.subplots_adjust(left=val,
-                                   right=1-val,
-                                   bottom=val,
-                                   top=1-val)
+            figure.subplots_adjust(
+                left=val, right=1 - val, bottom=val, top=1 - val
+            )
 
 
 class panel_ontop(themeable):
@@ -1518,9 +1602,10 @@ class panel_ontop(themeable):
     theme_element : bool
         Default is False.
     """
-    def apply(self, ax):
-        super().apply(ax)
-        ax.set_axisbelow(not self.properties['value'])
+
+    def apply_ax(self, ax: Axes):
+        super().apply_ax(ax)
+        ax.set_axisbelow(not self.properties["value"])
 
 
 class aspect_ratio(themeable):
@@ -1547,12 +1632,13 @@ class dpi(themeable):
     ----------
     theme_element : int
     """
+
     @property
-    def rcParams(self):
+    def rcParams(self) -> dict[str, Any]:
         rcParams = super().rcParams
-        val = self.properties['value']
-        rcParams['figure.dpi'] = val
-        rcParams['savefig.dpi'] = 'figure'
+        val = self.properties["value"]
+        rcParams["figure.dpi"] = val
+        rcParams["savefig.dpi"] = "figure"
         return rcParams
 
 
@@ -1565,18 +1651,19 @@ class figure_size(themeable):
     theme_element : tuple
         (width, height) in inches
     """
+
     @property
-    def rcParams(self):
+    def rcParams(self) -> dict[str, Any]:
         rcParams = super().rcParams
         try:
-            width, height = self.properties['value']
+            width, height = self.properties["value"]
         except ValueError:
             raise PlotnineError(
-                'figure_size should be a tuple (width, height) '
-                'with the values in inches')
+                "figure_size should be a tuple (width, height) "
+                "with the values in inches"
+            )
 
-        rcParams['figure.figsize'] = '{}, {}'.format(width,
-                                                     height)
+        rcParams["figure.figsize"] = "{}, {}".format(width, height)
         return rcParams
 
 
@@ -1596,20 +1683,21 @@ class subplots_adjust(themeable):
         See :class:`matplotlib.figure.SubplotParams`
         for the keys that the dictionary *can* have.
     """
-    def apply_figure(self, figure):
-        params = self.properties['value']
+
+    def apply_figure(self, figure: Figure, targets: dict[str, Any]):
+        params = self.properties["value"]
         figure.subplots_adjust(
-            wspace=params.get('wspace', None),
-            hspace=params.get('hspace', None),
+            wspace=params.get("wspace", None),
+            hspace=params.get("hspace", None),
         )
 
-    def setup_figure(self, figure):
-        params = self.properties['value']
+    def setup_figure(self, figure: Figure):
+        params = self.properties["value"]
         figure.subplots_adjust(
-            left=params.get('left', None),
-            right=params.get('right', None),
-            top=params.get('top', None),
-            bottom=params.get('bottom', None),
+            left=params.get("left", None),
+            right=params.get("right", None),
+            top=params.get("top", None),
+            bottom=params.get("bottom", None),
         )
 
 

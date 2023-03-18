@@ -1,12 +1,28 @@
+from __future__ import annotations
+
+import typing
+from itertools import chain
+
 import numpy as np
 import pandas as pd
 from mizani.bounds import expand_range_distinct
 
 from ..doctools import document
 from ..exceptions import PlotnineError
+from ..iapi import range_view
 from ..utils import alias, array_kind, identity, match
+from ._expand import expand_range
 from .range import RangeContinuous
 from .scale import scale_continuous, scale_datetime, scale_discrete
+
+if typing.TYPE_CHECKING:
+    from typing import Sequence
+
+    from plotnine.typing import (
+        Trans,
+        TupleFloat2,
+        TupleFloat4,
+    )
 
 
 # positions scales have a couple of differences (quirks) that
@@ -30,6 +46,7 @@ class scale_position_discrete(scale_discrete):
         For scales that deal with categoricals, these may
         be a subset or superset of the categories.
     """
+
     # All positions have no guide
     guide = None
 
@@ -69,7 +86,8 @@ class scale_position_discrete(scale_discrete):
         if limits is None:
             limits = self.limits
         if array_kind.discrete(series):
-            seq = np.arange(1, len(limits)+1)
+            # TODO: Rewrite without using numpy
+            seq = np.arange(1, len(limits) + 1)
             idx = np.asarray(match(series, limits, nomatch=len(series)))
             if not len(idx):
                 return np.array([])
@@ -79,7 +97,7 @@ class scale_position_discrete(scale_discrete):
                 # Deal with missing data
                 # - Insert NaN where there is no match
                 seq = np.hstack((seq.astype(float), np.nan))
-                idx = np.clip(idx, 0, len(seq)-1)
+                idx = np.clip(idx, 0, len(seq) - 1)
                 seq = seq[idx]
             return seq
         return series
@@ -100,9 +118,7 @@ class scale_position_discrete(scale_discrete):
                 limits = list(limits)
             return limits
         else:
-            raise PlotnineError(
-                "Lost, do not know what the limits are."
-            )
+            raise PlotnineError("Lost, do not know what the limits are.")
 
     @limits.setter
     def limits(self, value):
@@ -130,14 +146,62 @@ class scale_position_discrete(scale_discrete):
         else:  # both
             # e.g categorical bar plot have discrete items, but
             # are plot on a continuous x scale
-            a = np.hstack([
-                self.range_c.range,
-                expand_range_distinct(
-                    (1, len(self.range.range)),
-                    expand
-                )
-            ])
+            a = np.hstack(
+                [
+                    self.range_c.range,
+                    expand_range_distinct((1, len(self.range.range)), expand),
+                ]
+            )
             return a.min(), a.max()
+
+    def expand_limits(
+        self,
+        limits: Sequence[str],
+        expand: TupleFloat2 | TupleFloat4,
+        coord_limits: TupleFloat2,
+        trans: Trans,
+    ) -> range_view:
+        # Turn discrete limits into a tuple of continuous limits
+        if self.is_empty():
+            climits = (0, 1)
+        else:
+            climits = (1, len(limits))
+            self.range_c.range
+
+        if coord_limits is not None:
+            # - Override None in coord_limits
+            # - Expand limits in coordinate space
+            # - Remove any computed infinite values &
+            c0, c1 = coord_limits
+            climits = (
+                climits[0] if c0 is None else c0,
+                climits[1] if c1 is None else c1,
+            )
+
+        # Expand discrete range
+        rv_d = expand_range(climits, expand, trans)
+
+        if self.range_c.is_empty():
+            return rv_d
+
+        # Expand continuous range
+        no_expand = self.default_expansion(0, 0)
+        rv_c = expand_range(self.range_c.range, no_expand, trans)
+
+        # Merge the ranges
+        rv = range_view(
+            range=(
+                min(chain(rv_d.range, rv_c.range)),
+                max(chain(rv_d.range, rv_c.range)),
+            ),
+            range_coord=(
+                min(chain(rv_d.range_coord, rv_c.range_coord)),
+                max(chain(rv_d.range_coord, rv_c.range_coord)),
+            ),
+        )
+        rv.range = min(rv.range), max(rv.range)
+        rv.range_coord = min(rv.range_coord), max(rv.range_coord)
+        return rv
 
 
 @document
@@ -149,6 +213,7 @@ class scale_position_continuous(scale_continuous):
     ----------
     {superclass_parameters}
     """
+
     # All positions have no guide
     guide = None
 
@@ -178,7 +243,8 @@ class scale_x_discrete(scale_position_discrete):
     ----------
     {superclass_parameters}
     """
-    _aesthetics = ['x', 'xmin', 'xmax', 'xend']
+
+    _aesthetics = ["x", "xmin", "xmax", "xend"]
 
 
 @document
@@ -190,12 +256,13 @@ class scale_y_discrete(scale_position_discrete):
     ----------
     {superclass_parameters}
     """
-    _aesthetics = ['y', 'ymin', 'ymax', 'yend']
+
+    _aesthetics = ["y", "ymin", "ymax", "yend"]
 
 
 # Not part of the user API
-alias('scale_x_ordinal', scale_x_discrete)
-alias('scale_y_ordinal', scale_y_discrete)
+alias("scale_x_ordinal", scale_x_discrete)
+alias("scale_y_ordinal", scale_y_discrete)
 
 
 @document
@@ -207,7 +274,8 @@ class scale_x_continuous(scale_position_continuous):
     ----------
     {superclass_parameters}
     """
-    _aesthetics = ['x', 'xmin', 'xmax', 'xend', 'xintercept']
+
+    _aesthetics = ["x", "xmin", "xmax", "xend", "xintercept"]
 
 
 @document
@@ -219,9 +287,19 @@ class scale_y_continuous(scale_position_continuous):
     ----------
     {superclass_parameters}
     """
-    _aesthetics = ['y', 'ymin', 'ymax', 'yend', 'yintercept',
-                   'ymin_final', 'ymax_final',
-                   'lower', 'middle', 'upper']
+
+    _aesthetics = [
+        "y",
+        "ymin",
+        "ymax",
+        "yend",
+        "yintercept",
+        "ymin_final",
+        "ymax_final",
+        "lower",
+        "middle",
+        "upper",
+    ]  # pyright: ignore
 
 
 # Transformed scales
@@ -247,8 +325,8 @@ class scale_y_datetime(scale_datetime, scale_y_continuous):
     """
 
 
-alias('scale_x_date', scale_x_datetime)
-alias('scale_y_date', scale_y_datetime)
+alias("scale_x_date", scale_x_datetime)
+alias("scale_y_date", scale_y_datetime)
 
 
 @document
@@ -260,7 +338,8 @@ class scale_x_timedelta(scale_x_continuous):
     ----------
     {superclass_parameters}
     """
-    _trans = 'pd_timedelta'
+
+    _trans = "pd_timedelta"
 
 
 @document
@@ -272,7 +351,8 @@ class scale_y_timedelta(scale_y_continuous):
     ----------
     {superclass_parameters}
     """
-    _trans = 'pd_timedelta'
+
+    _trans = "pd_timedelta"
 
 
 @document
@@ -284,7 +364,8 @@ class scale_x_sqrt(scale_x_continuous):
     ----------
     {superclass_parameters}
     """
-    _trans = 'sqrt'
+
+    _trans = "sqrt"
 
 
 @document
@@ -296,7 +377,8 @@ class scale_y_sqrt(scale_y_continuous):
     ----------
     {superclass_parameters}
     """
-    _trans = 'sqrt'
+
+    _trans = "sqrt"
 
 
 @document
@@ -308,7 +390,8 @@ class scale_x_log10(scale_x_continuous):
     ----------
     {superclass_parameters}
     """
-    _trans = 'log10'
+
+    _trans = "log10"
 
 
 @document
@@ -320,7 +403,8 @@ class scale_y_log10(scale_y_continuous):
     ----------
     {superclass_parameters}
     """
-    _trans = 'log10'
+
+    _trans = "log10"
 
 
 @document
@@ -332,7 +416,8 @@ class scale_x_reverse(scale_x_continuous):
     ----------
     {superclass_parameters}
     """
-    _trans = 'reverse'
+
+    _trans = "reverse"
 
 
 @document
@@ -344,4 +429,5 @@ class scale_y_reverse(scale_y_continuous):
     ----------
     {superclass_parameters}
     """
-    _trans = 'reverse'
+
+    _trans = "reverse"

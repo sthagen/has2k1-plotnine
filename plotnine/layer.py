@@ -16,12 +16,19 @@ if typing.TYPE_CHECKING:
 
     from patsy.eval import EvalEnvironment
 
-    import plotnine as p9
-
-    from .geoms.geom import geom
-    from .positions.position import position
-    from .stats.stat import stat
-    from .typing import DataFrameConvertible, DataLike, LayerDataLike
+    from plotnine.typing import (
+        Coord,
+        DataFrameConvertible,
+        DataLike,
+        Geom,
+        Ggplot,
+        Layer,
+        LayerDataLike,
+        Layout,
+        Position,
+        Scales,
+        Stat,
+    )
 
 
 class layer:
@@ -62,21 +69,22 @@ class layer:
     There is no benefit to manually creating a layer. You should
     always use a ``geom`` or ``stat``.
     """
+
     # Data for this layer
     data: pd.DataFrame
 
     def __init__(
         self,
-        geom: geom,
-        stat: stat,
+        geom: Geom,
+        stat: Stat,
         *,
         mapping: aes,
         data: Optional[LayerDataLike],
-        position: position,
+        position: Position,
         inherit_aes: bool = True,
         show_legend: bool | None = None,
-        raster: bool = False
-    ) -> None:
+        raster: bool = False,
+    ):
         self.geom = geom
         self.stat = stat
         self._data = data
@@ -88,7 +96,7 @@ class layer:
         self.zorder = 0
 
     @staticmethod
-    def from_geom(geom: geom) -> layer:
+    def from_geom(geom: Geom) -> Layer:
         """
         Create a layer given a :class:`geom`
 
@@ -104,14 +112,14 @@ class layer:
         """
         kwargs = geom._kwargs
         lkwargs = {
-            'geom': geom,
-            'mapping': geom.mapping,
-            'data': geom.data,
-            'stat': geom._stat,
-            'position': geom._position
+            "geom": geom,
+            "mapping": geom.mapping,
+            "data": geom.data,
+            "stat": geom._stat,
+            "position": geom._position,
         }
 
-        layer_params = ('inherit_aes', 'show_legend', 'raster')
+        layer_params = ("inherit_aes", "show_legend", "raster")
         for param in layer_params:
             if param in kwargs:
                 lkwargs[param] = kwargs[param]
@@ -119,7 +127,7 @@ class layer:
                 lkwargs[param] = geom.DEFAULT_PARAMS[param]
         return layer(**lkwargs)
 
-    def __radd__(self, gg: p9.ggplot) -> p9.ggplot:
+    def __radd__(self, gg: Ggplot) -> Ggplot:
         """
         Add layer to ggplot object
         """
@@ -141,14 +149,14 @@ class layer:
         new = result.__dict__
 
         for key, item in old.items():
-            if key == 'data':
+            if key == "data":
                 new[key] = old[key]
             else:
                 new[key] = deepcopy(old[key], memo)
 
         return result
 
-    def setup(self, plot: p9.ggplot) -> None:
+    def setup(self, plot: Ggplot):
         """
         Prepare layer for the plot building
 
@@ -158,7 +166,7 @@ class layer:
         self._make_layer_mapping(plot.mapping)
         self._make_layer_environments(plot.environment)
 
-    def _make_layer_data(self, plot_data: DataLike | None) -> None:
+    def _make_layer_data(self, plot_data: DataLike | None):
         """
         Generate data to be used by this layer
 
@@ -169,8 +177,6 @@ class layer:
         """
         if plot_data is None:
             data = pd.DataFrame()
-        elif callable(plot_data):
-            data = plot_data()
         elif hasattr(plot_data, "to_pandas"):
             data = typing.cast("DataFrameConvertible", plot_data).to_pandas()
         else:
@@ -198,15 +204,15 @@ class layer:
         else:
             # Recognise polars dataframes
             if hasattr(self._data, "to_pandas"):
-                self.data = (
-                    typing.cast("DataFrameConvertible", self._data).to_pandas()
-                )
+                self.data = typing.cast(
+                    "DataFrameConvertible", self._data
+                ).to_pandas()
             elif isinstance(self._data, pd.DataFrame):
                 self.data = self._data.copy()
             else:
                 raise TypeError(f"Data has a bad type: {type(self.data)}")
 
-    def _make_layer_mapping(self, plot_mapping: aes) -> None:
+    def _make_layer_mapping(self, plot_mapping: aes):
         """
         Create the aesthetic mappings to be used by this layer
 
@@ -226,17 +232,14 @@ class layer:
                 del self.mapping[ae]
 
         # Set group as a mapping if set as a parameter
-        if 'group' in self.geom.aes_params:
-            group = self.geom.aes_params['group']
+        if "group" in self.geom.aes_params:
+            group = self.geom.aes_params["group"]
             # Double quote str so that it evaluates to itself
             if isinstance(group, str):
                 group = f'"{group}"'
-            self.mapping['group'] = stage(start=group)
+            self.mapping["group"] = stage(start=group)
 
-    def _make_layer_environments(
-        self,
-        plot_environment: EvalEnvironment
-    ) -> None:
+    def _make_layer_environments(self, plot_environment: EvalEnvironment):
         """
         Create the aesthetic mappings to be used by this layer
 
@@ -248,7 +251,7 @@ class layer:
         self.geom.environment = plot_environment
         self.stat.environment = plot_environment
 
-    def compute_aesthetics(self, plot: p9.ggplot) -> None:
+    def compute_aesthetics(self, plot: Ggplot):
         """
         Return a dataframe where the columns match the aesthetic mappings
 
@@ -261,14 +264,14 @@ class layer:
 
         if len(self.data) == 0 and len(evaled) > 0:
             # No data, and vectors suppled to aesthetics
-            evaled['PANEL'] = 1
+            evaled["PANEL"] = 1
         else:
-            evaled['PANEL'] = self.data['PANEL']
+            evaled["PANEL"] = self.data["PANEL"]
 
         data = add_group(evaled)
-        self.data = data.sort_values('PANEL', kind='mergesort')
+        self.data = data.sort_values("PANEL", kind="mergesort")
 
-    def compute_statistic(self, layout: p9.facets.layout.Layout) -> None:
+    def compute_statistic(self, layout: Layout):
         """
         Compute & return statistics for this layer
         """
@@ -282,7 +285,7 @@ class layer:
         data = self.stat.compute_layer(data, params, layout)
         self.data = data
 
-    def map_statistic(self, plot: p9.ggplot) -> None:
+    def map_statistic(self, plot: Ggplot):
         """
         Mapping aesthetics to computed statistics
         """
@@ -310,7 +313,7 @@ class layer:
         new = {ae: ae for ae in stat_data.columns}
         plot.scales.add_defaults(self.data, new)
 
-    def setup_data(self) -> None:
+    def setup_data(self):
         """
         Prepare/modify data for plotting
         """
@@ -323,12 +326,12 @@ class layer:
         check_required_aesthetics(
             self.geom.REQUIRED_AES,
             set(data.columns) | set(self.geom.aes_params),
-            self.geom.__class__.__name__
+            self.geom.__class__.__name__,
         )
 
         self.data = data
 
-    def compute_position(self, layout: p9.facets.layout.Layout) -> None:
+    def compute_position(self, layout: Layout):
         """
         Compute the position of each geometric object
 
@@ -343,11 +346,7 @@ class layer:
         data = self.position.compute_layer(data, params, layout)
         self.data = data
 
-    def draw(
-        self,
-        layout: p9.facets.layout.Layout,
-        coord: p9.coords.coord.coord
-    ) -> None:
+    def draw(self, layout: Layout, coord: Coord):
         """
         Draw geom
 
@@ -361,8 +360,8 @@ class layer:
         """
         params = copy(self.geom.params)
         params.update(self.stat.params)
-        params['zorder'] = self.zorder
-        params['raster'] = self.raster
+        params["zorder"] = self.zorder
+        params["raster"] = self.raster
         self.data = self.geom.handle_na(self.data)
         # At this point each layer must have the data
         # that is created by the plot build process
@@ -371,7 +370,7 @@ class layer:
     def use_defaults(
         self,
         data: pd.DataFrame | None = None,
-        aes_modifiers: dict[str, Any] | None = None
+        aes_modifiers: dict[str, Any] | None = None,
     ) -> pd.DataFrame:
         """
         Prepare/modify data for plotting
@@ -392,7 +391,7 @@ class layer:
 
         return self.geom.use_defaults(data, aes_modifiers)
 
-    def finish_statistics(self) -> None:
+    def finish_statistics(self):
         """
         Prepare/modify data for plotting
         """
@@ -407,21 +406,22 @@ class Layers(List[layer]):
     applied at all layers in the plot. This class makes those
     tasks easier.
     """
-    @overload
-    def __radd__(self, other: Iterable[layer]) -> Layers: ...
 
     @overload
-    def __radd__(self, other: p9.ggplot) -> p9.ggplot: ...
+    def __radd__(self, other: Iterable[layer]) -> Layers:
+        ...
 
-    def __radd__(
-        self,
-        other: Iterable[layer] | p9.ggplot
-    ) -> Layers | p9.ggplot:
+    @overload
+    def __radd__(self, other: Ggplot) -> Ggplot:
+        ...
+
+    def __radd__(self, other: Iterable[layer] | Ggplot) -> Layers | Ggplot:
         """
         Add layers to ggplot object
         """
         # Add layers to ggplot object
         from .ggplot import ggplot
+
         if isinstance(other, ggplot):
             for obj in self:
                 other += obj
@@ -432,15 +432,14 @@ class Layers(List[layer]):
         return other
 
     @overload
-    def __getitem__(self, key: SupportsIndex) -> layer: ...
+    def __getitem__(self, key: SupportsIndex) -> layer:
+        ...
 
     @overload
-    def __getitem__(self, key: slice) -> Layers: ...
+    def __getitem__(self, key: slice) -> Layers:
+        ...
 
-    def __getitem__(
-        self,
-        key: SupportsIndex | slice
-    ) -> layer | Layers:
+    def __getitem__(self, key: SupportsIndex | slice) -> layer | Layers:
         result = super().__getitem__(key)
         if isinstance(result, Iterable):
             result = Layers(result)
@@ -450,65 +449,61 @@ class Layers(List[layer]):
     def data(self) -> list[pd.DataFrame]:
         return [l.data for l in self]
 
-    def setup(self, plot: p9.ggplot) -> None:
+    def setup(self, plot: Ggplot):
         for l in self:
             l.setup(plot)
 
-    def setup_data(self) -> None:
+    def setup_data(self):
         for l in self:
             l.setup_data()
 
-    def draw(
-        self,
-        layout: p9.facets.layout.Layout,
-        coord: p9.coords.coord.coord
-    ) -> None:
+    def draw(self, layout: Layout, coord: Coord):
         # If zorder is 0, it is left to MPL
         for i, l in enumerate(self, start=1):
             l.zorder = i
             l.draw(layout, coord)
 
-    def compute_aesthetics(self, plot: p9.ggplot) -> None:
+    def compute_aesthetics(self, plot: Ggplot):
         for l in self:
             l.compute_aesthetics(plot)
 
-    def compute_statistic(self, layout: p9.facets.layout.Layout) -> None:
+    def compute_statistic(self, layout: Layout):
         for l in self:
             l.compute_statistic(layout)
 
-    def map_statistic(self, plot: p9.ggplot) -> None:
+    def map_statistic(self, plot: Ggplot):
         for l in self:
             l.map_statistic(plot)
 
-    def compute_position(self, layout: p9.facets.layout.Layout) -> None:
+    def compute_position(self, layout: Layout):
         for l in self:
             l.compute_position(layout)
 
     def use_defaults(
         self,
         data: pd.DataFrame | None = None,
-        aes_modifiers: dict[str, Any] | None = None
-    ) -> None:
+        aes_modifiers: dict[str, Any] | None = None,
+    ):
         for l in self:
             l.use_defaults(data, aes_modifiers)
 
-    def transform(self, scales: p9.scales.scale.scale) -> None:
+    def transform(self, scales: Scales):
         for l in self:
             l.data = scales.transform_df(l.data)
 
-    def train(self, scales: p9.scales.scale.scale) -> None:
+    def train(self, scales: Scales):
         for l in self:
-            l.data = scales.train_df(l.data)
+            scales.train_df(l.data)
 
-    def map(self, scales: p9.scales.scale.scale) -> None:
+    def map(self, scales: Scales):
         for l in self:
             l.data = scales.map_df(l.data)
 
-    def finish_statistics(self) -> None:
+    def finish_statistics(self):
         for l in self:
             l.finish_statistics()
 
-    def update_labels(self, plot: p9.ggplot) -> None:
+    def update_labels(self, plot: Ggplot):
         for l in self:
             plot._update_labels(l)
 
@@ -523,22 +518,21 @@ def add_group(data: pd.DataFrame) -> pd.DataFrame:
     if len(data) == 0:
         return data
 
-    if 'group' not in data:
+    if "group" not in data:
         ignore = data.columns.difference(list(SCALED_AESTHETICS))
         disc = discrete_columns(data, ignore=ignore)
         if disc:
-            data['group'] = ninteraction(data[disc], drop=True)
+            data["group"] = ninteraction(data[disc], drop=True)
         else:
-            data['group'] = NO_GROUP
+            data["group"] = NO_GROUP
     else:
-        data['group'] = ninteraction(data[['group']], drop=True)
+        data["group"] = ninteraction(data[["group"]], drop=True)
 
     return data
 
 
 def discrete_columns(
-    df: pd.DataFrame,
-    ignore: Sequence[str] | pd.Index
+    df: pd.DataFrame, ignore: Sequence[str] | pd.Index
 ) -> list[str]:
     """
     Return a list of the discrete columns in the dataframe

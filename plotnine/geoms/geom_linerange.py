@@ -10,10 +10,10 @@ from .geom_segment import geom_segment
 if typing.TYPE_CHECKING:
     from typing import Any
 
-    import matplotlib as mpl
     import pandas as pd
 
-    import plotnine as p9
+    from plotnine.iapi import panel_view
+    from plotnine.typing import Axes, Coord
 
 
 @document
@@ -27,24 +27,35 @@ class geom_linerange(geom):
     ----------
     {common_parameters}
     """
-    DEFAULT_AES = {'alpha': 1, 'color': 'black',
-                   'linetype': 'solid', 'size': 0.5}
-    REQUIRED_AES = {'x', 'ymin', 'ymax'}
-    DEFAULT_PARAMS = {'stat': 'identity', 'position': 'identity',
-                      'na_rm': False}
-    draw_legend = staticmethod(geom_path.draw_legend)  # type: ignore
+
+    DEFAULT_AES = {
+        "alpha": 1,
+        "color": "black",
+        "linetype": "solid",
+        "size": 0.5,
+    }
+    REQUIRED_AES = {"x", "ymin", "ymax"}
+    DEFAULT_PARAMS = {
+        "stat": "identity",
+        "position": "identity",
+        "na_rm": False,
+    }
+    draw_legend = staticmethod(geom_path.draw_legend)
 
     @staticmethod
     def draw_group(
         data: pd.DataFrame,
-        panel_params: p9.iapi.panel_view,
-        coord: p9.coords.coord.coord,
-        ax: mpl.axes.Axes,
-        **params: Any
-    ) -> None:
-        data.eval("""
-                     xend = x
-                     y = ymin
-                     yend = ymax""",
-                  inplace=True)
+        panel_params: panel_view,
+        coord: Coord,
+        ax: Axes,
+        **params: Any,
+    ):
+        data.eval(
+            """
+            xend = x
+            y = ymin
+            yend = ymax
+            """,
+            inplace=True,
+        )
         geom_segment.draw_group(data, panel_params, coord, ax, **params)

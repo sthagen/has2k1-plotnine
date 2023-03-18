@@ -1,4 +1,6 @@
-from contextlib import suppress
+from __future__ import annotations
+
+import typing
 
 import numpy as np
 import pandas as pd
@@ -6,7 +8,13 @@ import pandas as pd
 from ..doctools import document
 from ..exceptions import PlotnineError
 from ..mapping.evaluation import after_stat
+from ..scales.scale import scale_continuous
 from .stat import stat
+
+if typing.TYPE_CHECKING:
+    from typing import Callable
+
+    from plotnine.typing import FloatArrayLike
 
 
 @document
@@ -42,26 +50,33 @@ class stat_function(stat):
         'y'  # Points evaluated at x
     """
 
-    DEFAULT_PARAMS = {'geom': 'path', 'position': 'identity',
-                      'na_rm': False,
-                      'fun': None, 'n': 101, 'args': None,
-                      'xlim': None}
+    DEFAULT_PARAMS = {
+        "geom": "path",
+        "position": "identity",
+        "na_rm": False,
+        "fun": None,
+        "n": 101,
+        "args": None,
+        "xlim": None,
+    }
 
-    DEFAULT_AES = {'y': after_stat('y')}
-    CREATES = {'y'}
+    DEFAULT_AES = {"y": after_stat("y")}
+    CREATES = {"y"}
 
     def __init__(self, mapping=None, data=None, **kwargs):
         if data is None:
-            def _data_func(df):
+
+            def _data_func(df: pd.DataFrame) -> pd.DataFrame:
                 if df.empty:
-                    df = pd.DataFrame({'group': [1]})
+                    df = pd.DataFrame({"group": [1]})
                 return df
+
             data = _data_func
 
         super().__init__(mapping, data, **kwargs)
 
     def setup_params(self, data):
-        if not callable(self.params['fun']):
+        if not callable(self.params["fun"]):
             raise PlotnineError(
                 "stat_function requires parameter 'fun' to be "
                 "a function or any other callable object"
@@ -70,29 +85,37 @@ class stat_function(stat):
 
     @classmethod
     def compute_group(cls, data, scales, **params):
-        fun = params['fun']
-        n = params['n']
-        args = params['args']
-        xlim = params['xlim']
+        fun: Callable[..., FloatArrayLike] = params["fun"]  # pyright: ignore
+        n = params["n"]
+        args = params["args"]
+        xlim = params["xlim"]
         range_x = xlim or scales.x.dimension((0, 0))
         old_fun = fun
+
         if isinstance(args, (list, tuple)):
+
             def fun(x):
                 return old_fun(x, *args)
+
         elif isinstance(args, dict):
+
             def fun(x):
                 return old_fun(x, **args)
+
         elif args is not None:
+
             def fun(x):
                 return old_fun(x, args)
+
         else:
+
             def fun(x):
                 return old_fun(x)
 
         x = np.linspace(range_x[0], range_x[1], n)
 
         # continuous scale
-        with suppress(AttributeError):
+        if isinstance(scales.x, scale_continuous):
             x = scales.x.trans.inverse(x)
 
         # We know these can handle array-likes
@@ -101,5 +124,5 @@ class stat_function(stat):
         else:
             y = [fun(val) for val in x]
 
-        new_data = pd.DataFrame({'x': x, 'y': y})
+        new_data = pd.DataFrame({"x": x, "y": y})
         return new_data

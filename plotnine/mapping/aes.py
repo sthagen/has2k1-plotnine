@@ -5,38 +5,63 @@ from collections.abc import Iterable
 from contextlib import suppress
 from copy import deepcopy
 from dataclasses import fields
-from typing import Any, Dict
+from typing import Any, Dict, overload
 
 import pandas as pd
 
 from ..iapi import labels_view
 from .evaluation import after_stat, stage
 
-__all__ = ['aes']
+__all__ = ["aes"]
 
-X_AESTHETICS = {'x', 'xmin', 'xmax', 'xend', 'xintercept'}
-Y_AESTHETICS = {'y', 'ymin', 'ymax', 'yend', 'yintercept'}
+X_AESTHETICS = {"x", "xmin", "xmax", "xend", "xintercept"}
+Y_AESTHETICS = {"y", "ymin", "ymax", "yend", "yintercept"}
 
 ALL_AESTHETICS = {
-    'alpha', 'angle', 'color', 'colour', 'fill', 'group', 'intercept',
-    'label', 'lineheight', 'linetype', 'lower', 'middle', 'radius',
-    'sample', 'shape', 'size', 'slope', 'stroke', 'upper', 'weight',
+    "alpha",
+    "angle",
+    "color",
+    "colour",
+    "fill",
+    "group",
+    "intercept",
+    "label",
+    "lineheight",
+    "linetype",
+    "lower",
+    "middle",
+    "radius",
+    "sample",
+    "shape",
+    "size",
+    "slope",
+    "stroke",
+    "upper",
+    "weight",
     *X_AESTHETICS,
-    *Y_AESTHETICS
+    *Y_AESTHETICS,
 }
 
 POSITION_AESTHETICS = X_AESTHETICS | Y_AESTHETICS
 
 SCALED_AESTHETICS = {
-    'x', 'y', 'alpha', 'color', 'colour', 'fill',
-    'linetype', 'shape', 'size', 'stroke'
+    "x",
+    "y",
+    "alpha",
+    "color",
+    "colour",
+    "fill",
+    "linetype",
+    "shape",
+    "size",
+    "stroke",
 }
 
 NO_GROUP = -1
 
 # Aesthetics modifying searchers, DEPRECATED
-STAT_RE = re.compile(r'\bstat\(')
-DOTS_RE = re.compile(r'\.\.([a-zA-Z0-9_]+)\.\.')
+STAT_RE = re.compile(r"\bstat\(")
+DOTS_RE = re.compile(r"\.\.([a-zA-Z0-9_]+)\.\.")
 
 
 class aes(Dict[str, Any]):
@@ -157,7 +182,7 @@ class aes(Dict[str, Any]):
 
     def __init__(self, *args, **kwargs):
         kwargs = rename_aesthetics(kwargs)
-        kwargs.update(zip(('x', 'y'), args))
+        kwargs.update(zip(("x", "y"), args))
         kwargs = self._convert_deprecated_expr(kwargs)
         self.update(kwargs)
 
@@ -270,7 +295,19 @@ class aes(Dict[str, Any]):
         return new
 
 
-def rename_aesthetics(obj):
+@overload
+def rename_aesthetics(obj: list[str]) -> list[str]:
+    ...
+
+
+@overload
+def rename_aesthetics(obj: dict[str, Any]) -> dict[str, Any]:
+    ...
+
+
+def rename_aesthetics(
+    obj: list[str] | dict[str, Any]
+) -> list[str] | dict[str, Any]:
     """
     Rename aesthetics in obj
 
@@ -286,11 +323,11 @@ def rename_aesthetics(obj):
     """
     if isinstance(obj, dict):
         for name in tuple(obj.keys()):
-            new_name = name.replace('colour', 'color')
+            new_name = name.replace("colour", "color")
             if name != new_name:
                 obj[new_name] = obj.pop(name)
     else:
-        obj = [name.replace('colour', 'color') for name in obj]
+        obj = [name.replace("colour", "color") for name in obj]
 
     return obj
 
@@ -368,6 +405,7 @@ def strip_stat(value):
     >>> strip_stat(4)
     4
     """
+
     def strip_hanging_closing_parens(s):
         """
         Remove leftover  parens
@@ -377,9 +415,9 @@ def strip_stat(value):
         stack = 0
         idx = []
         for i, c in enumerate(s):
-            if c == '(':
+            if c == "(":
                 stack += 1
-            elif c == ')':
+            elif c == ")":
                 stack -= 1
                 if stack < 0:
                     idx.append(i)
@@ -389,8 +427,8 @@ def strip_stat(value):
 
     with suppress(TypeError):
         if STAT_RE.search(value):
-            value = re.sub(r'\bstat\(', '', value)
-            value = ''.join(strip_hanging_closing_parens(value))
+            value = re.sub(r"\bstat\(", "", value)
+            value = "".join(strip_hanging_closing_parens(value))
 
     return value
 
@@ -411,7 +449,7 @@ def strip_dots(value):
         Aesthetic value with the dots removed.
     """
     with suppress(TypeError):
-        value = DOTS_RE.sub(r'\1', value)
+        value = DOTS_RE.sub(r"\1", value)
     return value
 
 
@@ -437,10 +475,10 @@ def aes_to_scale(var):
     """
     Look up the scale that should be used for a given aesthetic
     """
-    if var in {'x', 'xmin', 'xmax', 'xend', 'xintercept'}:
-        var = 'x'
-    elif var in {'y', 'ymin', 'ymax', 'yend', 'yintercept'}:
-        var = 'y'
+    if var in {"x", "xmin", "xmax", "xend", "xintercept"}:
+        var = "x"
+    elif var in {"y", "ymin", "ymax", "yend", "yintercept"}:
+        var = "y"
     return var
 
 
@@ -449,24 +487,25 @@ def is_position_aes(vars_):
     Figure out if an aesthetic is a position aesthetic or not
     """
     try:
-        return all([aes_to_scale(v) in {'x', 'y'} for v in vars_])
+        return all([aes_to_scale(v) in {"x", "y"} for v in vars_])
     except TypeError:
-        return aes_to_scale(vars_) in {'x', 'y'}
+        return aes_to_scale(vars_) in {"x", "y"}
 
 
 def make_labels(mapping: dict[str, Any] | aes) -> labels_view:
     """
     Convert aesthetic mapping into text labels
     """
-    def _nice_label(value: Any) -> str:
+
+    def _nice_label(value: Any) -> str | None:
         if isinstance(value, pd.Series):
-            return value.name
+            return value.name  # pyright: ignore
         elif not isinstance(value, Iterable) or isinstance(value, str):
             return str(value)
         else:
             return None
 
-    def _make_label(ae: str, value: Any) -> str:
+    def _make_label(ae: str, value: Any) -> str | None:
         if not isinstance(value, stage):
             return _nice_label(value)
         elif value.start is None:
@@ -484,11 +523,13 @@ def make_labels(mapping: dict[str, Any] | aes) -> labels_view:
                 return _nice_label(value)
 
     valid_names = {f.name for f in fields(labels_view)}
-    return labels_view(**{
-        str(ae): _make_label(ae, label)
-        for ae, label in mapping.items()
-        if ae in valid_names
-    })
+    return labels_view(
+        **{
+            str(ae): _make_label(ae, label)
+            for ae, label in mapping.items()
+            if ae in valid_names
+        }
+    )
 
 
 def is_valid_aesthetic(value, ae):
@@ -512,43 +553,59 @@ def is_valid_aesthetic(value, ae):
     There are no guarantees that he value is spot on
     valid.
     """
-    if ae == 'linetype':
-        named = {'solid', 'dashed', 'dashdot', 'dotted',
-                 '_', '--', '-.', ':', 'None', ' ', ''}
+    if ae == "linetype":
+        named = {
+            "solid",
+            "dashed",
+            "dashdot",
+            "dotted",
+            "_",
+            "--",
+            "-.",
+            ":",
+            "None",
+            " ",
+            "",
+        }
         if value in named:
             return True
 
         # tuple of the form (offset, (on, off, on, off, ...))
         # e.g (0, (1, 2))
-        conditions = [isinstance(value, tuple),
-                      isinstance(value[0], int),
-                      isinstance(value[1], tuple),
-                      len(value[1]) % 2 == 0,
-                      all(isinstance(x, int) for x in value[1])]
+        conditions = [
+            isinstance(value, tuple),
+            isinstance(value[0], int),
+            isinstance(value[1], tuple),
+            len(value[1]) % 2 == 0,
+            all(isinstance(x, int) for x in value[1]),
+        ]
         if all(conditions):
             return True
         return False
 
-    elif ae == 'shape':
+    elif ae == "shape":
         if isinstance(value, str):
             return True
 
         # tuple of the form (numsides, style, angle)
         # where style is in the range [0, 3]
         # e.g (4, 1, 45)
-        conditions = [isinstance(value, tuple),
-                      all(isinstance(x, int) for x in value),
-                      0 <= value[1] < 3]
+        conditions = [
+            isinstance(value, tuple),
+            all(isinstance(x, int) for x in value),
+            0 <= value[1] < 3,
+        ]
         if all(conditions):
             return True
         return False
 
-    elif ae in {'color', 'fill'}:
+    elif ae in {"color", "fill"}:
         if isinstance(value, str):
             return True
         with suppress(TypeError):
-            if (isinstance(value, (tuple, list)) and
-                    all(0 <= x <= 1 for x in value)):
+            if isinstance(value, (tuple, list)) and all(
+                0 <= x <= 1 for x in value
+            ):
                 return True
         return False
 
@@ -574,4 +631,4 @@ def has_groups(data):
     """
     # If any row in the group column is equal to NO_GROUP, then
     # the data all of them are and the data has no groups
-    return data.loc[0, 'group'] != NO_GROUP
+    return data.loc[0, "group"] != NO_GROUP

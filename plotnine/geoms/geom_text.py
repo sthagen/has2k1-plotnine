@@ -22,13 +22,10 @@ from .geom import geom
 if typing.TYPE_CHECKING:
     from typing import Any
 
-    import matplotlib as mpl
     import pandas as pd
 
-    import plotnine as p9
-
-    from ..mapping import aes
-    from ..typing import DataLike
+    from plotnine.iapi import panel_view
+    from plotnine.typing import Aes, Axes, Coord, DataLike, DrawingArea, Layer
 
 
 # Note: hjust & vjust are parameters instead of aesthetics
@@ -86,6 +83,7 @@ class geom_text(geom):
     matplotlib.patheffects
 
     """
+
     _aesthetics_doc = """
     {aesthetics_table}
 
@@ -98,34 +96,47 @@ class geom_text(geom):
         Vertical alignment. One of *top*, *center*, *bottom*, *baseline*.
 
     """
-    DEFAULT_AES = {'alpha': 1, 'angle': 0, 'color': 'black',
-                   'size': 11, 'lineheight': 1.2, 'ha': 'center',
-                   'va': 'center'}
-    REQUIRED_AES = {'label', 'x', 'y'}
-    DEFAULT_PARAMS = {'stat': 'identity', 'position': 'identity',
-                      'na_rm': False, 'parse': False,
-                      'family': None, 'fontweight': 'normal',
-                      'fontstyle': 'normal', 'nudge_x': 0, 'nudge_y': 0,
-                      'adjust_text': None,
-                      'format_string': None,
-                      'path_effects': None}
+    DEFAULT_AES = {
+        "alpha": 1,
+        "angle": 0,
+        "color": "black",
+        "size": 11,
+        "lineheight": 1.2,
+        "ha": "center",
+        "va": "center",
+    }
+    REQUIRED_AES = {"label", "x", "y"}
+    DEFAULT_PARAMS = {
+        "stat": "identity",
+        "position": "identity",
+        "na_rm": False,
+        "parse": False,
+        "family": None,
+        "fontweight": "normal",
+        "fontstyle": "normal",
+        "nudge_x": 0,
+        "nudge_y": 0,
+        "adjust_text": None,
+        "format_string": None,
+        "path_effects": None,
+    }
 
     def __init__(
         self,
-        mapping: aes | None = None,
+        mapping: Aes | None = None,
         data: DataLike | None = None,
-        **kwargs: Any
-    ) -> None:
+        **kwargs: Any,
+    ):
         data, mapping = order_as_data_mapping(data, mapping)
         nudge_kwargs = {}
-        adjust_text = kwargs.get('adjust_text', None)
+        adjust_text = kwargs.get("adjust_text", None)
         if adjust_text is None:
             with suppress(KeyError):
-                nudge_kwargs['x'] = kwargs['nudge_x']
+                nudge_kwargs["x"] = kwargs["nudge_x"]
             with suppress(KeyError):
-                nudge_kwargs['y'] = kwargs['nudge_y']
+                nudge_kwargs["y"] = kwargs["nudge_y"]
             if nudge_kwargs:
-                kwargs['position'] = position_nudge(**nudge_kwargs)
+                kwargs["position"] = position_nudge(**nudge_kwargs)
         elif not HAS_ADJUST_TEXT:
             raise PlotnineError(
                 "To use adjust_text you must install the adjustText "
@@ -133,91 +144,92 @@ class geom_text(geom):
             )
 
         # Accomodate the old names
-        if mapping and 'hjust' in mapping:
-            mapping['ha'] = mapping.pop('hjust')
+        if mapping and "hjust" in mapping:
+            mapping["ha"] = mapping.pop("hjust")
 
-        if mapping and 'vjust' in mapping:
-            mapping['va'] = mapping.pop('vjust')
+        if mapping and "vjust" in mapping:
+            mapping["va"] = mapping.pop("vjust")
 
         geom.__init__(self, mapping, data, **kwargs)
 
     def setup_data(self, data: pd.DataFrame) -> pd.DataFrame:
-        parse = self.params['parse']
-        fmt = self.params['format_string']
+        parse = self.params["parse"]
+        fmt = self.params["format_string"]
 
         # format
         if fmt:
-            data['label'] = [fmt.format(l) for l in data['label']]
+            data["label"] = [fmt.format(l) for l in data["label"]]
 
         # Parse latex
         if parse:
-            data['label'] = [f'${l}$' for l in data['label']]
+            data["label"] = [f"${l}$" for l in data["label"]]
 
         return data
 
     def draw_panel(
         self,
         data: pd.DataFrame,
-        panel_params: p9.iapi.panel_view,
-        coord: p9.coords.coord.coord,
-        ax: mpl.axes.Axes,
-        **params: Any
-    ) -> None:
+        panel_params: panel_view,
+        coord: Coord,
+        ax: Axes,
+        **params: Any,
+    ):
         super().draw_panel(data, panel_params, coord, ax, **params)
 
     @staticmethod
     def draw_group(
         data: pd.DataFrame,
-        panel_params: p9.iapi.panel_view,
-        coord: p9.coords.coord.coord,
-        ax: mpl.axes.Axes,
-        **params: Any
-    ) -> None:
+        panel_params: panel_view,
+        coord: Coord,
+        ax: Axes,
+        **params: Any,
+    ):
         data = coord.transform(data, panel_params)
 
         # Bind color and alpha
-        color = to_rgba(data['color'], data['alpha'])
+        color = to_rgba(data["color"], data["alpha"])
 
         # Create a dataframe for the plotting data required
         # by ax.text
-        df = data[['x', 'y', 'size']].copy()
-        df['s'] = data['label']
-        df['rotation'] = data['angle']
-        df['linespacing'] = data['lineheight']
-        df['color'] = color
-        df['ha'] = data['ha']
-        df['va'] = data['va']
-        df['family'] = params['family']
-        df['fontweight'] = params['fontweight']
-        df['fontstyle'] = params['fontstyle']
-        df['zorder'] = params['zorder']
-        df['rasterized'] = params['raster']
-        df['clip_on'] = True
+        df = data[["x", "y", "size"]].copy()
+        df["s"] = data["label"]
+        df["rotation"] = data["angle"]
+        df["linespacing"] = data["lineheight"]
+        df["color"] = color
+        df["ha"] = data["ha"]
+        df["va"] = data["va"]
+        df["family"] = params["family"]
+        df["fontweight"] = params["fontweight"]
+        df["fontstyle"] = params["fontstyle"]
+        df["zorder"] = params["zorder"]
+        df["rasterized"] = params["raster"]
+        df["clip_on"] = True
 
         # 'boxstyle' indicates geom_label so we need an MPL bbox
-        draw_label = 'boxstyle' in params
+        draw_label = "boxstyle" in params
         if draw_label:
-            fill = to_rgba(data.pop('fill'), data['alpha'])
+            fill = to_rgba(data.pop("fill"), data["alpha"])
             if isinstance(fill, tuple):
-                fill = [list(fill)] * len(data['x'])
-            df['facecolor'] = fill
+                fill = [list(fill)] * len(data["x"])
+            df["facecolor"] = fill
 
-            if params['boxstyle'] in ('round', 'round4'):
-                boxstyle = '{},pad={},rounding_size={}'.format(
-                    params['boxstyle'],
-                    params['label_padding'],
-                    params['label_r'])
-            elif params['boxstyle'] in ('roundtooth', 'sawtooth'):
-                boxstyle = '{},pad={},tooth_size={}'.format(
-                    params['boxstyle'],
-                    params['label_padding'],
-                    params['tooth_size'])
+            if params["boxstyle"] in ("round", "round4"):
+                boxstyle = "{},pad={},rounding_size={}".format(
+                    params["boxstyle"],
+                    params["label_padding"],
+                    params["label_r"],
+                )
+            elif params["boxstyle"] in ("roundtooth", "sawtooth"):
+                boxstyle = "{},pad={},tooth_size={}".format(
+                    params["boxstyle"],
+                    params["label_padding"],
+                    params["tooth_size"],
+                )
             else:
-                boxstyle = '{},pad={}'.format(
-                    params['boxstyle'],
-                    params['label_padding'])
-            bbox = {'linewidth': params['label_size'],
-                    'boxstyle': boxstyle}
+                boxstyle = "{},pad={}".format(
+                    params["boxstyle"], params["label_padding"]
+                )
+            bbox = {"linewidth": params["label_size"], "boxstyle": boxstyle}
         else:
             bbox = {}
 
@@ -225,42 +237,35 @@ class geom_text(geom):
 
         # For labels add a bbox
         for i in range(len(data)):
-            kw = df.iloc[i].to_dict()
+            kw: dict["str", Any] = df.iloc[i].to_dict()
             if draw_label:
-                kw['bbox'] = bbox
-                kw['bbox']['edgecolor'] = params['boxcolor'] or kw['color']
-                kw['bbox']['facecolor'] = kw.pop('facecolor')
+                kw["bbox"] = bbox
+                kw["bbox"]["edgecolor"] = params["boxcolor"] or kw["color"]
+                kw["bbox"]["facecolor"] = kw.pop("facecolor")
             text_elem = ax.text(**kw)
             texts.append(text_elem)
-            if params['path_effects']:
-                text_elem.set_path_effects(params['path_effects'])
+            if params["path_effects"]:
+                text_elem.set_path_effects(params["path_effects"])
 
-        _adjust = params['adjust_text']
+        _adjust = params["adjust_text"]
         if _adjust:
-            if params['zorder'] == 1:
+            if params["zorder"] == 1:
                 warn(
                     "For better results with adjust_text, it should "
                     "not be the first layer or the only layer.",
-                    PlotnineWarning
+                    PlotnineWarning,
                 )
 
-            arrowprops = _adjust.pop('arrowprops', {})
-            if 'color' not in arrowprops:
-                arrowprops['color'] = color[0]
+            arrowprops = _adjust.pop("arrowprops", {})
+            if "color" not in arrowprops:
+                arrowprops["color"] = color[0]
 
-            adjust_text(
-                texts,
-                ax=ax,
-                arrowprops=arrowprops,
-                **_adjust
-            )
+            adjust_text(texts, ax=ax, arrowprops=arrowprops, **_adjust)
 
     @staticmethod
     def draw_legend(
-        data: pd.Series[Any],
-        da: mpl.patches.DrawingArea,
-        lyr: p9.layer.layer
-    ) -> mpl.patches.DrawingArea:
+        data: pd.Series[Any], da: DrawingArea, lyr: Layer
+    ) -> DrawingArea:
         """
         Draw letter 'a' in the box
 
@@ -279,16 +284,16 @@ class geom_text(geom):
         """
         assert lyr.geom is not None
         key = Text(
-            x=0.5*da.width,
-            y=0.5*da.height,
-            text='a',
-            alpha=data['alpha'],
-            size=data['size'],
-            family=lyr.geom.params['family'],
-            color=data['color'],
-            rotation=data['angle'],
-            horizontalalignment='center',
-            verticalalignment='center'
+            x=0.5 * da.width,  # pyright: ignore[reportGeneralTypeIssues]
+            y=0.5 * da.height,  # pyright: ignore[reportGeneralTypeIssues]
+            text="a",
+            alpha=data["alpha"],
+            size=data["size"],
+            family=lyr.geom.params["family"],
+            color=data["color"],
+            rotation=data["angle"],
+            horizontalalignment="center",
+            verticalalignment="center",
         )
         da.add_artist(key)
         return da

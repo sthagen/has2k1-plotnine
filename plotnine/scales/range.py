@@ -7,21 +7,24 @@ from mizani.scale import scale_continuous, scale_discrete
 if typing.TYPE_CHECKING:
     from typing import Any, Sequence
 
+    from plotnine.typing import TupleFloat2
+
 
 class Range:
     """
     Base class for all ranges
     """
-    #: Holds the range information after training
-    range: tuple[float, float]
 
-    def reset(self) -> None:
+    #: Holds the range information after training
+    range: TupleFloat2
+
+    def reset(self):
         """
         Reset range
         """
         del self.range
 
-    def train(self, x: Sequence[Any]) -> None:
+    def train(self, x: Sequence[Any]):
         """
         Train range
         """
@@ -39,12 +42,14 @@ class RangeContinuous(Range):
     Continuous Range
     """
 
-    def train(self, x: Sequence[Any]) -> None:
+    range: TupleFloat2
+
+    def train(self, x: Sequence[Any]):
         """
         Train continuous range
         """
         rng = None if self.is_empty() else self.range
-        self.range = scale_continuous.train(x, rng)
+        self.range = scale_continuous.train(x, rng)  # pyright: ignore
 
 
 class RangeDiscrete(Range):
@@ -52,14 +57,13 @@ class RangeDiscrete(Range):
     Discrete Range
     """
 
-    def train(
-        self,
-        x: Sequence[Any],
-        drop: bool = False,
-        na_rm: bool = False
-    ) -> None:
+    range: Sequence[Any]
+
+    def train(self, x: Sequence[Any], drop: bool = False, na_rm: bool = False):
         """
         Train discrete range
         """
         rng = None if self.is_empty() else self.range
-        self.range = scale_discrete.train(x, rng, drop, na_rm=na_rm)
+        self.range = scale_discrete.train(
+            x, rng, drop, na_rm=na_rm
+        )  # pyright: ignore

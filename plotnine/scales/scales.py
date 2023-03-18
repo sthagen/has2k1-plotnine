@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import itertools
+import typing
 from contextlib import suppress
 from typing import List
 from warnings import warn
@@ -12,6 +13,15 @@ from ..exceptions import PlotnineError, PlotnineWarning
 from ..mapping.aes import aes_to_scale
 from ..utils import Registry, array_kind
 from .scale import scale
+
+if typing.TYPE_CHECKING:
+    import pandas as pd
+
+    from plotnine.typing import (
+        Scale,
+        ScaledAestheticsName,
+    )
+
 
 _TPL_DUPLICATE_SCALE = """\
 Scale for '{0}' is already present.
@@ -28,7 +38,7 @@ class Scales(List[scale]):
     the ggplot object scales
     """
 
-    def append(self, sc):
+    def append(self, sc: Scale):
         """
         Add / Update scale
 
@@ -43,7 +53,7 @@ class Scales(List[scale]):
         # super() does not work well with reloads
         list.append(self, sc)
 
-    def find(self, aesthetic):
+    def find(self, aesthetic: ScaledAestheticsName) -> list[bool]:
         """
         Find scales for given aesthetic
 
@@ -58,7 +68,7 @@ class Scales(List[scale]):
         lst = [s.aesthetics for s in self]
         return list(itertools.chain(*lst))
 
-    def get_scales(self, aesthetic):
+    def get_scales(self, aesthetic: ScaledAestheticsName) -> Scale | None:
         """
         Return the scale for the aesthetic or None if there isn't one
 
@@ -75,33 +85,35 @@ class Scales(List[scale]):
             return None
 
     @property
-    def x(self):
+    def x(self) -> Scale | None:
         """
         Return x scale
         """
-        return self.get_scales('x')
+        return self.get_scales("x")
 
     @property
-    def y(self):
+    def y(self) -> Scale | None:
         """
         Return y scale
         """
-        return self.get_scales('y')
+        return self.get_scales("y")
 
-    def non_position_scales(self):
+    def non_position_scales(self) -> Scales:
         """
         Return a list of any non-position scales
         """
-        l = [s for s in self
-             if not ('x' in s.aesthetics) and not ('y' in s.aesthetics)]
+        l = [
+            s
+            for s in self
+            if "x" not in s.aesthetics and "y" not in s.aesthetics
+        ]
         return Scales(l)
 
-    def position_scales(self):
+    def position_scales(self) -> Scales:
         """
         Return a list of the position scales that are present
         """
-        l = [s for s in self
-             if ('x' in s.aesthetics) or ('y' in s.aesthetics)]
+        l = [s for s in self if ("x" in s.aesthetics) or ("y" in s.aesthetics)]
         return Scales(l)
 
     def train(self, data, vars, idx):
@@ -128,7 +140,7 @@ class Scales(List[scale]):
         idx = np.asarray(idx)
         for col in vars:
             for i, sc in enumerate(self, start=1):
-                bool_idx = (i == idx)
+                bool_idx = i == idx
                 sc.train(data.loc[bool_idx, col])
 
     def map(self, data, vars, idx):
@@ -165,7 +177,7 @@ class Scales(List[scale]):
             if use_df:
                 discrete_cols.append(col)
             for i, sc in enumerate(self, start=1):
-                bool_idx = (i == idx)
+                bool_idx = i == idx
                 results = sc.map(data.loc[bool_idx, col])
                 if use_df:
                     df.loc[bool_idx, col] = results
@@ -182,19 +194,18 @@ class Scales(List[scale]):
         for sc in self:
             sc.reset()
 
-    def train_df(self, df, drop=False):
+    def train_df(self, df: pd.DataFrame, drop: bool = False):
         """
         Train scales from a dataframe
         """
         if (len(df) == 0) or (len(self) == 0):
-            return df
+            return
 
         # Each scale trains the columns it understands
         for sc in self:
             sc.train_df(df)
-        return df
 
-    def map_df(self, df):
+    def map_df(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Map values from a dataframe.
 
@@ -208,7 +219,7 @@ class Scales(List[scale]):
             df = sc.map_df(df)
         return df
 
-    def transform_df(self, df):
+    def transform_df(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Transform values in a dataframe.
 
@@ -279,7 +290,7 @@ class Scales(List[scale]):
         aesthetics = set(aesthetics) - set(self.input())
 
         for ae in aesthetics:
-            scale_name = f'scale_{ae}_continuous'
+            scale_name = f"scale_{ae}_continuous"
             scale_f = Registry[scale_name]
             self.append(scale_f())
 
@@ -289,20 +300,22 @@ def scale_type(series):
     Get a suitable scale for the series
     """
     if array_kind.continuous(series):
-        stype = 'continuous'
+        stype = "continuous"
     elif array_kind.ordinal(series):
-        stype = 'ordinal'
+        stype = "ordinal"
     elif array_kind.discrete(series):
-        stype = 'discrete'
+        stype = "discrete"
     elif array_kind.datetime(series):
-        stype = 'datetime'
+        stype = "datetime"
     elif array_kind.timedelta(series):
-        stype = 'timedelta'
+        stype = "timedelta"
     else:
-        msg = ("Don't know how to automatically pick scale for "
-               "object of type {}. Defaulting to 'continuous'")
+        msg = (
+            "Don't know how to automatically pick scale for "
+            "object of type {}. Defaulting to 'continuous'"
+        )
         warn(msg.format(series.dtype), PlotnineWarning)
-        stype = 'continuous'
+        stype = "continuous"
     return stype
 
 
@@ -319,10 +332,10 @@ def make_scale(ae, series, *args, **kwargs):
     stype = scale_type(series)
 
     # filter parameters by scale type
-    if stype in ('discrete', 'ordinal'):
+    if stype in ("discrete", "ordinal"):
         with suppress(KeyError):
-            del kwargs['trans']
+            del kwargs["trans"]
 
-    scale_name = f'scale_{ae}_{stype}'
+    scale_name = f"scale_{ae}_{stype}"
     scale_klass = Registry[scale_name]
     return scale_klass(*args, **kwargs)
