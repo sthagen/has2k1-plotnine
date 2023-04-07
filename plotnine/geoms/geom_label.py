@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import typing
 
-from matplotlib.patches import Rectangle
-
 from ..doctools import document
+from ..utils import to_rgba
 from .geom_text import geom_text
 
 if typing.TYPE_CHECKING:
@@ -102,14 +101,17 @@ class geom_label(geom_text):
         -------
         out : DrawingArea
         """
+        from matplotlib.patches import Rectangle
+
+        fill = to_rgba(data["fill"], data["alpha"])
+
         if data["fill"]:
             rect = Rectangle(
                 (0, 0),
                 width=da.width,
                 height=da.height,
                 linewidth=0,
-                alpha=data["alpha"],
-                facecolor=data["fill"],
+                facecolor=fill,
                 capstyle="projecting",
             )
             da.add_artist(rect)

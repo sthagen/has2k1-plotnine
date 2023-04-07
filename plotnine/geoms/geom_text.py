@@ -4,15 +4,6 @@ import typing
 from contextlib import suppress
 from warnings import warn
 
-from matplotlib.text import Text
-
-try:
-    from adjustText import adjust_text
-except ImportError:
-    HAS_ADJUST_TEXT = False
-else:
-    HAS_ADJUST_TEXT = True
-
 from ..doctools import document
 from ..exceptions import PlotnineError, PlotnineWarning
 from ..positions import position_nudge
@@ -137,11 +128,8 @@ class geom_text(geom):
                 nudge_kwargs["y"] = kwargs["nudge_y"]
             if nudge_kwargs:
                 kwargs["position"] = position_nudge(**nudge_kwargs)
-        elif not HAS_ADJUST_TEXT:
-            raise PlotnineError(
-                "To use adjust_text you must install the adjustText "
-                "package."
-            )
+        else:
+            check_adjust_text()
 
         # Accomodate the old names
         if mapping and "hjust" in mapping:
@@ -249,6 +237,8 @@ class geom_text(geom):
 
         _adjust = params["adjust_text"]
         if _adjust:
+            from adjustText import adjust_text
+
             if params["zorder"] == 1:
                 warn(
                     "For better results with adjust_text, it should "
@@ -282,18 +272,29 @@ class geom_text(geom):
         -------
         out : DrawingArea
         """
-        assert lyr.geom is not None
+        from matplotlib.text import Text
+
+        color = to_rgba(data["color"], data["alpha"])
+
         key = Text(
             x=0.5 * da.width,  # pyright: ignore[reportGeneralTypeIssues]
             y=0.5 * da.height,  # pyright: ignore[reportGeneralTypeIssues]
             text="a",
-            alpha=data["alpha"],
             size=data["size"],
             family=lyr.geom.params["family"],
-            color=data["color"],
+            color=color,
             rotation=data["angle"],
             horizontalalignment="center",
             verticalalignment="center",
         )
         da.add_artist(key)
         return da
+
+
+def check_adjust_text():
+    try:
+        pass
+    except ImportError as err:
+        raise PlotnineError(
+            "To use adjust_text you must install the adjustText package."
+        ) from err

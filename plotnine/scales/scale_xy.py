@@ -5,12 +5,11 @@ from itertools import chain
 
 import numpy as np
 import pandas as pd
-from mizani.bounds import expand_range_distinct
 
 from ..doctools import document
 from ..exceptions import PlotnineError
 from ..iapi import range_view
-from ..utils import alias, array_kind, identity, match
+from ..utils import alias, array_kind, match
 from ._expand import expand_range
 from .range import RangeContinuous
 from .scale import scale_continuous, scale_datetime, scale_discrete
@@ -49,10 +48,6 @@ class scale_position_discrete(scale_discrete):
 
     # All positions have no guide
     guide = None
-
-    # After transformations all position values map
-    # to themselves
-    palette = staticmethod(identity)
 
     # Keeps two ranges, range and range_c
     range_c: RangeContinuous
@@ -132,6 +127,8 @@ class scale_position_discrete(scale_discrete):
 
         Unlike limits, this always returns a numeric vector of length 2
         """
+        from mizani.bounds import expand_range_distinct
+
         if limits is None:
             limits = self.limits
 
@@ -216,10 +213,6 @@ class scale_position_continuous(scale_continuous):
 
     # All positions have no guide
     guide = None
-
-    # After transformations all position values map
-    # to themselves
-    palette = staticmethod(identity)
 
     def map(self, series, limits=None):
         # Position aesthetics don't map, because the coordinate

@@ -3,14 +3,13 @@ from __future__ import annotations
 import typing
 from warnings import warn
 
-import matplotlib.lines as mlines
 import numpy as np
 import pandas as pd
 
 from ..doctools import document
 from ..exceptions import PlotnineWarning
 from ..mapping import aes
-from ..utils import SIZE_FACTOR, order_as_data_mapping
+from ..utils import SIZE_FACTOR, order_as_data_mapping, to_rgba
 from .geom import geom
 from .geom_segment import geom_segment
 
@@ -117,16 +116,18 @@ class geom_vline(geom):
         -------
         out : DrawingArea
         """
+        from matplotlib.lines import Line2D
+
         x = [0.5 * da.width] * 2
         y = [0, da.height]
         data["size"] *= SIZE_FACTOR
-        key = mlines.Line2D(
+        color = to_rgba(data["color"], data["alpha"])
+        key = Line2D(
             x,
             y,
-            alpha=data["alpha"],
             linestyle=data["linetype"],
             linewidth=data["size"],
-            color=data["color"],
+            color=color,
             solid_capstyle="butt",
             antialiased=False,
         )

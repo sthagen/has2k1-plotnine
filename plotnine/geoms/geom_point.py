@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import typing
 
-import matplotlib.lines as mlines
 import numpy as np
 
 from ..doctools import document
@@ -137,20 +136,23 @@ class geom_point(geom):
         -------
         out : DrawingArea
         """
+        from matplotlib.lines import Line2D
+
         if data["fill"] is None:
             data["fill"] = data["color"]
 
         size = (data["size"] + data["stroke"]) * SIZE_FACTOR
         stroke = data["stroke"] * SIZE_FACTOR
+        fill = to_rgba(data["fill"], data["alpha"])
+        color = to_rgba(data["color"], data["alpha"])
 
-        key = mlines.Line2D(
+        key = Line2D(
             [0.5 * da.width],
             [0.5 * da.height],
-            alpha=data["alpha"],
             marker=data["shape"],
             markersize=size,
-            markerfacecolor=data["fill"],
-            markeredgecolor=data["color"],
+            markerfacecolor=fill,
+            markeredgecolor=color,
             markeredgewidth=stroke,
         )
         da.add_artist(key)

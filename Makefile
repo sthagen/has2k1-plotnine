@@ -1,4 +1,4 @@
-.PHONY: clean-pyc clean-build doc clean visualize-tests
+.PHONY: clean-pyc clean-build doc clean visualize-tests build
 BROWSER := python -mwebbrowser
 
 help:
@@ -15,19 +15,14 @@ help:
 	@echo "install - install the package to the active Python's site-packages"
 	@echo "develop - install the package in development mode"
 
-clean: clean-build clean-pyc clean-test
+clean: clean-build clean-cache clean-test
 
 clean-build:
 	rm -fr build/
 	rm -fr dist/
-	rm -fr .eggs/
 	find . -name '*.egg-info' -exec rm -fr {} +
-	find . -name '*.egg' -exec rm -f {} +
 
-clean-pyc:
-	find . -name '*.pyc' -exec rm -f {} +
-	find . -name '*.pyo' -exec rm -f {} +
-	find . -name '*~' -exec rm -f {} +
+clean-cache:
 	find . -name '__pycache__' -exec rm -fr {} +
 
 clean-test:
@@ -36,26 +31,24 @@ clean-test:
 	rm -fr htmlcov/
 	rm -fr tests/result_images/*
 
-update:
-	pip install --upgrade -r requirements/dev.txt
-	pre-commit autoupdate
-
 ruff:
-	ruff plotnine $(args)
+	ruff . $(args)
 
 ruff-isort:
-	ruff --select I001 --quiet plotnine $(args)
+	ruff --select I001 --quiet . $(args)
 
-black:
+format:
 	black . --check
 
-black-fix:
+format-fix:
 	black .
 
 lint: ruff ruff-isort
 
 lint-fix:
 	make lint args="--fix"
+
+fix: format-fix lint-fix
 
 typecheck:
 	pyright
@@ -89,5 +82,9 @@ build: dist
 install: clean
 	pip install ".[extra]"
 
-develop: clean-pyc
+develop: clean-cache
 	pip install -e ".[all]"
+
+develop-update: clean-cache
+	pip install --upgrade -e ".[all]"
+	pre-commit autoupdate
