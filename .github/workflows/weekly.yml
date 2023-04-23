@@ -8,7 +8,6 @@ on:
     - cron: "40 06 * * WED"
 
 jobs:
-  # test plotnine latest, matplotlib latest
   plotnine_latest_matplotlib_latest:
     runs-on: ubuntu-latest
 
@@ -28,9 +27,7 @@ jobs:
         shell: bash
         run: |
           pip install --upgrade pip
-          pip install numpy
-          pip install -i https://test.pypi.org/simple/ "scikit-misc==0.2.0rc3"
-          pip install ".[extra,testing]"
+          pip install ".[extra,test]"
           pip install --upgrade git+https://github.com/matplotlib/matplotlib
 
       - name: Environment Information
@@ -50,7 +47,6 @@ jobs:
           path: result_images/
           if-no-files-found: ignore
 
-  # test plotnine latest, pandas latest
   plotnine_latest_pandas_latest:
     runs-on: ubuntu-latest
 
@@ -70,9 +66,7 @@ jobs:
         shell: bash
         run: |
           pip install --upgrade pip
-          pip install numpy
-          pip install -i https://test.pypi.org/simple/ "scikit-misc==0.2.0rc3"
-          pip install ".[extra,testing]"
+          pip install ".[extra,test]"
           pip install --upgrade git+https://github.com/pandas-dev/pandas
 
       - name: Environment Information
@@ -93,7 +87,6 @@ jobs:
           path: result_images/
           if-no-files-found: ignore
 
-  # test plotnine pypi, matplotlib latest
   plotnine_pypi_matplotlib_latest:
     runs-on: ubuntu-latest
 
@@ -127,9 +120,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install --upgrade git+https://github.com/matplotlib/matplotlib
-          pip install numpy
-          pip install -i https://test.pypi.org/simple/ "scikit-misc==0.2.0rc3"
-          pip install ".[extra,testing]"
+          pip install ".[extra,test]"
 
       - name: Environment Information
         shell: bash
@@ -148,7 +139,6 @@ jobs:
           path: result_images/
           if-no-files-found: ignore
 
-  # test plotnine pypi, pandas latest
   plotnine_pypi_pandas_latest:
     runs-on: ubuntu-latest
 
@@ -182,9 +172,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install --upgrade git+https://github.com/pandas-dev/pandas
-          pip install numpy
-          pip install -i https://test.pypi.org/simple/ "scikit-misc==0.2.0rc3"
-          pip install ".[extra,testing]"
+          pip install ".[extra,test]"
 
       - name: Environment Information
         shell: bash
@@ -202,4 +190,76 @@ jobs:
         with:
           name: result-images
           path: tests/result_images/
+          if-no-files-found: ignore
+
+  typecheck_plotnine_latest_matplotlib_latest:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: [3.11]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Packages
+        shell: bash
+        run: |
+          pip install --upgrade pip
+          pip install ".[extra,typing]"
+          pip install --upgrade git+https://github.com/matplotlib/matplotlib
+
+      - name: Environment Information
+        shell: bash
+        run: |
+          pip list
+
+      - name: Run Tests
+        shell: bash
+        run: |
+          make typecheck
+
+  typecheck_plotnine_latest_pandas_latest:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: [3.11]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Packages
+        shell: bash
+        run: |
+          pip install --upgrade pip
+          pip install ".[extra,typing]"
+          pip install --upgrade git+https://github.com/pandas-dev/pandas
+
+      - name: Environment Information
+        shell: bash
+        run: |
+          pip list
+
+      # to do: think about catching deprecations earlier
+      - name: Run Tests
+        shell: bash
+        run: |
+          make test
+
+      - uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: result-images
+          path: result_images/
           if-no-files-found: ignore
