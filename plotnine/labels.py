@@ -9,8 +9,8 @@ from .mapping.aes import SCALED_AESTHETICS, rename_aesthetics
 if typing.TYPE_CHECKING:
     import plotnine as p9
 
-__all__ = ["xlab", "ylab", "labs", "ggtitle"]
-VALID_LABELS = SCALED_AESTHETICS | {"caption", "title"}
+__all__ = ("xlab", "ylab", "labs", "ggtitle")
+VALID_LABELS = SCALED_AESTHETICS | {"caption", "title", "subtitle"}
 
 
 class labs:

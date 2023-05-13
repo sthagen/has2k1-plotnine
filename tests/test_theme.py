@@ -8,6 +8,7 @@ from plotnine import (
     element_line,
     element_text,
     facet_grid,
+    facet_wrap,
     geom_point,
     ggplot,
     labs,
@@ -27,8 +28,6 @@ from plotnine import (
     theme_xkcd,
 )
 from plotnine.data import mtcars
-
-_theme = theme(subplots_adjust={"right": 0.80})
 
 
 def test_add_complete_complete():
@@ -144,63 +143,63 @@ class TestThemes:
     def test_theme_538(self):
         p = self.g + labs(title="Theme 538") + theme_538()
 
-        assert p + _theme == "theme_538"
+        assert p == "theme_538"
 
     def test_theme_bw(self):
         p = self.g + labs(title="Theme BW") + theme_bw()
 
-        assert p + _theme == "theme_bw"
+        assert p == "theme_bw"
 
     def test_theme_classic(self):
         p = self.g + labs(title="Theme Classic") + theme_classic()
 
-        assert p + _theme == "theme_classic"
+        assert p == "theme_classic"
 
     def test_theme_dark(self):
         p = self.g + labs(title="Theme Dark") + theme_dark()
 
-        assert p + _theme == "theme_dark"
+        assert p == "theme_dark"
 
     def test_theme_gray(self):
         p = self.g + labs(title="Theme Gray") + theme_gray()
 
-        assert p + _theme == "theme_gray"
+        assert p == "theme_gray"
 
     def test_theme_light(self):
         p = self.g + labs(title="Theme Light") + theme_light()
 
-        assert p + _theme == "theme_light"
+        assert p == "theme_light"
 
     def test_theme_linedraw(self):
         p = self.g + labs(title="Theme Linedraw") + theme_linedraw()
 
-        assert p + _theme == "theme_linedraw"
+        assert p == "theme_linedraw"
 
     def test_theme_matplotlib(self):
         p = self.g + labs(title="Theme Matplotlib") + theme_matplotlib()
 
-        assert p + _theme == "theme_matplotlib"
+        assert p == "theme_matplotlib"
 
     def test_theme_minimal(self):
         p = self.g + labs(title="Theme Minimal") + theme_minimal()
 
-        assert p + _theme == "theme_minimal"
+        assert p == "theme_minimal"
 
     def test_theme_tufte(self):
         p = self.g + labs(title="Theme Tufte") + theme_tufte(ticks=False)
 
-        assert p + _theme == "theme_tufte"
+        assert p == "theme_tufte"
 
     @pytest.mark.xfail(reason="fails on github actions")
     def test_theme_seaborn(self):
         p = self.g + labs(title="Theme Seaborn") + theme_seaborn()
 
-        assert p + _theme == "theme_seaborn"
+        assert p == "theme_seaborn"
 
     def test_theme_void(self):
         p = self.g + labs(title="Theme Void") + theme_void()
 
-        assert p + _theme == "theme_void"
+        assert p == "theme_void"
 
     def test_theme_xkcd(self):
         p = (
@@ -214,6 +213,51 @@ class TestThemes:
         if os.environ.get("CI") or os.environ.get("TRAVIS"):
             # Github Actions and Travis do not have the fonts,
             # we still check to catch any other errors
-            assert p + _theme != "theme_gray"
+            assert p != "theme_gray"
         else:
-            assert p + _theme == "theme_xkcd"
+            assert p == "theme_xkcd"
+
+
+class TestLayout:
+    g = (
+        ggplot(mtcars, aes(x="wt", y="mpg", color="factor(gear)"))
+        + geom_point()
+        + labs(  # New
+            x="Weight",
+            y="Miles Per Gallon",
+            title="Relationship between Weight and Fuel Efficiency in Cars",
+            subtitle="Should we be driving lighter cars?",
+            caption=(
+                "The plot shows a negative correlation between car weight\n"
+                "and fuel efficiency, with lighter cars generally achieving\n"
+                "higher miles per gallon"
+            ),
+        )
+    )
+
+    def test_default(self):
+        assert self.g == "default"
+
+    def test_legend_on_top(self):
+        p = self.g + theme(legend_position="top")
+        assert p == "legend_at_top"
+
+    def test_legend_on_the_left(self):
+        p = self.g + theme(legend_position="left")
+        assert p == "legend_on_the_left"
+
+    def test_legend_at_the_bottom(self):
+        p = self.g + theme(legend_position="bottom")
+        assert p == "legend_at_the_bottom"
+
+    def test_facet_grid(self):
+        p = self.g + facet_grid("am ~ gear")
+        assert p == "facet_grid"
+
+    def test_facet_wrap(self):
+        p = self.g + facet_wrap("carb", nrow=2)
+        assert p == "facet_wrap"
+
+    def test_facet_wrap_scales_free(self):
+        p = self.g + facet_wrap("carb", scales="free")
+        assert p == "facet_wrap_scales_free"

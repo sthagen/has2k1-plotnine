@@ -1,4 +1,9 @@
-from typing import Any
+from __future__ import annotations
+
+import typing
+
+if typing.TYPE_CHECKING:
+    from typing import Any
 
 #: Development flag, e.g. set to ``True`` to prevent
 #: the queuing up of figures when errors happen.
@@ -7,9 +12,10 @@ close_all_figures = False
 #: Theme used when none is added to the ggplot object
 current_theme = None
 
-#: The base font family for all text that is part of
-#: the theme
-base_family = "Dejavu Sans"
+#: The base font family for all text that is part of the theme.
+#: Default is sans-serif and one is choosen automatically from
+#: rcParams["font.san-serif"]
+base_family = "sans-serif"
 
 #: Default aspect ratio used by the themes
 aspect_ratio = "auto"
@@ -20,14 +26,9 @@ dpi = 100
 #: Default figure size inches
 figure_size = (640 / dpi, 480 / dpi)
 
-#: Default parameters for how to tune the subplot layout
-# Choosen to match MPL 2.0 defaults
-SUBPLOTS_ADJUST = {
-    "left": 0.125,  # the left side of the subplots of the figure
-    "right": 0.9,  # the right side of the subplots of the figure
-    "bottom": 0.11,  # the bottom of the subplots of the figure
-    "top": 0.88,  # the top of the subplots of the figure
-}
+#: A size that is proportional of the figure width and
+#: is used by some themes to determine other margins
+base_margin = 0.01
 
 
 def get_option(name: str) -> Any:

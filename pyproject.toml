@@ -23,13 +23,13 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Visualization"
 ]
 dependencies = [
-    "matplotlib>=3.5.0",
+    "matplotlib>=3.6.0",
     "mizani>=0.9.0",
     "numpy>=1.23.0",
-    "pandas>=1.3.5",
+    "pandas>=1.5.0",
     "patsy>=0.5.1",
     "scipy>=1.5.0",
-    "statsmodels>=0.13.2",
+    "statsmodels>=0.14.0",
 ]
 requires-python = ">=3.8"
 
@@ -80,6 +80,7 @@ dev = [
 
 typing = [
     "pyright",
+    "ipython",
     "pandas-stubs",
 ]
 
@@ -178,7 +179,7 @@ defineConstant = { DEBUG = true }
 # typeCheckingMode = "strict"
 useLibraryCodeForTypes = true
 reportUnnecessaryTypeIgnoreComment = true
-reportUnsupportedDunderAll = false
+# reportUnsupportedDunderAll = false
 
 
 # Specifies a list of execution environments (see below). Execution
@@ -215,7 +216,7 @@ exclude = [
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 [tool.ruff.per-file-ignores]
-"plotnine/__init__.py" = ["F401", "F403"]
+"plotnine/__init__.py" = ["F403", "F405"]
 "plotnine/typing.py" = ["F401"]
 
 

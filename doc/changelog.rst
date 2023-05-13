@@ -1,9 +1,60 @@
+.. _changelog:
+
 Changelog
 =========
 
-v0.10.2
+v0.12.2
 -------
-(Not yet released)
+(not-released-yet)
+
+Enhancements
+************
+
+- All `__all__` variables are explicitly assigned to help static typecheckers
+  infer module attributes. (:issue:`685`)
+
+
+v0.12.1
+-------
+(2023-05-09)
+
+.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.7919297.svg
+   :target: https://doi.org/10.5281/zenodo.7919297
+
+New Features
+************
+
+- A layout manager. Now you do not have to adjust spacing parameters
+  to prevent objects around the panels from overlapping.
+  Specifically, you can:
+
+  1. Set the legend position to "top", "left" or "bottom"
+  2. Use a large or multiline plot title
+  3. Use a large or multiline plot caption
+  4. Use :class:`~plotnine.facets.facet_wrap` with :py:`scales="free"`
+     :py:`scales="free_x"` or :py:`scales="free_y"`
+
+  You can now also align the `plot_title`, `axis_title_x`, `axis_title_y`
+  and `plot_caption` with respect to the panels. Set these to "left",
+  "right" & "center" for the horizontal flowing text. And "top", "right"
+  & "center" for the vertical flowing text.
+
+  Also, the size of the figure is exactly determined by the theme setting.
+  For example, this:
+
+  .. code-block:: python
+
+     theme(figure_size=(8, 6), dpi=100)
+
+  will create an `800px x 600px` image.
+
+- You can create a ``subtitle`` using :class:`~plotnine.labels.labs` and
+  style it using the ``plot_subtitle`` parameter to :class:`~plotnine.themes.theme`.
+
+  .. code-block:: python
+
+     theme(plot_subtitle=element_text(size=8))
+
 
 Enhancements
 ************
@@ -11,6 +62,20 @@ Enhancements
 - :class:`~plotnine.ggplot` object gained a new method
   :meth:`~plotnine.ggplot.save_helper`. It gives you access to the
   matplotlib figure that will be saved to file.
+
+- When plotting with an ipython interactive backend (e.g. in a
+  jupyter notebook). The default image output is retina. You
+  do not need to run this command.
+
+  .. code-block:: python
+
+     %config InlineBackend.figure_format = "retina"
+
+  Plotnine still respects any values set the user.
+
+- In an interactive setting, after drawing an image. The size of the figure
+  (in pixels) is printed e.g. `<Figure Size: (640 x 480)>`. Previously,
+  something like `<ggplot: (336175301)>` was printed.
 
 API Changes
 ***********
@@ -22,6 +87,20 @@ API Changes
 
 - :meth:`~plotnine.ggplot.draw` no longer accepts the argument
   ``return_ggplot`` and the return value is always a matplolib figure.
+
+- Themeables :meth:`~plotnine.themes.themeable.strip_margin`,
+  :meth:`~plotnine.themes.themeable.strip_margin_x` and
+  :meth:`~plotnine.themes.themeable.strip_margin_y` have been renamed to
+  :meth:`~plotnine.themes.themeable.strip_align`,
+  :meth:`~plotnine.themes.themeable.strip_align_x`
+  :meth:`~plotnine.themes.themeable.strip_align_y` repectively.
+
+- :meth:`~plotnine.themes.themeables.subplots_adjust` has been deprecated.
+  You no longer need to use :py:`theme(subplots_adjust={"right": 0.85})` and
+  the like to make space for the legend or text around the panels.
+  In the future, this will through an error.
+
+- Changed default font-family (san-serif) from DejaVu Sans to Helvetica.
 
 Bug Fixes
 *********
@@ -41,6 +120,13 @@ Bug Fixes
 
 - Fixed legend for :class:`~plotnine.geoms.geom_point` to accurately display
   transparent fill colors that have been manually set. (:issue:`665`)
+
+- Fix issue where infinite limits for the `x` or `y` scales lead to an
+  exception. (:issue:`664`)
+
+- Fixed :class:`~plotnine.geoms.geom_text` and
+  :class:`~plotnine.geoms.geom_label` when used with string formatting so that
+  missing values are removed. (:issue:`651`)
 
 v0.10.1
 -------

@@ -5,7 +5,7 @@ from copy import copy, deepcopy
 from typing import overload
 
 from ..exceptions import PlotnineError
-from ..options import SUBPLOTS_ADJUST, get_option, set_option
+from ..options import get_option, set_option
 from .themeable import Themeables, themeable
 
 if typing.TYPE_CHECKING:
@@ -18,8 +18,8 @@ if typing.TYPE_CHECKING:
 default_rcparams = {
     "axes.axisbelow": "True",
     "font.sans-serif": [
-        "DejaVu Sans",
         "Helvetica",
+        "DejaVu Sans",  # MPL ships with this one
         "Avant Garde",
         "Computer Modern Sans serif",
         "Arial",
@@ -35,12 +35,6 @@ default_rcparams = {
     "lines.antialiased": "True",
     "patch.antialiased": "True",
     "timezone": "UTC",
-    # Choosen to match MPL 2.0 defaults
-    "savefig.dpi": "figure",
-    "figure.subplot.left": SUBPLOTS_ADJUST["left"],
-    "figure.subplot.right": SUBPLOTS_ADJUST["right"],
-    "figure.subplot.top": SUBPLOTS_ADJUST["top"],
-    "figure.subplot.bottom": SUBPLOTS_ADJUST["bottom"],
 }
 
 
@@ -115,6 +109,7 @@ class theme:
         legend_text_colorbar=None,
         legend_text=None,
         plot_title=None,
+        plot_subtitle=None,
         plot_caption=None,
         strip_text_x=None,
         strip_text_y=None,
@@ -169,7 +164,6 @@ class theme:
         aspect_ratio=None,
         dpi=None,
         figure_size=None,
-        subplots_adjust=None,
         legend_box=None,
         legend_box_margin=None,
         legend_box_just=None,
@@ -185,9 +179,10 @@ class theme:
         legend_entry_spacing_x=None,
         legend_entry_spacing_y=None,
         legend_entry_spacing=None,
-        strip_margin_x=None,
-        strip_margin_y=None,
-        strip_margin=None,
+        strip_align_x=None,
+        strip_align_y=None,
+        strip_align=None,
+        subplots_adjust=None,
         **kwargs,
     ):
         self.themeables = Themeables()
@@ -239,17 +234,26 @@ class theme:
         for th in self.themeables.values():
             th.apply(self)
 
-    def setup_figure(self, figure):
+    def setup(self):
         """
-        Make any desired changes to the figure object
+        Setup theme & figure for before drawing
+
+        1. The figure is modified with to the theme settings
+           that it are required before drawing.
+        2. Give contained objects of the theme/themeables a
+           reference to the theme.
 
         This method will be called once with a figure object
         before any plotting has completed. Subclasses that
         override this method should make sure that the base
         class method is called.
         """
+        from .elements import element_text
+
         for th in self.themeables.values():
-            th.setup_figure(figure)
+            th.setup_figure(self.figure)
+            if isinstance(th.theme_element, element_text):
+                th.theme_element.setup(self)
 
     @property
     def rcParams(self):
