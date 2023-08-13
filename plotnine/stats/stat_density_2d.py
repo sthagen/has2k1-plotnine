@@ -96,7 +96,7 @@ class stat_density_2d(stat):
 
         # The grid must have a "similar" shape (n, p) to the var_data
         X, Y = np.meshgrid(x, y)
-        var_data = np.array([data["x"].values, data["y"].values]).T
+        var_data = np.array([data["x"].to_numpy(), data["y"].to_numpy()]).T
         grid = np.array([X.flatten(), Y.flatten()]).T
         density = kde(var_data, grid, package, **kde_params)
 
@@ -138,9 +138,9 @@ def contour_lines(X, Y, Z, levels):
     )
 
     if isinstance(levels, int):
-        from mizani.breaks import extended_breaks
+        from mizani.breaks import breaks_extended
 
-        levels = extended_breaks(n=levels)((zmin, zmax))
+        levels = breaks_extended(n=levels)((zmin, zmax))
 
     # The counter_generator gives us a list of vertices that
     # represent all the contour lines at that level. There
@@ -157,7 +157,7 @@ def contour_lines(X, Y, Z, levels):
     for level in levels:
         vertices, _ = cgen.create_contour(level)
         for pid, piece in enumerate(vertices, start=start_pid):
-            n = len(piece)
+            n = len(piece)  # pyright: ignore
             segments.append(piece)
             piece_ids.append(np.repeat(pid, n))
             level_values.append(np.repeat(level, n))

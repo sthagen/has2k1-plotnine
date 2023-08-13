@@ -17,6 +17,7 @@ if typing.TYPE_CHECKING:
     from plotnine.typing import (
         FloatArray,
         FloatArrayLike,
+        FloatSeries,
         Ggplot,
         Scale,
     )
@@ -155,8 +156,8 @@ class coord:
 
     def distance(
         self,
-        x: pd.Series[float],
-        y: pd.Series[float],
+        x: FloatSeries,
+        y: FloatSeries,
         panel_params: panel_view,
     ) -> npt.NDArray[Any]:
         msg = "The coordinate should implement this method."
@@ -174,7 +175,7 @@ class coord:
 
         dist = self.distance(data["x"], data["y"], panel_params)
         bool_idx = (
-            data["group"].iloc[1:].values != data["group"].iloc[:-1].values
+            data["group"].to_numpy()[1:] != data["group"].to_numpy()[:-1]
         )
         dist[bool_idx] = np.nan
 

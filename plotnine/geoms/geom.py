@@ -4,8 +4,6 @@ import typing
 from copy import deepcopy
 from itertools import chain, repeat
 
-import pandas as pd
-
 from ..exceptions import PlotnineError
 from ..layer import layer
 from ..mapping.aes import is_valid_aesthetic, rename_aesthetics
@@ -23,6 +21,8 @@ from ..utils import (
 
 if typing.TYPE_CHECKING:
     from typing import Any
+
+    import pandas as pd
 
     from plotnine.iapi import panel_view
     from plotnine.typing import (
@@ -289,7 +289,7 @@ class geom(metaclass=Registry):
         for pid, pdata in data.groupby("PANEL"):
             if len(pdata) == 0:
                 continue
-            ploc = pdata["PANEL"].iat[0] - 1
+            ploc = pdata["PANEL"].iloc[0] - 1
             panel_params = layout.panel_params[ploc]
             ax = layout.axs[ploc]
             self.draw_panel(pdata, panel_params, coord, ax, **params)

@@ -82,7 +82,7 @@ class geom_path(geom):
         # NaNs at the beginning or the end. Those we drop
         bool_idx = (
             data[["x", "y", "size", "color", "linetype"]]
-            .isnull()  # Missing
+            .isna()  # Missing
             .apply(keep, axis=0)
         )  # Beginning or the End
         bool_idx = np.all(bool_idx, axis=1)  # Across the aesthetics
@@ -132,8 +132,10 @@ class geom_path(geom):
         # can be drawn as separate segments
         cols = {"color", "size", "linetype", "alpha", "group"}
         cols = cols & set(data.columns)
-        df = data.drop_duplicates(cols)
-        constant = len(df) == data["group"].nunique()
+        num_unique_rows = len(data.drop_duplicates(cols))
+        ngroup = len(np.unique(data["group"].to_numpy()))
+
+        constant = num_unique_rows == ngroup
         params["constant"] = constant
 
         if not constant:
@@ -153,7 +155,11 @@ class geom_path(geom):
     ):
         data = coord.transform(data, panel_params, munch=True)
         data["size"] *= SIZE_FACTOR
-        constant = params.pop("constant", data["group"].nunique() == 1)
+
+        if "constant" in params:
+            constant: bool = params.pop("constant")
+        else:
+            constant = len(np.unique(data["group"].to_numpy())) == 1
 
         if not constant:
             _draw_segments(data, ax, **params)

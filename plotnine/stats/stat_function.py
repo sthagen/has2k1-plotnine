@@ -8,7 +8,7 @@ import pandas as pd
 from ..doctools import document
 from ..exceptions import PlotnineError
 from ..mapping.evaluation import after_stat
-from ..scales.scale import scale_continuous
+from ..scales.scale_continuous import scale_continuous
 from .stat import stat
 
 if typing.TYPE_CHECKING:
@@ -46,8 +46,8 @@ class stat_function(stat):
 
     ::
 
-        'x'  # x points are which the function is evaluated
-        'y'  # Points evaluated at x
+        'x'   # x points at which the function is evaluated
+        'fx'  # points evaluated at each x
     """
 
     DEFAULT_PARAMS = {
@@ -60,16 +60,16 @@ class stat_function(stat):
         "xlim": None,
     }
 
-    DEFAULT_AES = {"y": after_stat("y")}
-    CREATES = {"y"}
+    DEFAULT_AES = {"y": after_stat("fx")}
+    CREATES = {"fx"}
 
     def __init__(self, mapping=None, data=None, **kwargs):
         if data is None:
 
-            def _data_func(df: pd.DataFrame) -> pd.DataFrame:
-                if df.empty:
-                    df = pd.DataFrame({"group": [1]})
-                return df
+            def _data_func(data: pd.DataFrame) -> pd.DataFrame:
+                if data.empty:
+                    data = pd.DataFrame({"group": [1]})
+                return data
 
             data = _data_func
 
@@ -85,12 +85,11 @@ class stat_function(stat):
 
     @classmethod
     def compute_group(cls, data, scales, **params):
-        fun: Callable[..., FloatArrayLike] = params["fun"]  # pyright: ignore
+        old_fun: Callable[..., FloatArrayLike] = params["fun"]
         n = params["n"]
         args = params["args"]
         xlim = params["xlim"]
         range_x = xlim or scales.x.dimension((0, 0))
-        old_fun = fun
 
         if isinstance(args, (list, tuple)):
 
@@ -120,9 +119,9 @@ class stat_function(stat):
 
         # We know these can handle array-likes
         if isinstance(old_fun, (np.ufunc, np.vectorize)):
-            y = fun(x)
+            fx = fun(x)
         else:
-            y = [fun(val) for val in x]
+            fx = [fun(val) for val in x]
 
-        new_data = pd.DataFrame({"x": x, "y": y})
+        new_data = pd.DataFrame({"x": x, "fx": fx})
         return new_data

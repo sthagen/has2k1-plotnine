@@ -73,7 +73,7 @@ class position(metaclass=Registry):
             # that does the real computation
             if len(pdata) == 0:
                 return pdata
-            scales = layout.get_scales(pdata["PANEL"].iat[0])
+            scales = layout.get_scales(pdata["PANEL"].iloc[0])
             return cls.compute_panel(pdata, scales, params)
 
         return groupby_apply(data, "PANEL", fn)
@@ -119,6 +119,9 @@ class position(metaclass=Registry):
             Transforms y scale mappings
             Takes one argument, either a scalar or an array-type
         """
+        if len(data) == 0:
+            return data
+
         if trans_x:
             xs = [name for name in data.columns if name in X_AESTHETICS]
             data[xs] = data[xs].apply(trans_x)
@@ -219,7 +222,7 @@ class position(metaclass=Registry):
         data = data.loc[idx, :]
 
         # Check for overlap
-        intervals = data[xminmax].drop_duplicates().values.flatten()
+        intervals = data[xminmax].drop_duplicates().to_numpy().flatten()
         intervals = intervals[~np.isnan(intervals)]
 
         if len(np.unique(intervals)) > 1 and any(

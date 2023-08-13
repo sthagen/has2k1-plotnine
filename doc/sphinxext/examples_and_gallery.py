@@ -265,7 +265,7 @@ def notebook_to_rst(nbfilename):
     }
 
     # Read notebook
-    with open(nbfilepath) as f:
+    with nbfilepath.open() as f:
         nb = nbformat.read(f, as_version=4)
 
     # Export
@@ -345,8 +345,6 @@ class gallery(nodes.General, nodes.Element):
     """
     Empty gallery node
     """
-
-    pass
 
 
 class Gallery(Directive):

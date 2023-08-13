@@ -128,6 +128,8 @@ class theme:
         axis_ticks_major_y=None,
         axis_ticks_major=None,
         axis_ticks_minor=None,
+        axis_ticks_x=None,
+        axis_ticks_y=None,
         axis_ticks=None,
         panel_grid_major_x=None,
         panel_grid_major_y=None,
@@ -147,10 +149,18 @@ class theme:
         strip_background_y=None,
         strip_background=None,
         rect=None,
+        axis_ticks_length_major_x=None,
+        axis_ticks_length_major_y=None,
         axis_ticks_length_major=None,
+        axis_ticks_length_minor_x=None,
+        axis_ticks_length_minor_y=None,
         axis_ticks_length_minor=None,
         axis_ticks_length=None,
+        axis_ticks_pad_major_x=None,
+        axis_ticks_pad_major_y=None,
         axis_ticks_pad_major=None,
+        axis_ticks_pad_minor_x=None,
+        axis_ticks_pad_minor_y=None,
         axis_ticks_pad_minor=None,
         axis_ticks_pad=None,
         axis_ticks_direction_x=None,
@@ -159,6 +169,10 @@ class theme:
         panel_spacing_x=None,
         panel_spacing_y=None,
         panel_spacing=None,
+        plot_margin_left=None,
+        plot_margin_right=None,
+        plot_margin_top=None,
+        plot_margin_bottom=None,
         plot_margin=None,
         panel_ontop=None,
         aspect_ratio=None,
@@ -431,4 +445,5 @@ def theme_update(**kwargs: themeable):
     kwargs : dict
         Theme elements
     """
-    theme_set(theme_get() + theme(**kwargs))
+    assert "complete" not in kwargs
+    theme_set(theme_get() + theme(**kwargs))  # pyright: ignore

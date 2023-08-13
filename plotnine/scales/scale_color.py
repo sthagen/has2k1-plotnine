@@ -6,10 +6,14 @@ from warnings import warn
 from ..doctools import document
 from ..exceptions import PlotnineWarning
 from ..utils import alias
-from .scale import scale_continuous, scale_datetime, scale_discrete
+from .scale_continuous import scale_continuous
+from .scale_datetime import scale_datetime
+from .scale_discrete import scale_discrete
 
 if typing.TYPE_CHECKING:
     from typing import Literal
+
+    from mizani.typing import ColorScheme, ColorSchemeShort
 
 
 # Discrete color scales #
@@ -42,7 +46,14 @@ class scale_color_hue(scale_discrete):
     _aesthetics = ["color"]
     na_value = "#7F7F7F"
 
-    def __init__(self, h=0.01, l=0.6, s=0.65, color_space="hls", **kwargs):
+    def __init__(
+        self,
+        h=0.01,
+        l=0.6,
+        s=0.65,
+        color_space: Literal["hls", "husl"] = "hls",
+        **kwargs,
+    ):
         from mizani.palettes import hue_pal
 
         self.palette = hue_pal(h, l, s, color_space=color_space)
@@ -91,7 +102,11 @@ class scale_color_brewer(scale_discrete):
     na_value = "#7F7F7F"
 
     def __init__(
-        self, type="seq", palette=1, direction: Literal[1, -1] = 1, **kwargs
+        self,
+        type: ColorScheme | ColorSchemeShort = "seq",
+        palette=1,
+        direction: Literal[1, -1] = 1,
+        **kwargs,
     ):
         from mizani.palettes import brewer_pal
 
@@ -133,8 +148,7 @@ class scale_color_grey(scale_discrete):
     def __init__(self, start=0.2, end=0.8, **kwargs):
         from mizani.palettes import grey_pal
 
-        # TODO: fix types in mizani
-        self.palette = grey_pal(start, end)  # pyright: ignore
+        self.palette = grey_pal(start, end)
         scale_discrete.__init__(self, **kwargs)
 
 
@@ -186,9 +200,7 @@ class scale_color_gradient(scale_continuous):
         from mizani.palettes import gradient_n_pal
 
         # TODO: fix types in mizani
-        self.palette = gradient_n_pal(
-            [low, high], name="gradient"
-        )  # pyright: ignore
+        self.palette = gradient_n_pal([low, high])  # pyright: ignore
         scale_continuous.__init__(self, **kwargs)
 
 
@@ -296,9 +308,7 @@ class scale_color_gradient2(scale_continuous):
 
         kwargs["rescaler"] = _rescale_mid
         # TODO: fix types in mizani
-        self.palette = gradient_n_pal(
-            [low, mid, high], name="gradient2"
-        )  # pyright: ignore
+        self.palette = gradient_n_pal([low, mid, high])  # pyright: ignore
         scale_continuous.__init__(self, **kwargs)
 
 
@@ -346,9 +356,7 @@ class scale_color_gradientn(scale_continuous):
         from mizani.palettes import gradient_n_pal
 
         # TODO: fix types in mizani
-        self.palette = gradient_n_pal(
-            colors, values, "gradientn"
-        )  # pyright: ignore
+        self.palette = gradient_n_pal(colors, values)  # pyright: ignore
         scale_continuous.__init__(self, **kwargs)
 
 
@@ -402,7 +410,7 @@ class scale_color_distiller(scale_color_gradientn):
 
     def __init__(
         self,
-        type="seq",
+        type: ColorScheme | ColorSchemeShort = "seq",
         palette=1,
         values=None,
         direction: Literal[1, -1] = -1,
@@ -471,11 +479,11 @@ class scale_color_cmap(scale_continuous):
     guide = "colorbar"
     na_value = "#7F7F7F"
 
-    def __init__(self, cmap_name="viridis", lut=None, **kwargs):
+    def __init__(self, cmap_name="viridis", **kwargs):
         from mizani.palettes import cmap_pal
 
         # TODO: fix types in mizani
-        self.palette = cmap_pal(cmap_name, lut)  # pyright: ignore
+        self.palette = cmap_pal(cmap_name)  # pyright: ignore
         super().__init__(**kwargs)
 
 
@@ -522,10 +530,10 @@ class scale_color_cmap_d(scale_discrete):
     _aesthetics = ["color"]
     na_value = "#7F7F7F"
 
-    def __init__(self, cmap_name="viridis", lut=None, **kwargs):
+    def __init__(self, cmap_name="viridis", **kwargs):
         from mizani.palettes import cmap_d_pal
 
-        self.palette = cmap_d_pal(cmap_name, lut)
+        self.palette = cmap_d_pal(cmap_name)
         super().__init__(**kwargs)
 
 

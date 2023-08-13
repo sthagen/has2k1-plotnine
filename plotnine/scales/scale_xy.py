@@ -12,7 +12,9 @@ from ..iapi import range_view
 from ..utils import alias, array_kind, match
 from ._expand import expand_range
 from .range import RangeContinuous
-from .scale import scale_continuous, scale_datetime, scale_discrete
+from .scale_continuous import scale_continuous
+from .scale_datetime import scale_datetime
+from .scale_discrete import scale_discrete
 
 if typing.TYPE_CHECKING:
     from typing import Sequence
@@ -223,7 +225,7 @@ class scale_position_continuous(scale_continuous):
         if limits is None:
             limits = self.limits
         scaled = self.oob(series, limits)
-        scaled[pd.isnull(scaled)] = self.na_value
+        scaled[pd.isna(scaled)] = self.na_value
         return scaled
 
 
@@ -424,3 +426,29 @@ class scale_y_reverse(scale_y_continuous):
     """
 
     _trans = "reverse"
+
+
+@document
+class scale_x_symlog(scale_x_continuous):
+    """
+    Continuous x position symmetric logarithm transformed scale
+
+    Parameters
+    ----------
+    {superclass_parameters}
+    """
+
+    _trans = "symlog"
+
+
+@document
+class scale_y_symlog(scale_y_continuous):
+    """
+    Continuous y position symmetric logarithm transformed scale
+
+    Parameters
+    ----------
+    {superclass_parameters}
+    """
+
+    _trans = "symlog"

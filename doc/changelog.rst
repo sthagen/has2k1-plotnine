@@ -3,9 +3,63 @@
 Changelog
 =========
 
-v0.12.2
+v0.13.0
 -------
 (not-released-yet)
+
+API Changes
+***********
+
+- Requires python >= 3.9
+- The name of the calculated aesthetic of
+  :class:`~plotnine.stats.stat_function` changed from `y` to `fx`.
+
+New
+***
+
+- Added symmetric logarithm transformation scales
+  :class:`~plotnine.scales.scale_x_symlog` and
+  :class:`~plotnine.scales.scale_x_symlog`
+
+- Gained themeables
+
+  - :meth:`~plotnine.themes.themeable.plot_margin_left`
+  - :meth:`~plotnine.themes.themeable.plot_margin_right`
+  - :meth:`~plotnine.themes.themeable.plot_margin_top`
+  - :meth:`~plotnine.themes.themeable.plot_margin_bottom`
+
+  to set the plot margin on each side independently.
+
+- Gained themeables
+
+  - :meth:`~plotnine.themes.themeable.axis_ticks_length_major_x`
+  - :meth:`~plotnine.themes.themeable.axis_ticks_length_major_y`
+  - :meth:`~plotnine.themes.themeable.axis_ticks_length_minor_x`
+  - :meth:`~plotnine.themes.themeable.axis_ticks_length_minor_y`
+
+  to control the x & y axis ticks length.
+
+- Gained themeables
+
+  - :meth:`~plotnine.themes.themeable.axis_ticks_pad_major_x`
+  - :meth:`~plotnine.themes.themeable.axis_ticks_pad_major_y`
+  - :meth:`~plotnine.themes.themeable.axis_ticks_pad_minor_x`
+  - :meth:`~plotnine.themes.themeable.axis_ticks_pad_minor_y`
+
+  to control the x & y tick padding.
+
+Bug Fixes
+*********
+
+- Fixed handling of minor breaks in :class:`~plotnine.scales.scale_continuous`
+  to accept numpy arrays and when the scale has a transform, that the
+  minor breaks are supplied in user space and not transform space. Just
+  like the major breaks. (:issue:`685`)
+
+- Fixed theming of axis_ticks with the size parameter. (:issue:`703`)
+
+- Fixed space handling around `axis_label`, `axis_text` and `axis_ticks` when
+  the ticks are turned off.
 
 Enhancements
 ************

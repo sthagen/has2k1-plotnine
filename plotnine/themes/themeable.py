@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import typing
 from contextlib import suppress
-from copy import deepcopy
 from typing import Dict
 from warnings import warn
 
@@ -108,7 +107,7 @@ class themeable(metaclass=RegistryHierarchyMeta):
     @staticmethod
     def from_class_name(name: str, theme_element: Any) -> themeable:
         """
-        Create an themeable by name
+        Create a themeable by name
 
         Parameters
         ----------
@@ -213,7 +212,6 @@ class themeable(metaclass=RegistryHierarchyMeta):
         followed by extracting the portion of the axes specific to this
         themeable then applying the properties.
         """
-        pass
 
     def apply_figure(self, figure: Figure, targets: dict[str, Any]):
         """
@@ -223,7 +221,6 @@ class themeable(metaclass=RegistryHierarchyMeta):
         after plotting and all the elements are drawn onto the
         figure.
         """
-        pass
 
     def setup_figure(self, figure: Figure):
         """
@@ -234,19 +231,16 @@ class themeable(metaclass=RegistryHierarchyMeta):
         cases where the drawing functions need(or can make use of)
         this information.
         """
-        pass
 
     def blank_ax(self, ax: Axes):
         """
         Blank out theme elements
         """
-        pass
 
     def blank_figure(self, figure: Figure, targets: dict[str, Any]):
         """
         Blank out elements on the figure
         """
-        pass
 
 
 class Themeables(Dict[str, themeable]):
@@ -294,15 +288,20 @@ class Themeables(Dict[str, themeable]):
         Return a list of themeables sorted in reverse based
         on the their depth in the inheritance hierarchy.
 
-        The sorting is key when applying and merging the themeables
-        so that they do not conflict i.e :class:`axis_line`
-        applied before :class:`axis_line_x`.
+        Themeables should be applied or merged in order from general
+        to specific. i.e.
+            - apply :class:`axis_line` before :class:`axis_line_x`
+            - merge :class:`axis_line_x` into :class:`axis_line`
         """
-
-        def key(th: themeable) -> int:
-            return len(th.__class__.__mro__)
-
-        return sorted(dict.values(self), key=key, reverse=True)
+        hierarchy = themeable._hierarchy
+        result: list[themeable] = []
+        seen = set()
+        for _, lst in hierarchy.items():
+            for name in reversed(lst):
+                if name in self and name not in seen:
+                    result.append(self[name])
+                    seen.add(name)
+        return result
 
     def property(self, name: str, key: str = "value") -> Any:
         """
@@ -396,9 +395,6 @@ class axis_title_x(themeable):
 
     def blank_figure(self, figure: Figure, targets: dict[str, Any]):
         super().blank_figure(figure, targets)
-        properties = self.properties.copy()
-        with suppress(KeyError):
-            del properties["margin"]
         with suppress(KeyError):
             text = targets["axis_title_x"]
             text.set_visible(False)
@@ -437,8 +433,6 @@ class axis_title(axis_title_x, axis_title_y):
     ----------
     theme_element : element_text
     """
-
-    pass
 
 
 class legend_title(themeable):
@@ -713,8 +707,6 @@ class strip_text(strip_text_x, strip_text_y):
     theme_element : element_text
     """
 
-    pass
-
 
 class title(axis_title, legend_title, plot_title, plot_subtitle, plot_caption):
     """
@@ -724,8 +716,6 @@ class title(axis_title, legend_title, plot_title, plot_subtitle, plot_caption):
     ----------
     theme_element : element_text
     """
-
-    pass
 
 
 class axis_text_x(themeable):
@@ -786,8 +776,6 @@ class axis_text(axis_text_x, axis_text_y):
     ----------
     theme_element : element_text
     """
-
-    pass
 
 
 class text(axis_text, legend_text, strip_text, title):
@@ -888,8 +876,6 @@ class axis_line(axis_line_x, axis_line_y):
     theme_element : element_line
     """
 
-    pass
-
 
 class axis_ticks_minor_x(themeable):
     """
@@ -902,19 +888,38 @@ class axis_ticks_minor_x(themeable):
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
+        # The ggplot._draw_breaks_and_labels uses set_tick_params to
+        # turn off the ticks that will not show. That sets the location
+        # key (e.g. params["bottom"]) to False. It also sets the artist
+        # to invisible. Theming should not change those artists to visible,
+        # so we return early.
+        params = ax.xaxis.get_tick_params(which="minor")
+        if not params.get("left", False):
+            return
 
-        d = deepcopy(self.properties)
+        # We have to use both
+        #    1. Axis.set_tick_params()
+        #    2. Tick.tick1line.set()
+        # We split the properties so that set_tick_params keeps
+        # record of the properties it cares about so that it does
+        # not undo them. GH703
+        tick_params = {}
+        properties = self.properties.copy()
         with suppress(KeyError):
-            d["markeredgewidth"] = d.pop("linewidth")
+            tick_params["width"] = properties.pop("linewidth")
         with suppress(KeyError):
-            d["markeredgecolor"] = d.pop("color")
+            tick_params["color"] = properties.pop("color")
+
+        if tick_params:
+            ax.xaxis.set_tick_params(which="minor", **tick_params)
 
         for tick in ax.xaxis.get_minor_ticks():
-            tick.tick1line.set(**d)
+            tick.tick1line.set(**properties)
 
     def blank_ax(self, ax: Axes):
         super().blank_ax(ax)
-        ax.xaxis.set_tick_params(which="minor", bottom=False)
+        for tick in ax.xaxis.get_minor_ticks():
+            tick.tick1line.set_visible(False)
 
 
 class axis_ticks_minor_y(themeable):
@@ -928,19 +933,27 @@ class axis_ticks_minor_y(themeable):
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
+        params = ax.yaxis.get_tick_params(which="minor")
+        if not params.get("left", False):
+            return
 
-        d = deepcopy(self.properties)
+        tick_params = {}
+        properties = self.properties.copy()
         with suppress(KeyError):
-            d["markeredgewidth"] = d.pop("linewidth")
+            tick_params["width"] = properties.pop("linewidth")
         with suppress(KeyError):
-            d["markeredgecolor"] = d.pop("color")
+            tick_params["color"] = properties.pop("color")
+
+        if tick_params:
+            ax.yaxis.set_tick_params(which="minor", **tick_params)
 
         for tick in ax.yaxis.get_minor_ticks():
-            tick.tick1line.set(**d)
+            tick.tick1line.set(**properties)
 
     def blank_ax(self, ax: Axes):
         super().blank_ax(ax)
-        ax.yaxis.set_tick_params(which="minor", left=False)
+        for tick in ax.yaxis.get_minor_ticks():
+            tick.tick1line.set_visible(False)
 
 
 class axis_ticks_major_x(themeable):
@@ -954,20 +967,27 @@ class axis_ticks_major_x(themeable):
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
+        params = ax.xaxis.get_tick_params(which="major")
+        if not params.get("left", False):
+            return
 
-        d = deepcopy(self.properties)
-        del d["visible"]
+        tick_params = {}
+        properties = self.properties.copy()
         with suppress(KeyError):
-            d["markeredgewidth"] = d.pop("linewidth")
+            tick_params["width"] = properties.pop("linewidth")
         with suppress(KeyError):
-            d["markeredgecolor"] = d.pop("color")
+            tick_params["color"] = properties.pop("color")
+
+        if tick_params:
+            ax.xaxis.set_tick_params(which="major", **tick_params)
 
         for tick in ax.xaxis.get_major_ticks():
-            tick.tick1line.set(**d)
+            tick.tick1line.set(**properties)
 
     def blank_ax(self, ax: Axes):
         super().blank_ax(ax)
-        ax.xaxis.set_tick_params(which="major", bottom=False)
+        for tick in ax.xaxis.get_major_ticks():
+            tick.tick1line.set_visible(False)
 
 
 class axis_ticks_major_y(themeable):
@@ -981,20 +1001,27 @@ class axis_ticks_major_y(themeable):
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
+        params = ax.yaxis.get_tick_params(which="major")
+        if not params.get("left", False):
+            return
 
-        d = deepcopy(self.properties)
-        del d["visible"]
+        tick_params = {}
+        properties = self.properties.copy()
         with suppress(KeyError):
-            d["markeredgewidth"] = d.pop("linewidth")
+            tick_params["width"] = properties.pop("linewidth")
         with suppress(KeyError):
-            d["markeredgecolor"] = d.pop("color")
+            tick_params["color"] = properties.pop("color")
+
+        if tick_params:
+            ax.yaxis.set_tick_params(which="major", **tick_params)
 
         for tick in ax.yaxis.get_major_ticks():
-            tick.tick1line.set(**d)
+            tick.tick1line.set(**properties)
 
     def blank_ax(self, ax: Axes):
         super().blank_ax(ax)
-        ax.yaxis.set_tick_params(which="major", left=False)
+        for tick in ax.yaxis.get_major_ticks():
+            tick.tick1line.set_visible(False)
 
 
 class axis_ticks_major(axis_ticks_major_x, axis_ticks_major_y):
@@ -1006,8 +1033,6 @@ class axis_ticks_major(axis_ticks_major_x, axis_ticks_major_y):
     theme_element : element_line
     """
 
-    pass
-
 
 class axis_ticks_minor(axis_ticks_minor_x, axis_ticks_minor_y):
     """
@@ -1018,7 +1043,25 @@ class axis_ticks_minor(axis_ticks_minor_x, axis_ticks_minor_y):
     theme_element : element_line
     """
 
-    pass
+
+class axis_ticks_x(axis_ticks_major_x, axis_ticks_minor_x):
+    """
+    x major and minor axis tick lines
+
+    Parameters
+    ----------
+    theme_element : element_line
+    """
+
+
+class axis_ticks_y(axis_ticks_major_y, axis_ticks_minor_y):
+    """
+    y major and minor axis tick lines
+
+    Parameters
+    ----------
+    theme_element : element_line
+    """
 
 
 class axis_ticks(axis_ticks_major, axis_ticks_minor):
@@ -1029,8 +1072,6 @@ class axis_ticks(axis_ticks_major, axis_ticks_minor):
     ----------
     theme_element : element_line
     """
-
-    pass
 
 
 class panel_grid_major_x(themeable):
@@ -1114,8 +1155,6 @@ class panel_grid_major(panel_grid_major_x, panel_grid_major_y):
     theme_element : element_line
     """
 
-    pass
-
 
 class panel_grid_minor(panel_grid_minor_x, panel_grid_minor_y):
     """
@@ -1126,8 +1165,6 @@ class panel_grid_minor(panel_grid_minor_x, panel_grid_minor_y):
     theme_element : element_line
     """
 
-    pass
-
 
 class panel_grid(panel_grid_major, panel_grid_minor):
     """
@@ -1137,8 +1174,6 @@ class panel_grid(panel_grid_major, panel_grid_minor):
     ----------
     theme_element : element_line
     """
-
-    pass
 
 
 class line(axis_line, axis_ticks, panel_grid):
@@ -1263,7 +1298,7 @@ class panel_background(themeable):
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
-        d = deepcopy(self.properties)
+        d = self.properties.copy()
         if "facecolor" in d and "alpha" in d:
             d["facecolor"] = to_rgba(d["facecolor"], d["alpha"])
             del d["alpha"]
@@ -1285,7 +1320,7 @@ class panel_border(themeable):
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
-        d = deepcopy(self.properties)
+        d = self.properties.copy()
         # Be lenient, if using element_line
         with suppress(KeyError):
             d["edgecolor"] = d.pop("color")
@@ -1378,8 +1413,6 @@ class strip_background(strip_background_x, strip_background_y):
     theme_element : element_rect
     """
 
-    pass
-
 
 class rect(
     legend_key,
@@ -1397,13 +1430,57 @@ class rect(
     theme_element : element_rect
     """
 
-    pass
-
 
 # value base themeables
 
 
-class axis_ticks_length_major(themeable):
+class axis_ticks_length_major_x(themeable):
+    """
+    x-axis major-tick length
+
+    Parameters
+    ----------
+    theme_element : float
+        Value in points.
+    """
+
+    def apply_ax(self, ax: Axes):
+        super().apply_ax(ax)
+        try:
+            t = ax.xaxis.get_major_ticks()[0]
+        except IndexError:
+            val = 0
+        else:
+            val = self.properties["value"] if t.tick1line.get_visible() else 0
+
+        ax.xaxis.set_tick_params(which="major", size=val)
+
+
+class axis_ticks_length_major_y(themeable):
+    """
+    y-axis major-tick length
+
+    Parameters
+    ----------
+    theme_element : float
+        Value in points.
+    """
+
+    def apply_ax(self, ax: Axes):
+        super().apply_ax(ax)
+        try:
+            t = ax.yaxis.get_major_ticks()[0]
+        except IndexError:
+            val = 0
+        else:
+            val = self.properties["value"] if t.tick1line.get_visible() else 0
+
+        ax.yaxis.set_tick_params(which="major", size=val)
+
+
+class axis_ticks_length_major(
+    axis_ticks_length_major_x, axis_ticks_length_major_y
+):
     """
     Axis major-tick length
 
@@ -1413,15 +1490,10 @@ class axis_ticks_length_major(themeable):
         Value in points.
     """
 
-    def apply_ax(self, ax: Axes):
-        super().apply_ax(ax)
-        ax.xaxis.set_tick_params(which="major", size=self.properties["value"])
-        ax.yaxis.set_tick_params(which="major", size=self.properties["value"])
 
-
-class axis_ticks_length_minor(themeable):
+class axis_ticks_length_minor_x(themeable):
     """
-    Axis minor-tick length
+    x-axis minor-tick length
 
     Parameters
     ----------
@@ -1431,8 +1503,39 @@ class axis_ticks_length_minor(themeable):
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
-        ax.xaxis.set_tick_params(which="minor", size=self.properties["value"])
-        ax.yaxis.set_tick_params(which="minor", size=self.properties["value"])
+        ax.xaxis.set_tick_params(
+            which="minor", length=self.properties["value"]
+        )
+
+
+class axis_ticks_length_minor_y(themeable):
+    """
+    x-axis minor-tick length
+
+    Parameters
+    ----------
+    theme_element : float
+        Value in points.
+    """
+
+    def apply_ax(self, ax: Axes):
+        super().apply_ax(ax)
+        ax.yaxis.set_tick_params(
+            which="minor", length=self.properties["value"]
+        )
+
+
+class axis_ticks_length_minor(
+    axis_ticks_length_minor_x, axis_ticks_length_minor_y
+):
+    """
+    Axis minor-tick length
+
+    Parameters
+    ----------
+    theme_element : float
+        Value in points.
+    """
 
 
 class axis_ticks_length(axis_ticks_length_major, axis_ticks_length_minor):
@@ -1445,12 +1548,10 @@ class axis_ticks_length(axis_ticks_length_major, axis_ticks_length_minor):
         Value in points.
     """
 
-    pass
 
-
-class axis_ticks_pad_major(themeable):
+class axis_ticks_pad_major_x(themeable):
     """
-    Axis major-tick padding
+    x-axis major-tick padding
 
     Parameters
     ----------
@@ -1463,19 +1564,65 @@ class axis_ticks_pad_major(themeable):
         val = self.properties["value"]
 
         for t in ax.xaxis.get_major_ticks():
-            t.set_pad(val)
-
-        for t in ax.yaxis.get_major_ticks():
-            t.set_pad(val)
+            _val = val if t.tick1line.get_visible() else 0
+            t.set_pad(_val)
 
 
-class axis_ticks_pad_minor(themeable):
+class axis_ticks_pad_major_y(themeable):
     """
-    Axis minor-tick padding
+    y-axis major-tick padding
 
     Parameters
     ----------
     theme_element : float
+        Value in points.
+
+    Note
+    ----
+    Padding is not applied when the :class:`axis_ticks_major_y` are
+    blank, but it does apply when the :class:`axis_ticks_length_major_y`
+    is zero.
+    """
+
+    def apply_ax(self, ax: Axes):
+        super().apply_ax(ax)
+        val = self.properties["value"]
+
+        for t in ax.yaxis.get_major_ticks():
+            _val = val if t.tick1line.get_visible() else 0
+            t.set_pad(_val)
+
+
+class axis_ticks_pad_major(axis_ticks_pad_major_x, axis_ticks_pad_major_y):
+    """
+    Axis major-tick padding
+
+    Parameters
+    ----------
+    theme_element : float
+        Value in points.
+
+    Note
+    ----
+    Padding is not applied when the :class:`axis_ticks_major` are
+    blank, but it does apply when the :class:`axis_ticks_length_major`
+    is zero.
+    """
+
+
+class axis_ticks_pad_minor_x(themeable):
+    """
+    x-axis minor-tick padding
+
+    Parameters
+    ----------
+    theme_element : float
+
+    Note
+    ----
+    Padding is not applied when the :class:`axis_ticks_minor_x` are
+    blank, but it does apply when the :class:`axis_ticks_length_minor_x`
+    is zero.
     """
 
     def apply_ax(self, ax: Axes):
@@ -1483,10 +1630,48 @@ class axis_ticks_pad_minor(themeable):
         val = self.properties["value"]
 
         for t in ax.xaxis.get_minor_ticks():
-            t.set_pad(val)
+            _val = val if t.tick1line.get_visible() else 0
+            t.set_pad(_val)
+
+
+class axis_ticks_pad_minor_y(themeable):
+    """
+    y-axis minor-tick padding
+
+    Parameters
+    ----------
+    theme_element : float
+
+    Note
+    ----
+    Padding is not applied when the :class:`axis_ticks_minor_y` are
+    blank, but it does apply when the :class:`axis_ticks_length_minor_y`
+    is zero.
+    """
+
+    def apply_ax(self, ax: Axes):
+        super().apply_ax(ax)
+        val = self.properties["value"]
 
         for t in ax.yaxis.get_minor_ticks():
-            t.set_pad(val)
+            _val = val if t.tick1line.get_visible() else 0
+            t.set_pad(_val)
+
+
+class axis_ticks_pad_minor(axis_ticks_pad_minor_x, axis_ticks_pad_minor_y):
+    """
+    Axis minor-tick padding
+
+    Parameters
+    ----------
+    theme_element : float
+
+    Note
+    ----
+    Padding is not applied when the :class:`axis_ticks_minor` are
+    blank, but it does apply when the :class:`axis_ticks_length_minor`
+    is zero.
+    """
 
 
 class axis_ticks_pad(axis_ticks_pad_major, axis_ticks_pad_minor):
@@ -1497,9 +1682,12 @@ class axis_ticks_pad(axis_ticks_pad_major, axis_ticks_pad_minor):
     ----------
     theme_element : float
         Value in points.
-    """
 
-    pass
+    Note
+    ----
+    Padding is not applied when the :class:`axis_ticks` are blank,
+    but it does apply when the :class:`axis_ticks_length` is zero.
+    """
 
 
 class axis_ticks_direction_x(themeable):
@@ -1552,8 +1740,6 @@ class axis_ticks_direction(axis_ticks_direction_x, axis_ticks_direction_y):
         - ``inout`` - ticks inside and outside the panel
     """
 
-    pass
-
 
 class panel_spacing_x(themeable):
     """
@@ -1564,8 +1750,6 @@ class panel_spacing_x(themeable):
     theme_element : float
         Size as a fraction of the figure width.
     """
-
-    pass
 
 
 class panel_spacing_y(themeable):
@@ -1585,8 +1769,6 @@ class panel_spacing_y(themeable):
     will be equal.
     """
 
-    pass
-
 
 class panel_spacing(panel_spacing_x, panel_spacing_y):
     """
@@ -1598,11 +1780,63 @@ class panel_spacing(panel_spacing_x, panel_spacing_y):
         Size in inches of the space between the facet panels
     """
 
-    pass
-
 
 # TODO: Distinct margins in all four directions
-class plot_margin(themeable):
+class plot_margin_left(themeable):
+    """
+    Plot Margin on the left
+
+    Parameters
+    ----------
+    theme_element : float
+        Must be in the [0, 1] range. It is specified
+        as a fraction of the figure width and figure
+        height.
+    """
+
+
+class plot_margin_right(themeable):
+    """
+    Plot Margin on the right
+
+    Parameters
+    ----------
+    theme_element : float
+        Must be in the [0, 1] range. It is specified
+        as a fraction of the figure width and figure
+        height.
+    """
+
+
+class plot_margin_top(themeable):
+    """
+    Plot Margin at the top
+
+    Parameters
+    ----------
+    theme_element : float
+        Must be in the [0, 1] range. It is specified
+        as a fraction of the figure width and figure
+        height.
+    """
+
+
+class plot_margin_bottom(themeable):
+    """
+    Plot Margin at the bottom
+
+    Parameters
+    ----------
+    theme_element : float
+        Must be in the [0, 1] range. It is specified
+        as a fraction of the figure width and figure
+        height.
+    """
+
+
+class plot_margin(
+    plot_margin_left, plot_margin_right, plot_margin_top, plot_margin_bottom
+):
     """
     Plot Margin
 
