@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import pandas.api.types as pdtypes
 
 from ..doctools import document
 from ..utils import resolution
@@ -50,6 +49,8 @@ class stat_boxplot(stat):
         'ymax'  # upper whisker, computed as; largest observation
                 # less than or equal to upper hinge + 1.5 * IQR
 
+        'n'     # Number of observations at a position
+
     Calculated aesthetics are accessed using the `after_stat` function.
     e.g. :py:`after_stat('width')`.
     """
@@ -74,15 +75,23 @@ class stat_boxplot(stat):
         "notchlower",
         "width",
         "relvarwidth",
+        "n",
     }
+
+    def setup_data(self, data):
+        if "x" not in data:
+            data["x"] = 0
+        return data
 
     def setup_params(self, data):
         if self.params["width"] is None:
-            self.params["width"] = resolution(data["x"], False) * 0.75
+            x = data["x"] if "x" in data else 0
+            self.params["width"] = resolution(x, False) * 0.75
         return self.params
 
     @classmethod
     def compute_group(cls, data, scales, **params):
+        n = len(data)
         y = data["y"].to_numpy()
         if "weight" in data:
             weights = data["weight"]
@@ -97,7 +106,7 @@ class stat_boxplot(stat):
         else:
             width = params["width"]
 
-        if pdtypes.is_categorical_dtype(data["x"]):
+        if isinstance(data["x"].dtype, pd.CategoricalDtype):
             x = data["x"].iloc[0]
         else:
             x = np.mean([data["x"].min(), data["x"].max()])
@@ -114,6 +123,7 @@ class stat_boxplot(stat):
             "x": x,
             "width": width,
             "relvarwidth": np.sqrt(total_weight),
+            "n": n,
         }
         return pd.DataFrame(d)
 
