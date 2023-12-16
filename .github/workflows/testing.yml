@@ -12,7 +12,7 @@ jobs:
 
     strategy:
       matrix:
-        python-version: [3.9, 3.11]
+        python-version: [3.9, 3.12]
 
     steps:
       - name: Checkout Code
@@ -74,7 +74,6 @@ jobs:
         shell: bash
         run: |
           pip install ruff
-          pip install black
 
       - name: Environment Information
         shell: bash
@@ -85,7 +84,7 @@ jobs:
         run: |
           make lint
 
-      - name: Check format with Black
+      - name: Check format with Ruff
         shell: bash
         run: |
           make format
@@ -144,21 +143,24 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Install Quarto
+        uses: quarto-dev/quarto-actions/setup@v2
+        with:
+          version: "1.4.521"
+
       - name: Install Packages
         shell: bash
         run: |
           sudo apt-get install pandoc
           pip install git+https://github.com/has2k1/mizani.git@main
           pip install ".[test,doc]"
-          pip install -r requirements/examples.txt
+          pip install -r requirements/doc.txt
+          quarto add --no-prompt has2k1/issuey
 
       - name: Environment Information
         shell: bash
         run: pip list
 
-      - name: Build Documentation
-        shell: bash
+      - name: Build documentation
         run: |
-          pushd doc
-          SPHINXOPTS=-W
-          make html && popd
+          make doc

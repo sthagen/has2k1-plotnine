@@ -1,0 +1,338 @@
+// Ref:
+// - https://getbootstrap.com/docs/5.3/utilities/spacing/
+// - https://github.com/twbs/bootstrap/blob/main/scss/_variables.scss
+
+/*-- scss:defaults --*/
+$primary: #9E2F68;
+$table-striped-bg: #F0F6F6;
+$font-family-base: "Source Sans Pro";
+$font-family-code: "Source Code Pro";
+$table-striped-order: even;
+$headings-font-weight: 300 !default;
+
+$class-symbol-color: $primary;
+$method-symbol-color: #D95F02;
+$function-symbol-color: #7570B3;
+$alias-symbol-color: #E7298A;
+$module-symbol-color: #377EB8;
+$attribute-symbol-color: #1B9E77;
+
+$signature-border-color: tint-color($primary, 15%);
+$signature-background-color: shade-color(tint-color($primary, 95%), 2.5%);
+
+/*-- scss:rules --*/
+
+a {
+   text-decoration: none;
+}
+
+h2, .h2 {
+   border-bottom: 0rem;
+}
+
+// Set headings boldness back to the bootstrap default.
+// quarto changes it for h1, h2, h3!
+h1, .h2, h2, .h2, h3, .h3 {
+   @extend .fw-medium;
+}
+
+table {
+   @extend .table-bordered;
+   @extend .table-striped;
+}
+
+.table > tbody {
+   // quarto adds a bottom color that is different from the border color,
+   // that looks good the default
+   border-bottom-color: $table-border-color;
+}
+
+// docstring spacing and indentation
+section.doc-has-member-docs > :nth-child(n+3):nth-last-child(n+1),
+section.doc-has-member-docs section.doc-object > :nth-child(n+3):nth-last-child(n+1) {
+   @extend .ps-4;
+   border-left: 0.025rem solid $gray-500;
+}
+
+// Remove problem margins
+//
+// margins present two problems
+//
+// 1. When we want to depicted nested content using a left border, margins
+//    are not covered by borders sot they introduce gaps.
+//    We do not have the option of nesting content in a div and apply
+//    left border to the div. When a sub-section is nested in a div, quarto
+//    does not include it the sidebar
+//
+// 2. A contained element with a bottom margin overflows the boundaries of
+//    of the container and the overflowing margin is not merged with the
+//    top margin of the element below the container.
+//
+// These affect the documentation page
+.doc section.doc-attributes > table, // case 1
+.doc section.doc-methods > table,    // case 1
+.doc section.doc-classes > table,    // case 1
+.doc .doc-definition-items > dl,     // case 2
+.doc .doc-definition-items > dl > dd:last-child > p:last-child, // case 2
+.doc .doc-text > p:last-child,         // case 2
+
+// This affects the reference/index page
+.doc .doc-summary-table:not(:has(+ .doc-summary-table)) table, // case 2
+
+// TypeAlias code
+.doc .doc-typing-typealias p:has(> code), // case 2
+.doc .doc-typing-typealias > div:last-child { // case 2
+   @extend .mb-0;
+}
+
+.doc section > h2,  // case 1
+.doc section > h3,  // case 1
+.doc section > h4 { // case 1
+   @extend .mt-0;
+}
+
+
+.doc section {
+   @extend .pt-4;
+}
+
+.doc h2 {
+   @extend .pb-0;
+}
+
+.doc h3,
+.doc h4 {
+   @extend .mb-3;
+}
+
+
+// docstring signatures
+.doc > .doc-signature > div.sourceCode{
+   background-color: $signature-background-color;
+}
+
+.doc.level1 > .doc-signature > div.sourceCode{
+   border-top: 0.25rem solid $signature-border-color;
+}
+
+.doc:not(.level1) > .doc-signature > div.sourceCode {
+   border-left: 0.25rem solid $signature-border-color;
+}
+
+.doc > .doc-signature > div.sourceCode code{
+   max-height: 20rem;
+   overflow: auto;
+}
+
+// Reference/Index
+
+// Give all the tables on the index page the same with.
+// It looks better, but as table cells do not respond to
+// min-width styling, this is not a perfect solution.
+.doc-index .doc-summary-table td:first-child{
+   width: 30%;
+}
+
+// gallery
+
+.gallery>.card {
+   @extend .border-2;
+   @extend .rounded-3;
+}
+
+.gallery>.card>.card-header {
+   @extend .py-1;
+   @extend .px-2;
+   @extend .rounded-top-3;
+   @extend .border-bottom;
+   @extend .border-1;
+   @extend .bg-light;
+   @extend .small;
+   text-align: center;
+}
+
+.gallery>.card>.card-header>p {
+   @extend .my-1;
+}
+
+.gallery>.card>.card-body {
+   @extend .p-2;
+   height: 250px;
+}
+
+.gallery>.card>.card-body>p:first-child {
+   display: contents;
+}
+
+.gallery>.card>.card-body>p:first-child img {
+   width: 100%;
+   height: 100%;
+   object-fit: contain;
+}
+
+// docstring definition-items
+.doc .doc-definition-items dt {
+   font-weight: normal;
+}
+
+.doc .doc-definition-items > dl > dt:not(:first-child) {
+   @extend .mt-3;
+}
+
+.doc .doc-definition-items > dl > dd {
+   @extend .mt-1;
+   @extend .mb-0;
+   @extend .ms-5;
+}
+
+.doc .doc-definition-items > dl > dd > table {
+   min-width: 33%;
+   width: 0;
+}
+
+.doc .doc-definition-items > dl > dd > table > thead {
+   border-top: 0rem solid $border-color;
+   border-bottom: 0.15em solid $border-color;
+}
+
+.doc .doc-definition-items > dl > dd > table td {
+   @extend .px-2;
+   @extend .py-1;
+}
+
+// Definitions that are code
+.doc .doc-definition-items dt code,
+.doc code.doc-typing-typealias-definition {
+   @extend .py-1;
+   display: block;
+   font-weight: normal;
+   color: var(--quarto-hl-ot-color);
+}
+
+.doc .doc-definition-items dt code a,
+.doc .doc-typing-typealias code a {
+   color: $primary;
+}
+
+// docstring object symbols
+.content code.doc-symbol {
+   font-size: 0.9rem;
+}
+
+.sidebar code.doc-symbol {
+   @extend .px-1;
+   font-size: 0.55rem;
+}
+
+.sidebar ul > li > a:has(.doc-symbol) {
+   white-space: nowrap;
+}
+
+.content code.doc-symbol-class,
+.sidebar code.doc-symbol-class {
+   color: $class-symbol-color;
+   background-color: tint-color($class-symbol-color, 95%);
+}
+
+.content code.doc-symbol-method,
+.sidebar code.doc-symbol-method {
+   color: $method-symbol-color;
+   background-color: tint-color($method-symbol-color, 95%);
+}
+
+.content code.doc-symbol-module,
+.sidebar code.doc-symbol-module {
+   color: $module-symbol-color;
+   background-color: tint-color($module-symbol-color, 95%);
+}
+
+.content code.doc-symbol-function,
+.sidebar code.doc-symbol-function {
+   color: $function-symbol-color;
+   background-color: tint-color($function-symbol-color, 95%);
+}
+
+.content code.doc-symbol-alias,
+.sidebar code.doc-symbol-alias {
+   color: $alias-symbol-color;
+   background-color: tint-color($alias-symbol-color, 95%);
+}
+
+.content code.doc-symbol-attribute,
+.sidebar code.doc-symbol-attribute {
+   color: $attribute-symbol-color;
+   background-color: tint-color($attribute-symbol-color, 95%);
+}
+
+code.doc-symbol-class::after {
+   content: "class";
+}
+
+code.doc-symbol-method::after {
+   content: "meth";
+}
+
+code.doc-symbol-module::after {
+   content: "mod";
+}
+
+code.doc-symbol-function::after {
+   content: "func";
+}
+
+code.doc-symbol-alias::after {
+   content: "alias";
+}
+
+code.doc-symbol-attribute::after {
+   content: "attr";
+}
+
+// docstring object labels
+
+.content code.doc-label {
+   @extend .fw-normal;
+   @extend .small;
+   font-size: 0.785rem;
+   color: $gray-800;
+   background-color: $gray-100;
+}
+
+.content code.doc-label-staticmethod::after {
+   content: "staticmethod";
+}
+
+.content code.doc-label-classmethod::after {
+   content: "classmethod";
+}
+
+.content code.doc-label-abstractmethod::after {
+   content: "abstractmethod";
+}
+
+.content code.doc-label-cached::after {
+   content: "cached";
+}
+
+.content code.doc-label-property::after {
+   content: "property";
+}
+
+.content code.doc-label-typing-overload::after {
+   content: "typing.overload";
+}
+
+.content code.doc-label-typing-typealias::after {
+   content: "TypeAlias";
+}
+
+.content code.doc-label-Protocol::after {
+   content: "Protocol";
+}
+
+
+/*-- scss:mixins --*/
+
+/*-- scss:functions --*/
+
+/*-- scss:uses --*/

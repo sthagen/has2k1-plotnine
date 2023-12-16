@@ -1,0 +1,19 @@
+---
+format:
+  html:
+    toc: false
+title: Tutorials
+jupyter: python3
+cache:
+   false
+---
+
+
+```{python}
+#| output: asis
+#| echo: false
+from _tutorials import generate_tutorials_links
+tutorials = generate_tutorials_links()
+
+print(tutorials)
+```
