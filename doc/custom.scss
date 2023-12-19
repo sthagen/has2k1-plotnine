@@ -47,6 +47,12 @@ table {
    border-bottom-color: $table-border-color;
 }
 
+// The default background color for the dropdown is
+// off-white and it washes out the text color.
+.navbar .dropdown-item {
+   color: $gray-800;
+}
+
 // docstring spacing and indentation
 section.doc-has-member-docs > :nth-child(n+3):nth-last-child(n+1),
 section.doc-has-member-docs section.doc-object > :nth-child(n+3):nth-last-child(n+1) {
@@ -85,12 +91,16 @@ section.doc-has-member-docs section.doc-object > :nth-child(n+3):nth-last-child(
    @extend .mb-0;
 }
 
+section.doc > h1, // case 1
 .doc section > h2,  // case 1
 .doc section > h3,  // case 1
 .doc section > h4 { // case 1
    @extend .mt-0;
 }
 
+section.doc > h1 + section {
+   @extend .pt-0;
+}
 
 .doc section {
    @extend .pt-4;

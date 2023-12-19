@@ -1,3 +1,6 @@
+"""
+This script is run by the Makefile before quarto_build
+"""
 import hashlib
 import re
 import shutil
@@ -7,18 +10,22 @@ from pathlib import Path
 
 DOC_DIR = Path(__file__).parent
 
-# The environment file holds the version
-ENV_TPL = """\
-VERSION={version}
+# The varibables file holds the version
+variables_filepath = DOC_DIR / "_variables.yml"
+VARIABLES_TPL = """\
+version: {version}
 """
 
 
-def generate_environment_file():
+def generate_variables_file():
     """
-    Generate _enviroment file in the quartodoc project directory
+    Generate _variables.yml file in the quartodoc project directory
     """
+    # Modifying variables file breaks quarto preview
+    if variables_filepath.exists():
+        return
+
     version = get_version("plotnine")
-    filepath = DOC_DIR / "_environment"
 
     # The scm-version scheme adds .date suffix to the version
     # if the repo is dirty. For better look while developing,
@@ -27,13 +34,8 @@ def generate_environment_file():
     if dirty_pattern.search(version):
         version = dirty_pattern.sub("", version)
 
-    # FIXME: We return because modifying the _environment file
-    # breaks "quarto render"
-    if filepath.exists():
-        return
-
-    contents = ENV_TPL.format(version=version)
-    filepath.write_text(contents)
+    contents = VARIABLES_TPL.format(version=version)
+    variables_filepath.write_text(contents)
 
 
 def copy_examples_and_tutorials():
@@ -69,5 +71,5 @@ def copy_examples_and_tutorials():
 
 
 if __name__ == "__main__":
-    generate_environment_file()
+    generate_variables_file()
     copy_examples_and_tutorials()
