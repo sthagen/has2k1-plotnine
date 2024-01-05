@@ -69,7 +69,7 @@ class guide_legend(guide):
         scale name is one of the aesthetics: `x`, `y`, `color`,
         `fill`, `size`, `shape`, `alpha`, `stroke`.
 
-        Returns this guide if trainning is successful and None
+        Returns this guide if training is successful and None
         if it fails
         """
         if aesthetic is None:
@@ -91,7 +91,12 @@ class guide_legend(guide):
         # create a hash of the important information in the guide
         labels = " ".join(str(x) for x in self.key["label"])
         info = "\n".join(
-            [self.title, labels, str(self.direction), self.__class__.__name__]
+            [
+                str(self.title),
+                labels,
+                str(self.direction),
+                self.__class__.__name__,
+            ]
         )
         self.hash = hashlib.sha256(info.encode("utf-8")).hexdigest()
         return self
