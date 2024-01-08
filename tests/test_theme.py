@@ -102,13 +102,6 @@ def test_add_element_blank():
     assert theme3 != theme2
     assert theme3 == theme4  # blanking cleans the slate
 
-    # When a themeable is blanked, the apply_ax method
-    # is replaced with the blank method.
-    th2 = theme2.themeables["axis_line_x"]
-    th3 = theme3.themeables["axis_line_x"]
-    assert th2.apply_ax.__name__ == "blank_ax"
-    assert th3.apply_ax.__name__ == "apply_ax"
-
 
 def test_element_line_dashed_capstyle():
     p = ggplot(mtcars, aes(x="wt", y="mpg")) + theme(
@@ -158,6 +151,23 @@ def test_no_ticks():
         + theme(axis_ticks_x=element_blank())
     )
     assert p == "no_ticks"
+
+
+def test_element_text_with_sequence_values():
+    p = (
+        ggplot(mtcars, aes("wt", "mpg"))
+        + geom_point()
+        + facet_grid(("am", "cyl"))
+        + theme(
+            axis_text=element_text(color="gray"),
+            axis_text_x=element_text(
+                color=("red", "green", "blue", "purple"), size=(8, 12, 16, 20)
+            ),
+            strip_text_x=element_text(color=("black", "brown", "cyan")),
+            strip_text_y=element_text(color=("teal", "orange")),
+        )
+    )
+    assert p == "element_text_with_sequence_values"
 
 
 class TestThemes:
