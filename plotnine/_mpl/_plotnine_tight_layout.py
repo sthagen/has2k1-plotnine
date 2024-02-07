@@ -14,18 +14,21 @@ import typing
 from copy import deepcopy
 from dataclasses import dataclass
 
-from matplotlib.offsetbox import AnchoredOffsetbox
-
 from ._plot_side_space import LRTBSpaces, WHSpaceParts, calculate_panel_spacing
+from .utils import get_transPanels
 
 if typing.TYPE_CHECKING:
     from typing import Literal, TypeAlias
 
+    from matplotlib.transforms import Transform
+
+    from plotnine._mpl.offsetbox import FlexibleAnchoredOffsetbox
+    from plotnine.iapi import legend_artists
     from plotnine.typing import (
         Facet,
         Figure,
-        LegendPosition,
         Text,
+        TupleFloat2,
     )
 
     from .layout_engine import LayoutPack
@@ -55,18 +58,17 @@ class TightParams:
     All parameters computed for the plotnine tight layout engine
     """
 
-    spaces: LRTBSpaces
-    grid: GridSpecParams
+    sides: LRTBSpaces
+    gullies: WHSpaceParts
 
-    def __init__(self, spaces: LRTBSpaces, wspace: float, hspace: float):
-        self.spaces = spaces
-        self.grid = GridSpecParams(
-            left=spaces.left,
-            right=spaces.right,
-            top=spaces.top,
-            bottom=spaces.bottom,
-            wspace=wspace,
-            hspace=hspace,
+    def __post_init__(self):
+        self.params = GridSpecParams(
+            left=self.sides.left,
+            right=self.sides.right,
+            top=self.sides.top,
+            bottom=self.sides.bottom,
+            wspace=self.gullies.wspace,
+            hspace=self.gullies.hspace,
         )
 
     def to_aspect_ratio(
@@ -88,9 +90,7 @@ class TightParams:
         """
         Reduce the height of axes to get the aspect ratio
         """
-        params = deepcopy(self)
-        spaces = params.spaces
-        grid = params.grid
+        self = deepcopy(self)
 
         # New height w.r.t figure height
         h1 = ratio * parts.w * (parts.W / parts.H)
@@ -99,14 +99,14 @@ class TightParams:
         dh = (parts.h - h1) * facet.nrow / 2
 
         # Reduce plot area height
-        grid.top -= dh
-        grid.bottom += dh
-        grid.hspace = parts.sh / h1
+        self.params.top -= dh
+        self.params.bottom += dh
+        self.params.hspace = parts.sh / h1
 
         # Add more vertical plot margin
-        spaces.t.plot_margin += dh
-        spaces.b.plot_margin += dh
-        return params
+        self.sides.t.plot_margin += dh
+        self.sides.b.plot_margin += dh
+        return self
 
     def _reduce_width(
         self, facet: Facet, ratio: float, parts: WHSpaceParts
@@ -114,9 +114,7 @@ class TightParams:
         """
         Reduce the width of axes to get the aspect ratio
         """
-        params = deepcopy(self)
-        spaces = params.spaces
-        grid = params.grid
+        self = deepcopy(self)
 
         # New width w.r.t figure width
         w1 = (parts.h * parts.H) / (ratio * parts.W)
@@ -125,27 +123,27 @@ class TightParams:
         dw = (parts.w - w1) * facet.ncol / 2
 
         # Reduce width
-        grid.left += dw
-        grid.right -= dw
-        grid.wspace = parts.sw / w1
+        self.params.left += dw
+        self.params.right -= dw
+        self.params.wspace = parts.sw / w1
 
         # Add more horizontal margin
-        spaces.l.plot_margin += dw
-        spaces.r.plot_margin += dw
-        return params
+        self.sides.l.plot_margin += dw
+        self.sides.r.plot_margin += dw
+        return self
 
 
 def get_plotnine_tight_layout(pack: LayoutPack) -> TightParams:
     """
     Compute tight layout parameters
     """
-    spaces = LRTBSpaces(pack)
-    parts = calculate_panel_spacing(pack, spaces)
-    params = TightParams(spaces, parts.wspace, parts.hspace)
+    sides = LRTBSpaces(pack)
+    gullies = calculate_panel_spacing(pack, sides)
+    tight_params = TightParams(sides, gullies)
     ratio = pack.facet._aspect_ratio()
     if ratio is not None:
-        params = params.to_aspect_ratio(pack.facet, ratio, parts)
-    return params
+        tight_params = tight_params.to_aspect_ratio(pack.facet, ratio, gullies)
+    return tight_params
 
 
 def set_figure_artist_positions(
@@ -155,58 +153,41 @@ def set_figure_artist_positions(
     """
     Set the x,y position of the artists around the panels
     """
-    _property = pack.theme.themeables.property
-    spaces = tparams.spaces
-    grid = tparams.grid
+    theme = pack.theme
+    sides = tparams.sides
+    params = tparams.params
 
     if pack.plot_title:
-        try:
-            ha = _property("plot_title", "ha")
-        except KeyError:
-            ha = "center"
-        pack.plot_title.set_y(spaces.t.edge("plot_title"))
-        horizonally_align_text_with_panels(pack.plot_title, grid, ha)
+        ha = theme.getp(("plot_title", "ha"))
+        pack.plot_title.set_y(sides.t.edge("plot_title"))
+        horizonally_align_text_with_panels(pack.plot_title, params, ha)
 
     if pack.plot_subtitle:
-        try:
-            ha = _property("plot_subtitle", "ha")
-        except KeyError:
-            ha = "center"
-        pack.plot_subtitle.set_y(spaces.t.edge("plot_subtitle"))
-        horizonally_align_text_with_panels(pack.plot_subtitle, grid, ha)
+        ha = theme.getp(("plot_subtitle", "ha"))
+        pack.plot_subtitle.set_y(sides.t.edge("plot_subtitle"))
+        horizonally_align_text_with_panels(pack.plot_subtitle, params, ha)
 
     if pack.plot_caption:
-        try:
-            ha = _property("plot_caption", "ha")
-        except KeyError:
-            ha = "right"
-        pack.plot_caption.set_y(spaces.b.edge("plot_caption"))
-        horizonally_align_text_with_panels(pack.plot_caption, grid, ha)
+        ha = theme.getp(("plot_caption", "ha"), "right")
+        pack.plot_caption.set_y(sides.b.edge("plot_caption"))
+        horizonally_align_text_with_panels(pack.plot_caption, params, ha)
 
     if pack.axis_title_x:
-        try:
-            ha = _property("axis_title_x", "ha")
-        except KeyError:
-            ha = "center"
-        pack.axis_title_x.set_y(spaces.b.edge("axis_title_x"))
-        horizonally_align_text_with_panels(pack.axis_title_x, grid, ha)
+        ha = theme.getp(("axis_title_x", "ha"), "center")
+        pack.axis_title_x.set_y(sides.b.edge("axis_title_x"))
+        horizonally_align_text_with_panels(pack.axis_title_x, params, ha)
 
     if pack.axis_title_y:
-        try:
-            va = _property("axis_title_y", "va")
-        except KeyError:
-            va = "center"
-        pack.axis_title_y.set_x(spaces.l.edge("axis_title_y"))
-        vertically_align_text_with_panels(pack.axis_title_y, grid, va)
+        va = theme.getp(("axis_title_y", "va"), "center")
+        pack.axis_title_y.set_x(sides.l.edge("axis_title_y"))
+        vertically_align_text_with_panels(pack.axis_title_y, params, va)
 
-    if pack.legend and pack.legend_position:
-        set_legend_position(
-            pack.legend, pack.legend_position, tparams, pack.figure
-        )
+    if pack.legends:
+        set_legends_position(pack.legends, tparams, pack.figure)
 
 
 def horizonally_align_text_with_panels(
-    text: Text, grid: GridSpecParams, ha: str
+    text: Text, params: GridSpecParams, ha: str
 ):
     """
     Horizontal justification
@@ -214,15 +195,15 @@ def horizonally_align_text_with_panels(
     Reinterpret horizontal alignment to be justification about the panels.
     """
     if ha == "center":
-        text.set_x((grid.left + grid.right) / 2)
+        text.set_x((params.left + params.right) / 2)
     elif ha == "left":
-        text.set_x(grid.left)
+        text.set_x(params.left)
     elif ha == "right":
-        text.set_x(grid.right)
+        text.set_x(params.right)
 
 
 def vertically_align_text_with_panels(
-    text: Text, grid: GridSpecParams, va: str
+    text: Text, params: GridSpecParams, va: str
 ):
     """
     Vertical justification
@@ -230,45 +211,74 @@ def vertically_align_text_with_panels(
     Reinterpret vertical alignment to be justification about the panels.
     """
     if va == "center":
-        text.set_y((grid.top + grid.bottom) / 2)
+        text.set_y((params.top + params.bottom) / 2)
     elif va == "top":
-        text.set_y(grid.top)
+        text.set_y(params.top)
     elif va == "bottom":
-        text.set_y(grid.bottom)
+        text.set_y(params.bottom)
 
 
-def set_legend_position(
-    legend: AnchoredOffsetbox,
-    position: LegendPosition,
+def set_legends_position(
+    legends: legend_artists,
     tparams: TightParams,
     fig: Figure,
 ):
     """
-    Place legend and align it centerally with respect to the panels
+    Place legend on the figure and justify is a required
     """
-    grid = tparams.grid
-    spaces = tparams.spaces
 
-    if position in ("right", "left"):
-        y = (grid.top + grid.bottom) / 2
-        if position == "left":
-            x = spaces.l.edge("legend")
-            loc = "center left"
-        else:
-            x = spaces.r.edge("legend")
-            loc = "center right"
-    elif position in ("top", "bottom"):
-        x = (grid.right + grid.left) / 2
-        if position == "top":
-            y = spaces.t.edge("legend")
-            loc = "upper center"
-        else:
-            y = spaces.b.edge("legend")
-            loc = "lower center"
-    else:
-        x, y = position
-        loc = "center"
+    def set_position(
+        aob: FlexibleAnchoredOffsetbox,
+        anchor_point: TupleFloat2,
+        xy_loc: TupleFloat2,
+        transform: Transform = fig.transFigure,
+    ):
+        """
+        Place box (by the anchor point) at given xy location
 
-    anchor_point = (x, y)
-    legend.loc = AnchoredOffsetbox.codes[loc]
-    legend.set_bbox_to_anchor(anchor_point, fig.transFigure)  # type: ignore
+        Parameters
+        ----------
+        aob :
+           Offsetbox to place
+        anchor_point :
+            Point on the Offsefbox.
+        xy_loc :
+            Point where to place the offsetbox.
+        transform :
+            Transformation
+        """
+        aob.xy_loc = xy_loc
+        aob.set_bbox_to_anchor(anchor_point, transform)  # type: ignore
+
+    sides = tparams.sides
+    params = fig.subplotpars
+
+    if legends.right:
+        j = legends.right.justification
+        y = params.bottom * (1 - j) + (params.top - sides.r._legend_height) * j
+        x = sides.r.edge("legend")
+        set_position(legends.right.box, (x, y), (1, 0))
+
+    if legends.left:
+        j = legends.left.justification
+        y = params.bottom * (1 - j) + (params.top - sides.l._legend_height) * j
+        x = sides.l.edge("legend")
+        set_position(legends.left.box, (x, y), (0, 0))
+
+    if legends.top:
+        j = legends.top.justification
+        x = params.left * (1 - j) + (params.right - sides.t._legend_width) * j
+        y = sides.t.edge("legend")
+        set_position(legends.top.box, (x, y), (0, 1))
+
+    if legends.bottom:
+        j = legends.bottom.justification
+        x = params.left * (1 - j) + (params.right - sides.b._legend_width) * j
+        y = sides.b.edge("legend")
+        set_position(legends.bottom.box, (x, y), (0, 0))
+
+    # Inside legends are placed using the panels coordinate system
+    if legends.inside:
+        transPanels = get_transPanels(fig)
+        for l in legends.inside:
+            set_position(l.box, l.position, l.justification, transPanels)

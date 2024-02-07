@@ -6,12 +6,13 @@ of objects with data created when the plot is being built.
 """
 from __future__ import annotations
 
-import typing
+import itertools
 from copy import copy
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
+from typing import TYPE_CHECKING
 
-if typing.TYPE_CHECKING:
-    from typing import Any, Dict, Iterator, Optional, Sequence
+if TYPE_CHECKING:
+    from typing import Any, Iterator, Optional, Sequence
 
     from plotnine.typing import (
         Axes,
@@ -25,6 +26,8 @@ if typing.TYPE_CHECKING:
         StripPosition,
         TupleFloat2,
     )
+
+    from ._mpl.offsetbox import FlexibleAnchoredOffsetbox
 
 
 @dataclass
@@ -163,7 +166,7 @@ class mpl_save_view:
     """
 
     figure: Figure
-    kwargs: Dict[str, Any]
+    kwargs: dict[str, Any]
 
 
 @dataclass
@@ -181,6 +184,36 @@ class layout_details:
     axis_x: bool
     axis_y: bool
     variables: dict[str, Any]
+    nrow: int
+    ncol: int
+
+    @property
+    def is_left(self) -> bool:
+        """
+        Return True if panel is on the left
+        """
+        return self.col == 1
+
+    @property
+    def is_right(self) -> bool:
+        """
+        Return True if panel is on the right
+        """
+        return self.col == self.ncol
+
+    @property
+    def is_top(self) -> bool:
+        """
+        Return True if panel is at the top
+        """
+        return self.row == 1
+
+    @property
+    def is_bottom(self) -> bool:
+        """
+        Return True if Panel is at the bottom
+        """
+        return self.row == self.nrow
 
 
 @dataclass
@@ -201,6 +234,7 @@ class strip_draw_info:
     label: str
     ax: Axes
     rotation: float
+    layout: layout_details
 
 
 @dataclass
@@ -216,7 +250,7 @@ class strip_label_details:
     @staticmethod
     def make(
         layout_info: layout_details,
-        vars: list[str],
+        vars: Sequence[str],
         location: StripPosition,
     ) -> strip_label_details:
         variables: dict[str, Any] = {
@@ -261,3 +295,61 @@ class strip_label_details:
         result = self.copy()
         result.variables = {"value": ", ".join(result.variables.values())}
         return result
+
+
+@dataclass
+class legend_justifications_view:
+    """
+    Global holder for how the legends should be justified
+    """
+
+    left: float = 0.5
+    right: float = 0.5
+    top: float = 0.5
+    bottom: float = 0.5
+    inside: Optional[TupleFloat2] = None
+
+
+@dataclass
+class outside_legend:
+    """
+    What is required to layout an outside legend
+    """
+
+    box: FlexibleAnchoredOffsetbox
+    justification: float
+
+
+@dataclass
+class inside_legend:
+    """
+    What is required to layout an inside legend
+    """
+
+    box: FlexibleAnchoredOffsetbox
+    justification: TupleFloat2
+    position: TupleFloat2
+
+
+@dataclass
+class legend_artists:
+    """
+    Legend artists that are drawn on the figure
+    """
+
+    left: Optional[outside_legend] = None
+    right: Optional[outside_legend] = None
+    top: Optional[outside_legend] = None
+    bottom: Optional[outside_legend] = None
+    inside: list[inside_legend] = field(default_factory=list)
+
+    @property
+    def boxes(self) -> list[FlexibleAnchoredOffsetbox]:
+        """
+        Return list of all AnchoredOffsetboxes for the legends
+        """
+        lrtb = (
+            l.box for l in (self.left, self.right, self.top, self.bottom) if l
+        )
+        inside = (l.box for l in self.inside)
+        return list(itertools.chain([*lrtb, *inside]))

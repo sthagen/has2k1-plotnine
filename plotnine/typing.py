@@ -31,6 +31,7 @@ from plotnine.facets.layout import Layout
 from plotnine.facets.strips import Strips
 from plotnine.geoms.geom import geom
 from plotnine.ggplot import ggplot
+from plotnine.guides import guide_colorbar, guide_legend
 from plotnine.guides.guide import guide
 from plotnine.iapi import strip_label_details
 from plotnine.layer import Layers, layer
@@ -143,6 +144,9 @@ FigureFormat: TypeAlias = Literal["png", "retina", "jpeg", "jpg", "svg", "pdf"]
 StripLabellingFuncNames: TypeAlias = Literal[
     "label_value", "label_both", "label_context"
 ]
+
+# Facet space
+FacetSpaceRatios: TypeAlias = dict[Literal["x", "y"], Sequence[float]]
 
 # Function that can facet strips
 StripLabellingFunc: TypeAlias = Callable[
@@ -259,7 +263,20 @@ ScaleLabels: TypeAlias = Sequence[str]
 ## Coords
 CoordRange: TypeAlias = TupleFloat2
 
-# Legend
+# Guide
+SidePosition: TypeAlias = Literal["left", "right", "top", "bottom"]
 LegendPosition: TypeAlias = (
-    Literal["left", "right", "top", "bottom"] | tuple[float, float]
+    Literal["left", "right", "top", "bottom", "inside"] | tuple[float, float]
+)
+Orientation: TypeAlias = Literal["horizontal", "vertical"]
+GuideKind: TypeAlias = Literal["legend", "colorbar", "colourbar"]
+LegendOrColorbar: TypeAlias = (
+    guide_legend | guide_colorbar | Literal["legend", "colorbar"]
+)
+NoGuide: TypeAlias = Literal["none", False]
+LegendOnly: TypeAlias = guide_legend | Literal["legend"]
+VerticalJustification: TypeAlias = Literal["bottom", "center", "top"]
+HorizontalJustification: TypeAlias = Literal["left", "center", "right"]
+TextJustification: TypeAlias = (
+    VerticalJustification | HorizontalJustification | Literal["baseline"]
 )

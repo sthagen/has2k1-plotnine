@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import typing
+from typing import TYPE_CHECKING
 
-from matplotlib.patches import FancyBboxPatch
+from matplotlib import artist
+from matplotlib.patches import FancyBboxPatch, Rectangle
 from matplotlib.text import _get_textbox  # type: ignore
 from matplotlib.transforms import Affine2D
 
-if typing.TYPE_CHECKING:
+if TYPE_CHECKING:
     from matplotlib.backend_bases import RendererBase
 
     from plotnine.typing import StripPosition
@@ -20,7 +21,7 @@ if typing.TYPE_CHECKING:
 # dimension information at draw time.
 
 
-class SFancyBboxPatch(FancyBboxPatch):
+class StripTextPatch(FancyBboxPatch):
     """
     Strip text background box
     """
@@ -70,3 +71,20 @@ class SFancyBboxPatch(FancyBboxPatch):
         if renderer:
             self.update_position_size(renderer)
         return super().get_window_extent(renderer)
+
+
+class InsideStrokedRectangle(Rectangle):
+    """
+    A rectangle whose stroked is fully contained within it
+    """
+
+    @artist.allow_rasterization
+    def draw(self, renderer):
+        """
+        Draw with the bounds of the rectangle adjusted to accomodate the stroke
+        """
+        x, y = self.xy
+        w, h = self.get_width(), self.get_height()
+        lw = self.get_linewidth()
+        self.set_bounds((x + lw / 2), (y + lw / 2), (w - lw), (h - lw))
+        super().draw(renderer)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import typing
 
+import numpy as np
 import pandas as pd
 
 from .._utils import add_margins, cross_join, join_keys, match, ninteraction
@@ -16,10 +17,10 @@ from .facet import (
 from .strips import Strips, strip
 
 if typing.TYPE_CHECKING:
-    from typing import Literal
+    from typing import Literal, Optional, Sequence
 
     from plotnine.iapi import layout_details
-    from plotnine.typing import Axes
+    from plotnine.typing import Axes, FacetSpaceRatios
 
 
 class facet_grid(facet):
@@ -28,42 +29,23 @@ class facet_grid(facet):
 
     Parameters
     ----------
-    facets : str | tuple | list
-        A formula with the rows (of the tabular display) on
-        the LHS and the columns (of the tabular display) on
-        the RHS; the dot in the formula is used to indicate
-        there should be no faceting on this dimension
-        (either row or column). If a tuple/list is used, it
-        must of size two, the elements of which must be
-        strings or lists. If string formula is not processed
-        as you may expect, use tuple/list. For example, the
-        follow two specifications are equivalent:
-
-        ```python
-        "func(var4) ~ func(var1+var3) + func(var2)"
-
-        ["func(var4)", ("func(var1+var3)", "func(var2)")]
-        ```
-
-        There may be cases where you cannot use a
-        use a pure string formula, e.g.
-
-        ```python
-        ['var4', ('var1+var3', 'var2')]
-        ```
-    margins : bool | list[str]
+    rows :
+        Variable expressions along the rows of the facets/panels.
+        Each expression is evaluated within the context of the dataframe.
+    cols :
+        Variable expressions along the columns of the facets/panels.
+        Each expression is evaluated within the context of the dataframe.
+    margins :
         variable names to compute margins for.
         True will compute all possible margins.
-    space : str | dict
+    space :
         Control the size of the  `x` or `y` sides of the panels.
         The size also depends to the `scales` parameter.
 
         If a string, it should be one of
         `['fixed', 'free', 'free_x', 'free_y']`{.py}.
-        Currently, only the `'fixed'` option is supported.
 
-        Alternatively if a `dict`, it indicates the relative facet
-        size ratios such as:
+        If a `dict`, it indicates the relative facet size ratios such as:
 
         ```python
         {"x": [1, 2], "y": [3, 1, 1]}
@@ -76,35 +58,33 @@ class facet_grid(facet):
 
         Note that the number of dimensions in the list must equal the
         number of facets that will be produced.
-    shrink : bool, default=True
+    shrink :
         Whether to shrink the scales to the output of the
         statistics instead of the raw data.
-    labeller : str | callable, default="label_value"
+    labeller :
         How to label the facets. A string value if it should be
         one of `["label_value", "label_both", "label_context"]`{.py}.
-    as_table : bool, default=True
+    as_table :
         If `True`, the facets are laid out like a table with
         the highest values at the bottom-right. If `False`
         the facets are laid out like a plot with the highest
         value a the top-right
-    drop : bool, default=True
+    drop :
         If `True`, all factor levels not used in the data
         will automatically be dropped. If `False`, all
         factor levels will be shown, regardless of whether
         or not they appear in the data.
     """
 
-    rows: list[str]
-    cols: list[str]
-
     def __init__(
         self,
-        facets: str | tuple[str | list[str], str | list[str]],
+        rows: Optional[str | Sequence[str]] = None,
+        cols: Optional[str | Sequence[str]] = None,
+        *,
         margins: bool | list[str] = False,
         scales: Literal["fixed", "free", "free_x", "free_y"] = "fixed",
         space: (
-            Literal["fixed", "free", "free_x", "free_y"]
-            | dict[Literal["x", "y"], list[int]]
+            Literal["fixed", "free", "free_x", "free_y"] | FacetSpaceRatios
         ) = "fixed",
         shrink: bool = True,
         labeller: Literal[
@@ -121,18 +101,63 @@ class facet_grid(facet):
             as_table=as_table,
             drop=drop,
         )
+        self.rows, self.cols = parse_grid_rows_cols(rows, cols)
         self.space = space
-        self.rows, self.cols = parse_grid_facets(facets)
         self.margins = margins
-        self.space_free = {
-            "x": isinstance(space, str) and space in ("free_x", "free"),
-            "y": isinstance(space, str) and space in ("free_y", "free"),
-        }
-        self.num_vars_x = len(self.cols)
-        self.num_vars_y = len(self.rows)
+
+    def _make_figure(self):
+        import matplotlib.pyplot as plt
+        from matplotlib.gridspec import GridSpec
+
+        layout = self.layout
+        space = self.space
+        ratios = {}
+
+        # Calculate the width (x) & height (y) ratios for space=free[xy]
+        if isinstance(space, str):
+            if space in {"free", "free_x"}:
+                pidx: list[int] = (
+                    layout.layout.sort_values("COL")
+                    .drop_duplicates("COL")
+                    .index.tolist()
+                )
+                panel_views = [layout.panel_params[i] for i in pidx]
+                ratios["width_ratios"] = [
+                    np.ptp(pv.x.range) for pv in panel_views
+                ]
+
+            if space in {"free", "free_y"}:
+                pidx = (
+                    layout.layout.sort_values("ROW")
+                    .drop_duplicates("ROW")
+                    .index.tolist()
+                )
+                panel_views = [layout.panel_params[i] for i in pidx]
+                ratios["height_ratios"] = [
+                    np.ptp(pv.y.range) for pv in panel_views
+                ]
+
+        if isinstance(self.space, dict):
+            if len(self.space["x"]) != self.ncol:
+                raise ValueError(
+                    "The number of x-ratios for the facet space sizes "
+                    "should match the number of columns."
+                )
+
+            if len(self.space["y"]) != self.nrow:
+                raise ValueError(
+                    "The number of y-ratios for the facet space sizes "
+                    "should match the number of rows."
+                )
+
+            ratios["width_ratios"] = self.space.get("x")
+            ratios["height_ratios"] = self.space.get("y")
+
+        return plt.figure(), GridSpec(self.nrow, self.ncol, **ratios)
 
     def compute_layout(self, data: list[pd.DataFrame]) -> pd.DataFrame:
         if not self.rows and not self.cols:
+            self.nrow, self.ncol = 1, 1
             return layout_null()
 
         base_rows = combine_vars(
@@ -194,7 +219,7 @@ class facet_grid(facet):
             )
             return data
 
-        vars = list(self.rows + self.cols)
+        vars = (*self.rows, *self.cols)
         margin_vars: tuple[list[str], list[str]] = (
             list(data.columns.intersection(self.rows)),
             list(data.columns.intersection(self.cols)),
@@ -205,12 +230,12 @@ class facet_grid(facet):
         data, facet_vals = add_missing_facets(data, layout, vars, facet_vals)
 
         # assign each point to a panel
-        if len(facet_vals) == 0:
-            # Special case of no facetting
-            data["PANEL"] = 1
-        else:
+        if len(facet_vals) and len(facet_vals.columns):
             keys = join_keys(facet_vals, layout, vars)
             data["PANEL"] = match(keys["x"], keys["y"], start=1)
+        else:
+            # Special case of no facetting
+            data["PANEL"] = 1
 
         # matching dtype and
         # the categories(panel numbers) for the data should be in the
@@ -225,26 +250,50 @@ class facet_grid(facet):
         data.reset_index(drop=True, inplace=True)
         return data
 
-    def make_ax_strips(self, layout_info: layout_details, ax: Axes) -> Strips:
+    def make_strips(self, layout_info: layout_details, ax: Axes) -> Strips:
         lst = []
-        toprow = layout_info.row == 1
-        rightcol = layout_info.col == self.ncol
-        if toprow and len(self.cols):
+        if layout_info.is_top and self.cols:
             s = strip(self.cols, layout_info, self, ax, "top")
             lst.append(s)
-        if rightcol and len(self.rows):
+        if layout_info.is_right and self.rows:
             s = strip(self.rows, layout_info, self, ax, "right")
             lst.append(s)
         return Strips(lst)
 
 
-def parse_grid_facets(
-    facets: str | tuple[str | list[str], str | list[str]],
+def parse_grid_rows_cols(
+    rows: Optional[str | Sequence[str]] = None,
+    cols: Optional[str | Sequence[str]] = None,
+) -> tuple[list[str], list[str]]:
+    """
+    Return the rows & cols that make up the grid
+    """
+    if cols is None and isinstance(rows, str):  # formula
+        return parse_grid_facets_old(rows)
+
+    if cols is None:
+        cols = []
+    elif isinstance(cols, str):
+        cols = [cols]
+
+    if rows is None:
+        rows = []
+    elif isinstance(rows, str):
+        rows = [rows]
+
+    return list(rows), list(cols)
+
+
+def parse_grid_facets_old(
+    facets: str | tuple[str | Sequence[str], str | Sequence[str]],
 ) -> tuple[list[str], list[str]]:
     """
     Return two lists of facetting variables, for the rows & columns
+
+    This parse the old & silently deprecated style.
     """
     valid_seqs = [
+        "(var1,)",
         "('var1', '.')",
         "('var1', 'var2')",
         "('.', 'var1')",
@@ -255,6 +304,7 @@ def parse_grid_facets(
     )
 
     valid_forms = [
+        "var1",
         "var1 ~ .",
         "var1 ~ var2",
         ". ~ var1",
@@ -265,13 +315,19 @@ def parse_grid_facets(
     error_msg_f = "Valid formula for 'facet_grid' look like" f" {valid_forms}"
 
     if not isinstance(facets, str):
-        if len(facets) != 2:
+        if len(facets) == 1:
+            rows = ensure_list_spec(facets[0])
+            cols = []
+        elif len(facets) == 2:
+            rows = ensure_list_spec(facets[0])
+            cols = ensure_list_spec(facets[1])
+        else:
             raise PlotnineError(error_msg_s)
+        return list(rows), list(cols)
 
-        rows = ensure_list_spec(facets[0])
-        cols = ensure_list_spec(facets[1])
-
-        return rows, cols
+    if "~" not in facets:
+        rows = ensure_list_spec(facets)
+        return list(rows), []
 
     # Example of allowed formulae
     # "c ~ a + b'
@@ -287,10 +343,10 @@ def parse_grid_facets(
 
     rows = ensure_list_spec(lhs)
     cols = ensure_list_spec(rhs)
-    return rows, cols
+    return list(rows), list(cols)
 
 
-def ensure_list_spec(term: list[str] | str) -> list[str]:
+def ensure_list_spec(term: Sequence[str] | str) -> Sequence[str]:
     """
     Convert a str specification to a list spec
 

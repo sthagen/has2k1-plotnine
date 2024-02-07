@@ -1,5 +1,5 @@
 from ..options import get_option
-from .elements import element_rect, element_text
+from .elements import element_blank, element_line, element_rect, element_text
 from .theme import theme
 
 
@@ -66,33 +66,35 @@ class theme_seaborn(theme):
                 ha="left",
                 margin={"r": m, "units": "fig"},
             ),
-            legend_box="auto",
-            legend_box_just="auto",
             legend_box_margin=0,
             legend_box_spacing=m * 3,  # figure units
-            legend_direction="auto",
-            legend_entry_spacing_x=5,
-            legend_entry_spacing_y=2,
+            legend_key_spacing_x=5,
+            legend_key_spacing_y=2,
             legend_key_size=base_size * 0.8 * 1.8,
+            legend_frame=element_blank(),
+            legend_ticks_length=0.2,
             legend_margin=0,
             legend_position="right",
             legend_spacing=10,  # points
             legend_text=element_text(
-                va="baseline",
-                ha="left",
-                margin={"t": 3, "b": 3, "l": 3, "r": 3, "units": "pt"},
-            ),
-            legend_title=element_text(
-                ha="left",
                 margin={
-                    "t": m,
-                    "b": m,
-                    "l": m,
-                    "r": m,
+                    "t": m / 1.5,
+                    "b": m / 1.5,
+                    "l": m / 1.5,
+                    "r": m / 1.5,
                     "units": "fig",
                 },
             ),
-            legend_title_align="auto",
+            legend_ticks=element_line(color="#CCCCCC", size=1),
+            legend_title=element_text(
+                margin={
+                    "t": m,
+                    "b": m / 2,
+                    "l": m * 2,
+                    "r": m * 2,
+                    "units": "fig",
+                },
+            ),
             panel_spacing=m,
             plot_caption=element_text(
                 size=base_size * 0.8,
@@ -104,20 +106,18 @@ class theme_seaborn(theme):
             plot_margin=m,
             plot_subtitle=element_text(
                 size=base_size * 1,
-                ha="left",
                 va="top",
                 ma="left",
                 margin={"b": m, "units": "fig"},
             ),
             plot_title=element_text(
                 size=base_size * 1.2,
-                ha="left",
                 va="top",
                 ma="left",
                 margin={"b": m, "units": "fig"},
             ),
             strip_align=0,
-            strip_background=element_rect(color="None", fill="#D1CDDF"),
+            strip_background=element_rect(color="none", fill="#D1CDDF"),
             strip_text=element_text(
                 size=base_size * 0.8,
                 linespacing=1.0,

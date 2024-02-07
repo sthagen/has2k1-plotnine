@@ -116,8 +116,8 @@ class ggplot:
         """
         Print/show the plot
         """
-        dpi = self.theme.themeables.property("dpi")
-        width, height = self.theme.themeables.property("figure_size")
+        dpi = self.theme.getp("dpi")
+        width, height = self.theme.getp("figure_size")
         W, H = int(width * dpi), int(height * dpi)
         self.show()
         return f"<Figure Size: ({W} x {H})>"
@@ -263,21 +263,20 @@ class ggplot:
             self._build()
 
             # setup
-            figure, _ = self._create_figure()
-            self._setup_parameters()
-            self.theme.setup()
-            self.facet.strips.generate()
+            self.figure, self.axs = self.facet.setup(self)
+            self.theme.setup(self)
 
             # Drawing
             self._draw_layers()
+            self._draw_panel_borders()
             self._draw_breaks_and_labels()
-            self._draw_legend()
+            self.guides.draw(self)
             self._draw_figure_texts()
             self._draw_watermarks()
 
             # Artist object theming
             self.theme.apply()
-            figure.set_layout_engine(PlotnineLayoutEngine(self))
+            self.figure.set_layout_engine(PlotnineLayoutEngine(self))
 
         return self.figure
 
@@ -305,18 +304,17 @@ class ggplot:
             self._build()
 
             # setup
-            self._setup_parameters()
-            self.theme.setup()
-            self.facet.strips.generate()
+            self.figure, self.axs = self.facet.setup(self)
+            self.theme.setup(self)
 
             # drawing
             self._draw_layers()
             self._draw_breaks_and_labels()
-            self._draw_legend()
+            self.guides.draw(self)
 
             # artist theming
             self.theme.apply()
-            figure.set_layout_engine(PlotnineLayoutEngine(self))
+            self.figure.set_layout_engine(PlotnineLayoutEngine(self))
 
         return self
 
@@ -399,36 +397,33 @@ class ggplot:
         # Allow layout to modify data before rendering
         layout.finish_data(layers)
 
-    def _setup_parameters(self):
+    def _draw_panel_borders(self):
         """
-        Set facet properties
+        Draw Panel boders
         """
-        # facet
-        self.facet.set_properties(self)
-        # layout
-        self.layout.axs = self.axs
-        # theme
-        self.theme.figure = self.figure
-        self.theme.axs = self.axs
+        # We add a patch rather than use ax.patch because want the
+        # grid lines below the borders. We leave ax.patch for the
+        # background only.
+        if self.theme.T.is_blank("panel_border"):
+            return
 
-    def _create_figure(self) -> tuple[Figure, list[Axes]]:
-        """
-        Create Matplotlib figure and axes
-        """
-        import matplotlib.pyplot as plt
+        from matplotlib.patches import Rectangle
 
-        # Good for development
-        if get_option("close_all_figures"):
-            plt.close("all")
-
-        figure: Figure = plt.figure()
-        axs = self.facet.make_axes(
-            figure, self.layout.layout, self.coordinates
-        )
-
-        self.figure = figure
-        self.axs = axs
-        return figure, axs
+        for ax in self.axs:
+            rect = Rectangle(
+                (0, 0),
+                1,
+                1,
+                facecolor="none",
+                transform=ax.transAxes,
+                # Adding a clip path but defaulting to no clipping
+                # gives a fullwidth border that can perfectly overlap
+                # will with legend borders.
+                clip_path=ax.patch,
+                clip_on=False,
+            )
+            self.figure.add_artist(rect)
+            self.theme.targets.panel_border.append(rect)
 
     def _draw_layers(self):
         """
@@ -468,45 +463,17 @@ class ggplot:
             if layout_info.axis_y:
                 ax.yaxis.set_tick_params(which="both", left=True)
 
-    def _draw_legend(self):
-        """
-        Draw legend onto the figure
-        """
-        from matplotlib.font_manager import FontProperties
-        from matplotlib.offsetbox import AnchoredOffsetbox
-
-        legend_box = self.guides.build(self)
-        if not legend_box:
-            return
-
-        anchored_box = AnchoredOffsetbox(
-            loc="center",
-            child=legend_box,
-            pad=0.0,
-            frameon=False,
-            prop=FontProperties(size=0, stretch=0),
-            bbox_to_anchor=(0, 0),
-            bbox_transform=self.figure.transFigure,
-            borderpad=0.0,
-        )
-
-        anchored_box.set_zorder(90.1)
-        anchored_box.set_in_layout(True)
-
-        self.theme._targets["legend_background"] = anchored_box
-        self.figure.add_artist(anchored_box)
-
     def _draw_figure_texts(self):
         """
         Draw title, x label, y label and caption onto the figure
         """
         figure = self.figure
         theme = self.theme
-        _targets = theme._targets
+        targets = theme.targets
 
         title = self.labels.get("title", "")
-        caption = self.labels.get("caption", "")
         subtitle = self.labels.get("subtitle", "")
+        caption = self.labels.get("caption", "")
 
         # Get the axis labels (default or specified by user)
         # and let the coordinate modify them e.g. flip
@@ -515,17 +482,20 @@ class ggplot:
         )
 
         # The locations are handled by the layout manager
-        text_title = figure.text(0, 0, title)
-        text_caption = figure.text(0, 0, caption)
-        text_subtitle = figure.text(0, 0, subtitle)
-        text_x = figure.text(0, 0, labels.x or "")
-        text_y = figure.text(0, 0, labels.y or "")
+        if title:
+            targets.plot_title = figure.text(0, 0, title)
 
-        _targets["plot_title"] = text_title
-        _targets["plot_caption"] = text_caption
-        _targets["plot_subtitle"] = text_subtitle
-        _targets["axis_title_x"] = text_x
-        _targets["axis_title_y"] = text_y
+        if subtitle:
+            targets.plot_subtitle = figure.text(0, 0, subtitle)
+
+        if caption:
+            targets.plot_caption = figure.text(0, 0, caption)
+
+        if labels.x:
+            targets.axis_title_x = figure.text(0, 0, labels.x)
+
+        if labels.y:
+            targets.axis_title_y = figure.text(0, 0, labels.y)
 
     def _draw_watermarks(self):
         """
@@ -607,7 +577,7 @@ class ggplot:
         ):
             raise PlotnineError("You must specify both width and height")
 
-        width, height = self.theme.themeables.property("figure_size")
+        width, height = self.theme.getp("figure_size")
         assert width is not None
         assert height is not None
 

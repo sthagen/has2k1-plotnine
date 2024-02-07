@@ -9,6 +9,8 @@ import warnings
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from contextlib import suppress
+from copy import deepcopy
+from dataclasses import field
 from typing import TYPE_CHECKING, cast, overload
 from warnings import warn
 
@@ -22,7 +24,7 @@ from ..exceptions import PlotnineError, PlotnineWarning
 from ..mapping import aes
 
 if TYPE_CHECKING:
-    from typing import Any, Callable
+    from typing import Any, Callable, Literal, TypeVar
 
     import numpy.typing as npt
     from matplotlib.typing import ColorType
@@ -35,14 +37,28 @@ if TYPE_CHECKING:
         FloatArray,
         FloatArrayLike,
         IntArray,
+        SidePosition,
+        TupleFloat2,
     )
 
+    T = TypeVar("T")
 
 # Points and lines of equal size should give the
 # same visual diameter (for points) and thickness
 # (for lines). Given the adjustments in geom_point,
 # this factor gives us the match.
 SIZE_FACTOR = np.sqrt(np.pi)
+
+# A lookup for the coordinates of specific named positions on
+# a unit square.
+BOX_LOCATIONS: dict[str, TupleFloat2] = {
+    "left": (0, 0.5),
+    "right": (1, 0.5),
+    "top": (0.5, 1),
+    "bottom": (0.5, 0),
+    "center": (0.5, 0.5),
+    "centre": (0.5, 0.5),
+}
 
 
 def is_scalar(val):
@@ -145,7 +161,8 @@ def multitype_sort(arr: AnyArrayLike) -> list[Any]:
 
 
 def _margins(
-    vars: tuple[list[str], list[str]], margins: bool | list[str] = True
+    vars: tuple[Sequence[str], Sequence[str]],
+    margins: bool | Sequence[str] = True,
 ):
     """
     Figure out margining variables.
@@ -199,8 +216,8 @@ def _margins(
 
 def add_margins(
     df: pd.DataFrame,
-    vars: tuple[list[str], list[str]],
-    margins: bool | list[str] = True,
+    vars: tuple[Sequence[str], Sequence[str]],
+    margins: bool | Sequence[str] = True,
 ) -> pd.DataFrame:
     """
     Add margins to a data frame.
@@ -1214,3 +1231,63 @@ def simple_table(
         *[format_row(*row) for row in rows],  # Ri1 Ri2 Ri3
     ]
     return "\n".join(_rows)
+
+
+def no_init(default: T) -> T:
+    """
+    Set defaut value of a dataclass field that will not be __init__ed
+    """
+    return field(init=False, default=default)
+
+
+def no_init_mutable(default: T) -> T:
+    """
+    Set defaut value of a dataclass field that will not be __init__ed
+    """
+    return field(init=False, default_factory=lambda: deepcopy(default))
+
+
+def default_field(default: T) -> T:
+    """
+    Set default value of a dataclass field using a factory
+    """
+    return field(default_factory=lambda: deepcopy(default))
+
+
+def get_opposite_side(s: SidePosition) -> SidePosition:
+    """
+    Return the opposite side
+    """
+    lookup: dict[SidePosition, SidePosition] = {
+        "right": "left",
+        "left": "right",
+        "top": "bottom",
+        "bottom": "top",
+    }
+    return lookup[s]
+
+
+def ensure_xy_location(
+    loc: SidePosition | Literal["center"] | float | TupleFloat2,
+) -> TupleFloat2:
+    """
+    Convert input into (x, y) location
+
+    Parameters
+    ----------
+    loc:
+        A specification for a location that can be converted to
+        coordinate points on a unit-square. Note that, if the location
+        is (x, y) points, the same points are returned.
+    """
+    if loc in BOX_LOCATIONS:
+        return BOX_LOCATIONS[loc]
+    elif isinstance(loc, (float, int)):
+        return (loc, 0.5)
+    elif isinstance(loc, tuple):
+        h, v = loc
+        if isinstance(h, str) and isinstance(v, str):
+            return BOX_LOCATIONS[h][0], BOX_LOCATIONS[v][1]
+        if isinstance(h, (int, float)) and isinstance(v, (int, float)):
+            return (h, v)
+    raise ValueError(f"Cannot make a location from '{loc}'")

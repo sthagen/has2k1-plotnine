@@ -1,5 +1,3 @@
-from copy import copy, deepcopy
-
 from .elements import element_blank, element_line, element_rect, element_text
 from .theme import theme
 from .theme_gray import theme_gray
@@ -32,68 +30,41 @@ class theme_xkcd(theme_gray):
         scale=1,
         length=100,
         randomness=2,
-        stroke_size=4,
+        stroke_size=3,
         stroke_color="white",
     ):
         from matplotlib import patheffects
 
         super().__init__(base_size)
+        sketch_params = (scale, length, randomness)
+        path_effects = [
+            patheffects.withStroke(
+                linewidth=stroke_size, foreground=stroke_color
+            )
+        ]
         self += theme(
             text=element_text(family=["xkcd", "Humor Sans", "Comic Sans MS"]),
-            axis_ticks=element_line(color="black", size=1.5),
+            axis_ticks=element_line(color="black", size=1),
             axis_ticks_minor=element_blank(),
             axis_ticks_direction="in",
             axis_ticks_length_major=6,
-            legend_background=element_rect(color="black", fill="None"),
+            legend_background=element_rect(color="black"),
+            legend_box_margin=2,
             legend_margin=5,
-            legend_key=element_rect(fill="None"),
-            panel_border=element_rect(color="black", size=1.5),
+            legend_key=element_rect(fill="none"),
+            panel_border=element_rect(color="black", size=1),
             panel_grid=element_blank(),
             panel_background=element_rect(fill="white"),
             strip_background=element_rect(color="black", fill="white"),
-            strip_background_x=element_rect(width=2 / 3.0),
-            strip_background_y=element_rect(height=2 / 3.0),
+            strip_background_x=element_rect(width=2 / 3),
+            strip_background_y=element_rect(height=2 / 3),
             strip_align=-0.5,
         )
 
-        d = {
-            "axes.unicode_minus": False,
-            "path.sketch": (scale, length, randomness),
-            "path.effects": [
-                patheffects.withStroke(
-                    linewidth=stroke_size, foreground=stroke_color
-                )
-            ],
-        }
-        self._rcParams.update(d)
-
-    def __deepcopy__(self, memo):
-        """
-        Deep copy support for theme_xkcd
-        """
-        cls = self.__class__
-        result = cls.__new__(cls)
-        memo[id(self)] = result
-        old = self.__dict__
-        new = result.__dict__
-
-        for key, item in old.items():
-            if key == "_rcParams":
-                continue
-            new[key] = deepcopy(item, memo)
-
-        result._rcParams = {}
-        for k, v in self._rcParams.items():
-            try:
-                result._rcParams[k] = deepcopy(v, memo)
-            except NotImplementedError:
-                # deepcopy raises an error for objects that are
-                # drived from or composed of
-                # matplotlib.transform. TransformNode.
-                # Not desirable, but probably requires upstream fix.
-                # In particular, XKCD uses
-                # matplotlib.patheffects.withStrok
-                # -gdowding
-                result._rcParams[k] = copy(v)
-
-        return result
+        self._rcParams.update(
+            {
+                "axes.unicode_minus": False,
+                "path.sketch": sketch_params,
+                "path.effects": path_effects,
+            }
+        )

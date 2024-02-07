@@ -1,5 +1,5 @@
 from ..options import get_option
-from .elements import element_blank, element_text
+from .elements import element_blank, element_line, element_text
 from .theme import theme
 
 
@@ -31,8 +31,6 @@ class theme_void(theme):
                 color="black",
                 size=base_size,
                 linespacing=0.9,
-                ha="center",
-                va="center",
                 rotation=0,
                 margin={},
             ),
@@ -43,35 +41,36 @@ class theme_void(theme):
             aspect_ratio=get_option("aspect_ratio"),
             dpi=get_option("dpi"),
             figure_size=get_option("figure_size"),
-            legend_box="auto",
-            legend_box_just="auto",
             legend_box_margin=0,
             legend_box_spacing=m * 3,
-            legend_direction="auto",
-            legend_entry_spacing_x=5,
-            legend_entry_spacing_y=2,
-            legend_key_height=18,
-            legend_key_width=18,
+            legend_key_spacing_x=5,
+            legend_key_spacing_y=2,
+            legend_frame=element_blank(),
+            legend_key_size=base_size * 0.8 * 1.8,
+            legend_ticks_length=0.2,
             legend_margin=0,
             legend_position="right",
             legend_spacing=10,
             legend_text=element_text(
                 size=base_size * 0.8,
-                ha="left",
-                margin={"t": 3, "b": 3, "l": 3, "r": 3, "units": "pt"},
-            ),
-            legend_text_legend=element_text(va="baseline"),
-            legend_title=element_text(
-                ha="left",
                 margin={
-                    "t": m,
-                    "b": m,
-                    "l": m,
-                    "r": m,
+                    "t": m / 1.5,
+                    "b": m / 1.5,
+                    "l": m / 1.5,
+                    "r": m / 1.5,
                     "units": "fig",
                 },
             ),
-            legend_title_align="auto",
+            legend_ticks=element_line(color="#CCCCCC", size=1),
+            legend_title=element_text(
+                margin={
+                    "t": m,
+                    "b": m / 2,
+                    "l": m * 2,
+                    "r": m * 2,
+                    "units": "fig",
+                },
+            ),
             panel_spacing=m,
             plot_caption=element_text(
                 size=base_size * 0.8,
@@ -80,7 +79,7 @@ class theme_void(theme):
                 ma="left",
                 margin={"t": m, "units": "fig"},
             ),
-            plot_margin=m,
+            plot_margin=0,
             plot_subtitle=element_text(
                 size=base_size * 1,
                 ha="left",
@@ -90,7 +89,7 @@ class theme_void(theme):
             ),
             plot_title=element_text(
                 size=base_size * 1.2,
-                ha="left",
+                ha="center",
                 va="top",
                 ma="left",
                 margin={"b": m, "units": "fig"},

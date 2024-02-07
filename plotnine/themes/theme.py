@@ -2,18 +2,22 @@ from __future__ import annotations
 
 import typing
 from copy import copy, deepcopy
+from functools import cached_property
 from typing import overload
 
 from ..exceptions import PlotnineError
 from ..options import get_option, set_option
+from .targets import ThemeTargets
 from .themeable import Themeables, themeable
 
 if typing.TYPE_CHECKING:
-    from typing import Any, Type
+    from typing import Type
 
     from typing_extensions import Self
 
-    from plotnine.typing import Axes, Figure, Ggplot
+    from plotnine import ggplot
+    from plotnine.typing import Axes, Figure
+
 
 # All complete themes are initiated with these rcparams. They
 # can be overridden.
@@ -85,18 +89,19 @@ class theme:
     should not be modified after that.
     """
 
+    complete: bool
+
     # This is set when the figure is created,
     # it is useful at legend drawing time and
     # when applying the theme.
+    plot: ggplot
     figure: Figure
     axs: list[Axes]
-    complete: bool
 
     # Dictionary to collect matplotlib objects that will
     # be targeted for theming by the themeables
-    # It is initialised in the plot context and removed at
-    # the end of it.
-    _targets: dict[str, Any]
+    # It is initialised in the setup method.
+    targets: ThemeTargets
 
     def __init__(
         self,
@@ -136,6 +141,7 @@ class theme:
         axis_ticks_x=None,
         axis_ticks_y=None,
         axis_ticks=None,
+        legend_ticks=None,
         panel_grid_major_x=None,
         panel_grid_major_y=None,
         panel_grid_minor_x=None,
@@ -145,6 +151,13 @@ class theme:
         panel_grid=None,
         line=None,
         legend_key=None,
+        legend_frame=None,
+        legend_justification=None,
+        legend_justification_bottom=None,
+        legend_justification_inside=None,
+        legend_justification_left=None,
+        legend_justification_right=None,
+        legend_justification_top=None,
         legend_background=None,
         legend_box_background=None,
         panel_background=None,
@@ -190,14 +203,17 @@ class theme:
         legend_key_width=None,
         legend_key_height=None,
         legend_key_size=None,
+        legend_ticks_length=None,
         legend_margin=None,
         legend_box_spacing=None,
         legend_spacing=None,
+        legend_position_inside=None,
         legend_position=None,
-        legend_title_align=None,
-        legend_entry_spacing_x=None,
-        legend_entry_spacing_y=None,
-        legend_entry_spacing=None,
+        legend_title_position=None,
+        legend_text_position=None,
+        legend_key_spacing_x=None,
+        legend_key_spacing_y=None,
+        legend_key_spacing=None,
         strip_align_x=None,
         strip_align_y=None,
         strip_align=None,
@@ -206,6 +222,7 @@ class theme:
     ):
         self.themeables = Themeables()
         self.complete = complete
+        self._is_setup = False
 
         if complete:
             self._rcParams = deepcopy(default_rcparams)
@@ -241,6 +258,20 @@ class theme:
             and other.rcParams == self.rcParams
         )
 
+    @cached_property
+    def T(self):
+        """
+        Convenient access to the themeables
+        """
+        return self.themeables
+
+    @cached_property
+    def getp(self):
+        """
+        Convenient access into the properties of the themeables
+        """
+        return self.themeables.getp
+
     def apply(self):
         """
         Apply this theme, then apply additional modifications in order.
@@ -249,29 +280,46 @@ class theme:
         Subclasses that override this method should make sure that the
         base class method is called.
         """
-        for th in self.themeables.values():
+        self._add_default_themeable_properties()
+
+        for th in self.T.values():
             th.apply(self)
 
-    def setup(self):
+    def setup(self, plot: ggplot):
         """
-        Setup theme & figure for before drawing
+        Setup theme for applying
 
-        1. The figure is modified with to the theme settings
-           that it are required before drawing.
-        2. Give contained objects of the theme/themeables a
-           reference to the theme.
+        This method will be called when the figure and axes have been created
+        but before any plotting or other artists have been added to the
+        figure. This method gives the theme and the elements references to
+        the figure and/or axes.
 
-        This method will be called once with a figure object
-        before any plotting has completed. Subclasses that
-        override this method should make sure that the base
-        class method is called.
+        It also initialises where the artists to be themed will be stored.
         """
-        from .elements import element_text
+        from .elements.element_base import element_base
 
-        for th in self.themeables.values():
-            th.setup_figure(self.figure)
-            if isinstance(th.theme_element, element_text):
-                th.theme_element.setup(self)
+        self.plot = plot
+        self.figure = plot.figure
+        self.axs = plot.axs
+        self.targets = ThemeTargets()
+
+        for name, th in self.T.items():
+            if isinstance(th.theme_element, element_base):
+                th.theme_element.setup(self, name)
+
+        self._is_setup = True
+
+    def _add_default_themeable_properties(self):
+        """
+        Add default themeable properties that depend depend on the plot
+
+        Some properties may be left unset (None) and their final values are
+        best worked out dynamically after the plot has been built, but
+        before the themeables are applied.
+
+        This is where the theme is modified to add those values.
+        """
+        smart_title_and_subtitle_ha(self)
 
     @property
     def rcParams(self):
@@ -302,7 +350,7 @@ class theme:
             # In particular, XKCD uses matplotlib.patheffects.withStrok
             rcParams = copy(self._rcParams)
 
-        for th in self.themeables.values():
+        for th in self.T.values():
             rcParams.update(th.rcParams)
         return rcParams
 
@@ -317,6 +365,9 @@ class theme:
         A complete theme will annihilate any previous themes. Partial themes
         can be added together and can be added to a complete theme.
         """
+        if self._is_setup:
+            other.setup(self.plot)
+
         if other.complete:
             return other
 
@@ -338,10 +389,10 @@ class theme:
         ...
 
     @overload
-    def __radd__(self, other: Ggplot) -> Ggplot:
+    def __radd__(self, other: ggplot) -> ggplot:
         ...
 
-    def __radd__(self, other: theme | Ggplot) -> theme | Ggplot:
+    def __radd__(self, other: theme | ggplot) -> theme | ggplot:
         """
         Add theme to ggplot object or to another theme
 
@@ -394,7 +445,7 @@ class theme:
         old = self.__dict__
         new = result.__dict__
 
-        shallow = {"figure", "_targets"}
+        shallow = {"plot", "figure", "axs"}
         for key, item in old.items():
             if key in shallow:
                 new[key] = item
@@ -410,7 +461,7 @@ class theme:
 
         The result is a theme that has double the dpi.
         """
-        dpi = self.themeables.property("dpi")
+        dpi = self.getp("dpi")
         return self + theme(dpi=dpi * 2)
 
 
@@ -463,3 +514,33 @@ def theme_update(**kwargs: themeable):
     """
     assert "complete" not in kwargs
     theme_set(theme_get() + theme(**kwargs))  # pyright: ignore
+
+
+def smart_title_and_subtitle_ha(plot_theme: theme):
+    """
+    Smartly add the horizontal alignment for the title and subtitle
+    """
+    from .elements import element_text
+
+    has_title = plot_theme.targets.plot_title is not None
+    has_subtitle = plot_theme.targets.plot_subtitle is not None
+
+    title_ha = plot_theme.getp(("plot_title", "ha"))
+    subtitle_ha = plot_theme.getp(("plot_subtitle", "ha"))
+
+    default_title_ha, default_subtitle_ha = "center", "left"
+    kwargs = {}
+
+    if has_title and not title_ha:
+        if has_subtitle and not subtitle_ha:
+            title_ha = default_subtitle_ha
+        else:
+            title_ha = default_title_ha
+        kwargs["plot_title"] = element_text(ha=title_ha)
+
+    if has_subtitle and not subtitle_ha:
+        subtitle_ha = default_subtitle_ha
+        kwargs["plot_subtitle"] = element_text(ha=subtitle_ha)
+
+    if kwargs:
+        plot_theme += theme(**kwargs)

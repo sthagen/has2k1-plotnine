@@ -446,21 +446,31 @@ quartodoc:
         - legend_box_margin
         - legend_box_spacing
         - legend_direction
-        - legend_entry_spacing
-        - legend_entry_spacing_x
-        - legend_entry_spacing_y
+        - legend_key_spacing
+        - legend_key_spacing_x
+        - legend_key_spacing_y
+        - legend_frame
+        - legend_justification
+        - legend_justification_bottom
+        - legend_justification_inside
+        - legend_justification_left
+        - legend_justification_right
+        - legend_justification_top
         - legend_key
         - legend_key_height
         - legend_key_size
         - legend_key_width
         - legend_margin
         - legend_position
+        - legend_position_inside
         - legend_spacing
         - legend_text
         - legend_text_colorbar
         - legend_text_legend
+        - legend_text_position
+        - legend_ticks_length
         - legend_title
-        - legend_title_align
+        - legend_title_position
         - line
         - panel_background
         - panel_border

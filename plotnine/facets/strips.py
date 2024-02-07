@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-import typing
-from contextlib import suppress
-from typing import List
+from typing import TYPE_CHECKING, List
 
 from ..iapi import strip_draw_info, strip_label_details
 
-if typing.TYPE_CHECKING:
+if TYPE_CHECKING:
+    from typing import Sequence
+
+    from typing_extensions import Self
+
     from plotnine.iapi import layout_details
     from plotnine.typing import (
         Axes,
@@ -34,7 +36,7 @@ class strip:
 
     def __init__(
         self,
-        vars: list[str],
+        vars: Sequence[str],
         layout_info: layout_details,
         facet: Facet,
         ax: Axes,
@@ -46,9 +48,9 @@ class strip:
         self.facet = facet
         self.figure = facet.figure
         self.theme = facet.theme
+        self.layout_info = layout_info
         label_info = strip_label_details.make(layout_info, vars, position)
         self.label_info = facet.labeller(label_info)
-        self.draw_info = self.get_draw_info()
 
     def get_draw_info(self) -> strip_draw_info:
         """
@@ -61,53 +63,48 @@ class strip:
             to draw the strip text and the background box
             (box_x, box_y, box_width, box_height).
         """
-        _property = self.theme.themeables.property
+        theme = self.theme
         position = self.position
         if position == "top":
             # The x & y values are just starting locations
             # The final location is determined by the layout manager.
-            x, y = 0, 1
+            y = 1
             ha, va = "center", "bottom"
-            rotation = _property("strip_text_x", "rotation")
+            rotation = theme.getp(("strip_text_x", "rotation"))
             box_width = 1
             box_height = 0  # Determined by the text size
             # TODO: Allow two unique paddings for either side.
             # Requires implementing an mpl.patches.boxstyle that recognises
             # two padding values.
-            strip_text_margin = _property("strip_text_x", "margin").get_as(
+            strip_text_margin = theme.getp(("strip_text_x", "margin")).get_as(
                 "b", "lines"
             )
-            strip_align = _property("strip_align_x")
+            strip_align = theme.getp("strip_align_x")
 
             # x & width properties of the background slide and
             # shrink the strip horizontally.
-            with suppress(KeyError):
-                x = _property("strip_text_x", "x")
-            with suppress(KeyError):
-                box_width = _property("strip_background_x", "width")
+            x = theme.getp(("strip_text_x", "x"), 0)
+            box_width = theme.getp(("strip_background_x", "width"), 1)
 
         elif position == "right":
             # The x & y values are just starting locations
             # The final location is determined by the layout manager.
-            x, y = 1, 0
+            x = 1
             ha, va = "left", "center"
-            rotation = _property("strip_text_y", "rotation")
+            rotation = theme.getp(("strip_text_y", "rotation"))
             box_width = 0  # Determine by the text height
-            box_height = 1
             # TODO: Allow two unique paddings for either side.
             # Requires implementing an mpl.patches.boxstyle that recognises
             # two padding values.
-            strip_text_margin = _property("strip_text_y", "margin").get_as(
+            strip_text_margin = theme.getp(("strip_text_y", "margin")).get_as(
                 "r", "lines"
             )
-            strip_align = _property("strip_align_y")
+            strip_align = theme.getp("strip_align_y")
 
             # y & height properties of the background slide and
             # shrink the strip vertically.
-            with suppress(KeyError):
-                y = _property("strip_text_y", "y")
-            with suppress(KeyError):
-                box_height = _property("strip_background_y", "height")
+            y = theme.getp(("strip_text_y", "y"), 0)
+            box_height = theme.getp(("strip_background_y", "height"), 1)
         else:
             raise ValueError(f"Unknown position for strip text: {position!r}")
 
@@ -124,6 +121,7 @@ class strip:
             label=self.label_info.text(),
             ax=self.ax,
             rotation=rotation,
+            layout=self.layout_info,
         )
 
     def draw(self):
@@ -133,28 +131,20 @@ class strip:
 
         from .._mpl.text import SText
 
-        _targets = self.theme._targets
-        text = SText(self.draw_info)
+        targets = self.theme.targets
+        draw_info = self.get_draw_info()
+
+        text = SText(draw_info)
         rect = text.spatch
 
-        self.ax.add_artist(text)
-        self.ax.add_artist(rect)
+        self.figure.add_artist(text)
 
-        for key in (
-            "strip_text_x",
-            "strip_text_y",
-            "strip_background_x",
-            "strip_background_y",
-        ):
-            if key not in _targets:
-                _targets[key] = []
-
-        if self.draw_info.position == "right":
-            _targets["strip_background_y"].append(rect)
-            _targets["strip_text_y"].append(text)
+        if draw_info.position == "right":
+            targets.strip_background_y.append(rect)
+            targets.strip_text_y.append(text)
         else:
-            _targets["strip_background_x"].append(rect)
-            _targets["strip_text_x"].append(text)
+            targets.strip_background_x.append(rect)
+            targets.strip_text_x.append(text)
 
 
 class Strips(List[strip]):
@@ -168,6 +158,7 @@ class Strips(List[strip]):
     def from_facet(facet: Facet) -> Strips:
         new = Strips()
         new.facet = facet
+        new.setup()
         return new
 
     @property
@@ -194,7 +185,7 @@ class Strips(List[strip]):
         for s in self:
             s.draw()
 
-    def generate(self):
+    def setup(self) -> Self:
         """
         Calculate the box information for all strips
 
@@ -202,5 +193,6 @@ class Strips(List[strip]):
         """
         for layout_info in self.layout.get_details():
             ax = self.axs[layout_info.panel_index]
-            lst = self.facet.make_ax_strips(layout_info, ax)
+            lst = self.facet.make_strips(layout_info, ax)
             self.extend(lst)
+        return self

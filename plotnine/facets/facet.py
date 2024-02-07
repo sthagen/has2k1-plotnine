@@ -15,11 +15,12 @@ from ..scales.scales import Scales
 from .strips import Strips
 
 if typing.TYPE_CHECKING:
-    from typing import Any, Literal, Optional
+    from typing import Any, Literal, Optional, Sequence
 
     import numpy.typing as npt
     from matplotlib.gridspec import GridSpec
 
+    from plotnine import ggplot
     from plotnine.iapi import layout_details, panel_view
     from plotnine.mapping import Environment
     from plotnine.typing import (
@@ -27,7 +28,6 @@ if typing.TYPE_CHECKING:
         CanBeStripLabellingFunc,
         Coord,
         Figure,
-        Ggplot,
         Layers,
         Layout,
         Scale,
@@ -97,30 +97,11 @@ class facet:
     # Axes
     axs: list[Axes]
 
-    # The first and last axes according to how MPL creates them.
-    # Used for labelling the x and y axes,
-    first_ax: Axes
-    last_ax: Axes
-
-    # Number of facet variables along the horizontal axis
-    num_vars_x = 0
-
-    # Number of facet variables along the vertical axis
-    num_vars_y = 0
-
     # ggplot object that the facet belongs to
-    plot: Ggplot
+    plot: ggplot
 
     # Facet strips
     strips: Strips
-
-    # Control the relative size of multiple facets
-    # Use a subclass to change the default.
-    # See: facet_grid for an example
-    space: (
-        Literal["fixed", "free", "free_x", "free_y"]
-        | dict[Literal["x", "y"], list[int]]
-    ) = "fixed"
 
     grid_spec: GridSpec
 
@@ -148,7 +129,7 @@ class facet:
             "y": scales in ("free_y", "free"),
         }
 
-    def __radd__(self, plot: Ggplot) -> Ggplot:
+    def __radd__(self, plot: ggplot) -> ggplot:
         """
         Add facet to ggplot object
         """
@@ -156,16 +137,20 @@ class facet:
         plot.facet.environment = plot.environment
         return plot
 
-    def set_properties(self, plot: Ggplot):
-        """
-        Copy required properties from ggplot object
-        """
-        self.axs = plot.axs
-        self.coordinates = plot.coordinates
-        self.figure = plot.figure
+    def setup(self, plot: ggplot):
+        self.plot = plot
         self.layout = plot.layout
+
+        if hasattr(plot, "figure"):
+            self.figure, self.axs = plot.figure, plot.axs
+        else:
+            self.figure, self.axs = self.make_figure()
+
+        self.coordinates = plot.coordinates
         self.theme = plot.theme
+        self.layout.axs = self.axs
         self.strips = Strips.from_facet(self)
+        return self.figure, self.axs
 
     def setup_data(self, data: list[pd.DataFrame]) -> list[pd.DataFrame]:
         """
@@ -303,7 +288,7 @@ class facet:
 
         return self
 
-    def make_ax_strips(self, layout_info: layout_details, ax: Axes) -> Strips:
+    def make_strips(self, layout_info: layout_details, ax: Axes) -> Strips:
         """
         Create strips for the facet
 
@@ -340,6 +325,8 @@ class facet:
             b = t[1] if np.isfinite(t[1]) else None
             return (a, b)
 
+        theme = self.theme
+
         # limits
         ax.set_xlim(*_inf_to_none(panel_params.x.range))
         ax.set_ylim(*_inf_to_none(panel_params.y.range))
@@ -362,11 +349,10 @@ class facet:
         ax.xaxis.set_major_formatter(MyFixedFormatter(panel_params.x.labels))
         ax.yaxis.set_major_formatter(MyFixedFormatter(panel_params.y.labels))
 
-        _property = self.theme.themeables.property
-        margin = _property("axis_text_x", "margin")
+        margin = theme.getp(("axis_text_x", "margin"))
         pad_x = margin.get_as("t", "pt")
 
-        margin = _property("axis_text_y", "margin")
+        margin = theme.getp(("axis_text_y", "margin"))
         pad_y = margin.get_as("r", "pt")
 
         ax.tick_params(axis="x", which="major", pad=pad_x)
@@ -393,58 +379,35 @@ class facet:
 
         return result
 
-    def _create_subplots(
-        self, fig: Figure, layout: pd.DataFrame
-    ) -> list[Axes]:
+    def _make_figure(self) -> tuple[Figure, GridSpec]:
         """
-        Create suplots and return axs
+        Create figure & gridspec
         """
+        import matplotlib.pyplot as plt
         from matplotlib.gridspec import GridSpec
 
-        num_panels = len(layout)
+        return plt.figure(), GridSpec(self.nrow, self.ncol)
+
+    def make_figure(self) -> tuple[Figure, list[Axes]]:
+        """
+        Create and return Matplotlib figure and subplot axes
+        """
+        num_panels = len(self.layout.layout)
         axsarr = np.empty((self.nrow, self.ncol), dtype=object)
-        space = self.space
-        default_space: dict[Literal["x", "y"], list[int]] = {
-            "x": [1 for x in range(self.ncol)],
-            "y": [1 for x in range(self.nrow)],
-        }
 
-        if isinstance(space, str):
-            # TODO: Implement 'free', 'free_x' & 'free_y'
-            # This is the value of "fixed" space
-            space = default_space
-        elif isinstance(space, dict):
-            if "x" not in space:
-                space["x"] = default_space["x"]
-            if "y" not in space:
-                space["y"] = default_space["y"]
-
-        if len(space["x"]) != self.ncol:
-            raise ValueError(
-                "The number of x-ratios for the facet space sizes "
-                "should match the number of columns."
-            )
-
-        if len(space["y"]) != self.nrow:
-            raise ValueError(
-                "The number of y-ratios for the facet space sizes "
-                "should match the number of rows."
-            )
-
-        gs = GridSpec(
-            self.nrow,
-            self.ncol,
-            height_ratios=space["y"],
-            width_ratios=space["x"],
-        )
+        # Create figure & gridspec
+        figure, gs = self._make_figure()
         self.grid_spec = gs
 
         # Create axes
-        i = 1
-        for row in range(self.nrow):
-            for col in range(self.ncol):
-                axsarr[row, col] = fig.add_subplot(gs[i - 1])
-                i += 1
+        it = itertools.product(range(self.nrow), range(self.ncol))
+        for i, (row, col) in enumerate(it):
+            axsarr[row, col] = figure.add_subplot(gs[i])
+
+        # axsarr = np.array([
+        #     figure.add_subplot(gs[i])
+        #     for i in range(self.nrow * self.ncol)
+        # ]).reshape((self.nrow, self.ncol))
 
         # Rearrange axes
         # They are ordered to match the positions in the layout table
@@ -463,31 +426,15 @@ class facet:
 
         # Delete unused axes
         for ax in axs[num_panels:]:
-            fig.delaxes(ax)
+            figure.delaxes(ax)
         axs = axs[:num_panels]
-        return list(axs)
-
-    def make_axes(
-        self, figure: Figure, layout: pd.DataFrame, coordinates: Coord
-    ) -> list[Axes]:
-        """
-        Create and return Matplotlib axes
-        """
-        axs = self._create_subplots(figure, layout)
-
-        # Used for labelling the x and y axes, the first and
-        # last axes according to how MPL creates them.
-        self.first_ax = figure.axes[0]
-        self.last_ax = figure.axes[-1]
-        self.figure = figure
-        self.axs = axs
-        return axs
+        return figure, list(axs)
 
     def _aspect_ratio(self) -> Optional[float]:
         """
         Return the aspect_ratio
         """
-        aspect_ratio = self.theme.themeables.property("aspect_ratio")
+        aspect_ratio = self.theme.getp("aspect_ratio")
         if aspect_ratio == "auto":
             # If the panels have different limits the coordinates
             # cannot compute a common aspect ratio
@@ -504,7 +451,7 @@ class facet:
 def combine_vars(
     data: list[pd.DataFrame],
     environment: Environment,
-    vars: list[str],
+    vars: Sequence[str],
     drop: bool = True,
 ) -> pd.DataFrame:
     """
@@ -588,7 +535,7 @@ def layout_null() -> pd.DataFrame:
     """
     layout = pd.DataFrame(
         {
-            "PANEL": [1],
+            "PANEL": pd.Categorical([1]),
             "ROW": 1,
             "COL": 1,
             "SCALE_X": 1,
@@ -603,7 +550,7 @@ def layout_null() -> pd.DataFrame:
 def add_missing_facets(
     data: pd.DataFrame,
     layout: pd.DataFrame,
-    vars: list[str],
+    vars: Sequence[str],
     facet_vals: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
@@ -634,7 +581,7 @@ def add_missing_facets(
 
 
 def eval_facet_vars(
-    data: pd.DataFrame, vars: list[str], env: Environment
+    data: pd.DataFrame, vars: Sequence[str], env: Environment
 ) -> pd.DataFrame:
     """
     Evaluate facet variables

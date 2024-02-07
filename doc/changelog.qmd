@@ -27,6 +27,45 @@ title: Changelog
   If you set the backend to an interactive one, use
   [](:class:`~plotnine.ggplot.show`) to draw the plot.
 
+- The default horizontal alignment for the plot title is center if it
+  there is no subtitle. When there is a subtitle, the default is to have
+  both aligned to the left.
+
+- Some parameters that control the look and feel of `guide_colorbar` and
+  `guide_legend` have been removed. For their place, the `theme` parameter
+  has been introduced and it gives better control of the look and feel.
+
+- Themeables `legend_entry_spacing`, `legend_entry_spacing_x` and
+  `legend_entry_spacing_y` have been renamed to `legend_key_spacing`,
+  `legend_key_spacing_x` and `legend_key_spacing_y` respectively
+
+- [](:class:`~plotnine.facets.facet_grid`) now accepts two parameters,
+  `rows` and `cols`, to specify the variables along the two dimensions of
+  the panels.
+
+  The previous way of using a single parameter will still work if it is a
+  string. For cases where the value was a list, e.g.
+
+  ```python
+  facet_grid(facets=["col1", "col2"])
+  ```
+
+  can be rewritten as any one of;
+
+  ```python
+  facet_grid("col1", "col2")
+  facet_grid(["col1"], ["col2"])
+  facet_grid(rows="col1", cols="col2")
+  facet_grid(rows=["col1"], cols=["col2"])
+  ```
+
+- The `facets` parameter in [](:class:`~plotnine.facets.facet_wrap`) has
+  also changed to a more straight forward specification for the column
+  variables. It expects a single string or a list/tuple of strings.
+  ({{< issue 545 >}})
+
+  However, the R-style formula strings are still silently accepted.
+
 ### New
 
 - Added symmetric logarithm transformation scales
@@ -73,6 +112,45 @@ title: Changelog
 
   will output all subsequent figures in svg format.
 
+- Improved support for customizing guides/legends.
+
+  - You can now add a frame to the colobar
+  - You can now apply themes to individual guides, e.g.
+
+    ```py
+    + guides(color=guide_colorbar(theme=theme_xkcd()))
+    ```
+    or
+
+    ```py
+    + guides(color=guide_legend(theme=theme_minimal())
+    ```
+
+  - You can now place legends at more than one position
+    around the panels. e.g.
+
+    ```py
+    + guides(
+        color=guide_colorbar(position="left"),
+        fill=guide_legend(position="bottom"),
+        size=guide_legend(position="bottom")
+    )
+    ```
+
+    Puts the `fill` and `size` guides at the bottom, and the
+    `color` guide on the left.
+
+  - You can easily justify the legend along the four edges
+    of the space around the panel area.
+
+  - You can now place the legend inside the panels with easily
+    control its location.
+
+- The `space` parameter of [](:class:`~plotnine.facets.facet_grid`) now
+  responds to the values `free`, `free_x` and `free_y` to have panels
+  whose relative width and/or height depends on the data range.
+  ({{< issue 545 >}})
+
 ### Bug Fixes
 
 - Fixed handling of minor breaks in
@@ -99,12 +177,17 @@ title: Changelog
 
 - Fixed drawing the upper outline of `geom_ribbon`. ({{< issue 728 >}})
 
+- Fixed issue where the gridlines overlap the panel border. ({{< issue 638 >}})
+
 ### Enhancements
 
 - All `__all__` variables are explicitly assigned to help static typecheckers
   infer module attributes. ({{< issue 685 >}})
 
 - You can now pickle the drawn matplotlib figures. ({{< issue 729 >}})
+
+- The facet titles in the `strip_text` are now better aligned are appear more
+  centered withing the `strip_background`.
 
 ## v0.12.1
 (2023-05-09)
