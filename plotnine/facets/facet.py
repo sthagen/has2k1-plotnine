@@ -18,21 +18,18 @@ if typing.TYPE_CHECKING:
     from typing import Any, Literal, Optional, Sequence
 
     import numpy.typing as npt
+    from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
     from matplotlib.gridspec import GridSpec
 
-    from plotnine import ggplot
+    from plotnine import ggplot, theme
+    from plotnine.coords.coord import coord
+    from plotnine.facets.layout import Layout
     from plotnine.iapi import layout_details, panel_view
+    from plotnine.layer import Layers
     from plotnine.mapping import Environment
-    from plotnine.typing import (
-        Axes,
-        CanBeStripLabellingFunc,
-        Coord,
-        Figure,
-        Layers,
-        Layout,
-        Scale,
-        Theme,
-    )
+    from plotnine.scales.scale import scale
+    from plotnine.typing import CanBeStripLabellingFunc
 
 
 class facet:
@@ -83,13 +80,13 @@ class facet:
     params: dict[str, Any]
 
     # Theme object, automatically updated before drawing the plot
-    theme: Theme
+    theme: theme
 
     # Figure object on which the facet panels are created
     figure: Figure
 
     # coord object, automatically updated before drawing the plot
-    coordinates: Coord
+    coordinates: coord
 
     # layout object, automatically updated before drawing the plot
     layout: Layout
@@ -187,8 +184,8 @@ class facet:
     def init_scales(
         self,
         layout: pd.DataFrame,
-        x_scale: Optional[Scale] = None,
-        y_scale: Optional[Scale] = None,
+        x_scale: Optional[scale] = None,
+        y_scale: Optional[scale] = None,
     ) -> types.SimpleNamespace:
         scales = types.SimpleNamespace()
 

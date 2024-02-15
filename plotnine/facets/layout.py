@@ -11,16 +11,14 @@ from ..iapi import labels_view, layout_details, pos_scales
 
 if typing.TYPE_CHECKING:
     import pandas as pd
+    from matplotlib.axes import Axes
 
+    from plotnine import ggplot
+    from plotnine.coords.coord import coord
+    from plotnine.facets.facet import facet
     from plotnine.iapi import panel_view
-    from plotnine.typing import (
-        Axes,
-        Coord,
-        Facet,
-        Ggplot,
-        Layers,
-        Scales,
-    )
+    from plotnine.layer import Layers
+    from plotnine.scales.scales import Scales
 
 
 class Layout:
@@ -29,10 +27,10 @@ class Layout:
     """
 
     # facet
-    facet: Facet
+    facet: facet
 
     # coordinate system
-    coord: Coord
+    coord: coord
 
     # A dataframe with the layout information of the plot
     layout: pd.DataFrame
@@ -48,7 +46,7 @@ class Layout:
 
     axs: list[Axes]  # MPL axes
 
-    def setup(self, layers: Layers, plot: Ggplot):
+    def setup(self, layers: Layers, plot: ggplot):
         """
         Create a layout for the panels
 
@@ -178,7 +176,7 @@ class Layout:
         with suppress(AttributeError):
             self.panel_scales_y.reset()
 
-    def setup_panel_params(self, coord: Coord):
+    def setup_panel_params(self, coord: coord):
         """
         Calculate the x & y range & breaks information for each panel
 

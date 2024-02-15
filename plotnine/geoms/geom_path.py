@@ -17,17 +17,14 @@ if typing.TYPE_CHECKING:
 
     import numpy.typing as npt
     import pandas as pd
+    from matplotlib.axes import Axes
+    from matplotlib.offsetbox import DrawingArea
     from matplotlib.path import Path
 
+    from plotnine.coords.coord import coord
     from plotnine.iapi import panel_view
-    from plotnine.typing import (
-        Axes,
-        Coord,
-        DrawingArea,
-        Layer,
-        TupleFloat2,
-        TupleInt2,
-    )
+    from plotnine.layer import layer
+    from plotnine.typing import TupleFloat2, TupleInt2
 
 
 @document
@@ -108,7 +105,7 @@ class geom_path(geom):
         self,
         data: pd.DataFrame,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
         ax: Axes,
         **params: Any,
     ):
@@ -154,7 +151,7 @@ class geom_path(geom):
     def draw_group(
         data: pd.DataFrame,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
         ax: Axes,
         **params: Any,
     ):
@@ -178,7 +175,7 @@ class geom_path(geom):
 
     @staticmethod
     def draw_legend(
-        data: pd.Series[Any], da: DrawingArea, lyr: Layer
+        data: pd.Series[Any], da: DrawingArea, lyr: layer
     ) -> DrawingArea:
         """
         Draw a horizontal line in the box
@@ -217,7 +214,7 @@ class geom_path(geom):
 
     @staticmethod
     def legend_key_size(
-        data: pd.Series[Any], min_size: TupleInt2, lyr: Layer
+        data: pd.Series[Any], min_size: TupleInt2, lyr: layer
     ) -> TupleInt2:
         w, h = min_size
         pad_w, pad_h = w * 0.5, h * 0.5
@@ -265,7 +262,7 @@ class arrow:
         self,
         data: pd.DataFrame,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
         ax: Axes,
         constant: bool = True,
         **params: Any,
@@ -383,7 +380,7 @@ class arrow:
         x2: npt.ArrayLike,
         y2: npt.ArrayLike,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
         ax: Axes,
     ) -> list[Path]:
         """

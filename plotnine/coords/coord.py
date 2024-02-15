@@ -13,13 +13,13 @@ if typing.TYPE_CHECKING:
     import numpy.typing as npt
     import pandas as pd
 
+    from plotnine import ggplot
     from plotnine.iapi import labels_view, panel_view
+    from plotnine.scales.scale import scale
     from plotnine.typing import (
         FloatArray,
         FloatArrayLike,
         FloatSeries,
-        Ggplot,
-        Scale,
     )
 
 
@@ -35,7 +35,7 @@ class coord:
     # if the coordinate system needs them
     params: dict[str, Any]
 
-    def __radd__(self, plot: Ggplot) -> Ggplot:
+    def __radd__(self, plot: ggplot) -> ggplot:
         """
         Add coordinates to ggplot object
         """
@@ -131,7 +131,7 @@ class coord:
         """
         return data
 
-    def setup_panel_params(self, scale_x: Scale, scale_y: Scale) -> panel_view:
+    def setup_panel_params(self, scale_x: scale, scale_y: scale) -> panel_view:
         """
         Compute the range and break information for the panel
         """

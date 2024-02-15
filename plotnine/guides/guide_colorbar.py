@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cached_property
 from types import SimpleNamespace as NS
 from typing import TYPE_CHECKING, cast
@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from mizani.bounds import rescale
 
-from .._utils import get_opposite_side, no_init_mutable
+from .._utils import get_opposite_side
 from ..exceptions import PlotnineError, PlotnineWarning
 from ..mapping.aes import rename_aesthetics
 from ..scales.scale_continuous import scale_continuous
@@ -64,7 +64,9 @@ class guide_colorbar(guide):
     draw_llim: bool = True
 
     # Non-Parameter Attributes
-    available_aes: set[str] = no_init_mutable({"colour", "color", "fill"})
+    available_aes: set[str] = field(
+        init=False, default_factory=lambda: {"colour", "color", "fill"}
+    )
 
     def __post_init__(self):
         self._elements_cls = GuideElementsColorbar

@@ -37,19 +37,15 @@ from .scales.scales import Scales
 from .themes.theme import theme, theme_get
 
 if typing.TYPE_CHECKING:
+    from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
     from typing_extensions import Self
 
-    from plotnine.typing import (
-        Axes,
-        Coord,
-        DataLike,
-        Facet,
-        Figure,
-        Layer,
-        PlotAddable,
-        Theme,
-        Watermark,
-    )
+    from plotnine import watermark
+    from plotnine.coords.coord import coord
+    from plotnine.facets.facet import facet
+    from plotnine.layer import layer
+    from plotnine.typing import DataLike, PlotAddable
 
 __all__ = ("ggplot", "ggsave", "save_as_pdf_pages")
 
@@ -75,9 +71,9 @@ class ggplot:
 
     figure: Figure
     axs: list[Axes]
-    theme: Theme
-    facet: Facet
-    coordinates: Coord
+    theme: theme
+    facet: facet
+    coordinates: coord
 
     def __init__(
         self,
@@ -96,10 +92,10 @@ class ggplot:
         self.guides = guides()
         self.scales = Scales()
         self.theme = theme_get()
-        self.coordinates: Coord = coord_cartesian()
+        self.coordinates: coord = coord_cartesian()
         self.environment = Environment.capture(1)
         self.layout = Layout()
-        self.watermarks: list[Watermark] = []
+        self.watermarks: list[watermark] = []
 
         # build artefacts
         self._build_objs = NS()
@@ -516,7 +512,7 @@ class ggplot:
         hash_token = abs(self.__hash__())
         return Path(f"plotnine-save-{hash_token}.{ext}")
 
-    def _update_labels(self, layer: Layer):
+    def _update_labels(self, layer: layer):
         """
         Update label data for the ggplot
 

@@ -21,8 +21,9 @@ from .strips import Strips, strip
 if typing.TYPE_CHECKING:
     from typing import Literal, Optional, Sequence
 
+    from matplotlib.axes import Axes
+
     from plotnine.iapi import layout_details
-    from plotnine.typing import Axes
 
 
 class facet_wrap(facet):
@@ -164,7 +165,6 @@ class facet_wrap(facet):
 
         # assign each point to a panel
         if len(facet_vals) and len(facet_vals.columns):
-            # print(type(facet_vals))
             keys = join_keys(facet_vals, layout, self.vars)
             data["PANEL"] = match(keys["x"], keys["y"], start=1)
         else:

@@ -14,19 +14,19 @@ from .mapping.evaluation import evaluate, stage
 if typing.TYPE_CHECKING:
     from typing import Any, Optional, Sequence, SupportsIndex
 
+    from plotnine import ggplot
+    from plotnine.coords.coord import coord
+    from plotnine.facets.layout import Layout
+    from plotnine.geoms.geom import geom
+    from plotnine.layer import layer
     from plotnine.mapping import Environment
+    from plotnine.positions.position import position
+    from plotnine.scales.scales import Scales
+    from plotnine.stats.stat import stat
     from plotnine.typing import (
-        Coord,
         DataFrameConvertible,
         DataLike,
-        Geom,
-        Ggplot,
-        Layer,
         LayerDataLike,
-        Layout,
-        Position,
-        Scales,
-        Stat,
     )
 
 
@@ -73,12 +73,12 @@ class layer:
 
     def __init__(
         self,
-        geom: Geom,
-        stat: Stat,
+        geom: geom,
+        stat: stat,
         *,
         mapping: aes,
         data: Optional[LayerDataLike],
-        position: Position,
+        position: position,
         inherit_aes: bool = True,
         show_legend: bool | dict[str, bool] | None = None,
         raster: bool = False,
@@ -94,7 +94,7 @@ class layer:
         self.zorder = 0
 
     @staticmethod
-    def from_geom(geom: Geom) -> Layer:
+    def from_geom(geom: geom) -> layer:
         """
         Create a layer given a [](`~plotnine.geoms.geom`)
 
@@ -125,7 +125,7 @@ class layer:
                 lkwargs[param] = geom.DEFAULT_PARAMS[param]
         return layer(**lkwargs)
 
-    def __radd__(self, plot: Ggplot) -> Ggplot:
+    def __radd__(self, plot: ggplot) -> ggplot:
         """
         Add layer to ggplot object
         """
@@ -154,7 +154,7 @@ class layer:
 
         return result
 
-    def setup(self, plot: Ggplot):
+    def setup(self, plot: ggplot):
         """
         Prepare layer for the plot building
 
@@ -250,7 +250,7 @@ class layer:
         self.geom.environment = plot_environment
         self.stat.environment = plot_environment
 
-    def compute_aesthetics(self, plot: Ggplot):
+    def compute_aesthetics(self, plot: ggplot):
         """
         Return a dataframe where the columns match the aesthetic mappings
 
@@ -284,7 +284,7 @@ class layer:
         data = self.stat.compute_layer(data, params, layout)
         self.data = data
 
-    def map_statistic(self, plot: Ggplot):
+    def map_statistic(self, plot: ggplot):
         """
         Mapping aesthetics to computed statistics
         """
@@ -345,7 +345,7 @@ class layer:
         data = self.position.compute_layer(data, params, layout)
         self.data = data
 
-    def draw(self, layout: Layout, coord: Coord):
+    def draw(self, layout: Layout, coord: coord):
         """
         Draw geom
 
@@ -411,10 +411,10 @@ class Layers(List[layer]):
         ...
 
     @overload
-    def __radd__(self, other: Ggplot) -> Ggplot:
+    def __radd__(self, other: ggplot) -> ggplot:
         ...
 
-    def __radd__(self, other: Iterable[layer] | Ggplot) -> Layers | Ggplot:
+    def __radd__(self, other: Iterable[layer] | ggplot) -> Layers | ggplot:
         """
         Add layers to ggplot object
         """
@@ -448,7 +448,7 @@ class Layers(List[layer]):
     def data(self) -> list[pd.DataFrame]:
         return [l.data for l in self]
 
-    def setup(self, plot: Ggplot):
+    def setup(self, plot: ggplot):
         for l in self:
             l.setup(plot)
 
@@ -456,13 +456,13 @@ class Layers(List[layer]):
         for l in self:
             l.setup_data()
 
-    def draw(self, layout: Layout, coord: Coord):
+    def draw(self, layout: Layout, coord: coord):
         # If zorder is 0, it is left to MPL
         for i, l in enumerate(self, start=1):
             l.zorder = i
             l.draw(layout, coord)
 
-    def compute_aesthetics(self, plot: Ggplot):
+    def compute_aesthetics(self, plot: ggplot):
         for l in self:
             l.compute_aesthetics(plot)
 
@@ -470,7 +470,7 @@ class Layers(List[layer]):
         for l in self:
             l.compute_statistic(layout)
 
-    def map_statistic(self, plot: Ggplot):
+    def map_statistic(self, plot: ggplot):
         for l in self:
             l.map_statistic(plot)
 
@@ -502,7 +502,7 @@ class Layers(List[layer]):
         for l in self:
             l.finish_statistics()
 
-    def update_labels(self, plot: Ggplot):
+    def update_labels(self, plot: ggplot):
         for l in self:
             plot._update_labels(l)
 

@@ -17,17 +17,17 @@ from .geom_rug import geom_rug
 if typing.TYPE_CHECKING:
     from typing import Any, Literal, Optional, Sequence
 
+    from matplotlib.axes import Axes
+    from mizani.transforms import trans
     from typing_extensions import TypeGuard
 
+    from plotnine.coords.coord import coord
+    from plotnine.facets.layout import Layout
+    from plotnine.geoms.geom import geom
     from plotnine.iapi import panel_view
+    from plotnine.scales.scale import scale
     from plotnine.typing import (
         AnyArray,
-        Axes,
-        Coord,
-        Geom,
-        Layout,
-        Scale,
-        Trans,
         TupleFloat2,
         TupleFloat3,
         TupleFloat4,
@@ -55,7 +55,7 @@ class _geom_logticks(geom_rug):
     draw_legend = staticmethod(geom_path.draw_legend)
 
     def draw_layer(
-        self, data: pd.DataFrame, layout: Layout, coord: Coord, **params: Any
+        self, data: pd.DataFrame, layout: Layout, coord: coord, **params: Any
     ):
         """
         Draw ticks on every panel
@@ -71,7 +71,7 @@ class _geom_logticks(geom_rug):
         base: Optional[float],
         sides: str,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
     ) -> TupleFloat2:
         """
         Check the log transforms
@@ -98,7 +98,7 @@ class _geom_logticks(geom_rug):
             The bases (base_x, base_y) to use when generating the ticks.
         """
 
-        def is_log_trans(t: Trans) -> bool:
+        def is_log_trans(t: trans) -> bool:
             return hasattr(t, "base") and t.__class__.__name__.startswith(
                 "log"
             )
@@ -197,7 +197,7 @@ class _geom_logticks(geom_rug):
         self,
         data: pd.DataFrame,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
         ax: Axes,
         **params: Any,
     ):
@@ -212,7 +212,7 @@ class _geom_logticks(geom_rug):
         }
 
         def _draw(
-            geom: Geom,
+            geom: geom,
             axis: Literal["x", "y"],
             tick_positions: tuple[AnyArray, AnyArray, AnyArray],
         ):
@@ -301,5 +301,5 @@ class annotation_logticks(annotate):
         )
 
 
-def is_continuous_scale(sc: Scale) -> TypeGuard[ScaleContinuous]:
+def is_continuous_scale(sc: scale) -> TypeGuard[ScaleContinuous]:
     return isinstance(sc, ScaleContinuous)

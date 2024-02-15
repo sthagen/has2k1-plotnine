@@ -20,11 +20,9 @@ from .scale_discrete import scale_discrete
 if typing.TYPE_CHECKING:
     from typing import Sequence
 
-    from plotnine.typing import (
-        Trans,
-        TupleFloat2,
-        TupleFloat4,
-    )
+    from mizani.transforms import trans
+
+    from plotnine.typing import TupleFloat2, TupleFloat4
 
 
 # positions scales have a couple of differences (quirks) that
@@ -159,7 +157,7 @@ class scale_position_discrete(scale_discrete):
         limits: Sequence[str],
         expand: TupleFloat2 | TupleFloat4,
         coord_limits: TupleFloat2,
-        trans: Trans,
+        trans: trans,
     ) -> range_view:
         # Turn discrete limits into a tuple of continuous limits
         if self.is_empty():
@@ -257,11 +255,13 @@ class scale_y_discrete(scale_position_discrete):
 
 
 # Not part of the user API
-class scale_x_ordinal(scale_x_discrete, alias):
+@alias
+class scale_x_ordinal(scale_x_discrete):
     pass
 
 
-class scale_y_ordinal(scale_y_discrete, alias):
+@alias
+class scale_y_ordinal(scale_y_discrete):
     pass
 
 
@@ -325,11 +325,13 @@ class scale_y_datetime(scale_datetime, scale_y_continuous):
     """
 
 
-class scale_x_date(scale_x_datetime, alias):
+@alias
+class scale_x_date(scale_x_datetime):
     pass
 
 
-class scale_y_date(scale_y_datetime, alias):
+@alias
+class scale_y_date(scale_y_datetime):
     pass
 
 

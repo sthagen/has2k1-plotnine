@@ -13,9 +13,13 @@ if typing.TYPE_CHECKING:
     from typing import Any
 
     import pandas as pd
+    from matplotlib.axes import Axes
+    from matplotlib.offsetbox import DrawingArea
 
+    from plotnine.coords.coord import coord
     from plotnine.iapi import panel_view
-    from plotnine.typing import Axes, Coord, DrawingArea, Layer, TupleInt2
+    from plotnine.layer import layer
+    from plotnine.typing import TupleInt2
 
 
 @document
@@ -53,7 +57,7 @@ class geom_pointrange(geom):
     def draw_group(
         data: pd.DataFrame,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
         ax: Axes,
         **params: Any,
     ):
@@ -66,7 +70,7 @@ class geom_pointrange(geom):
 
     @staticmethod
     def draw_legend(
-        data: pd.Series[Any], da: DrawingArea, lyr: Layer
+        data: pd.Series[Any], da: DrawingArea, lyr: layer
     ) -> DrawingArea:
         """
         Draw a point in the box
@@ -92,7 +96,7 @@ class geom_pointrange(geom):
 
     @staticmethod
     def legend_key_size(
-        data: pd.Series[Any], min_size: TupleInt2, lyr: Layer
+        data: pd.Series[Any], min_size: TupleInt2, lyr: layer
     ) -> TupleInt2:
         data = copy(data)
         data["size"] = data["size"] * lyr.geom.params["fatten"]

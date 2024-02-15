@@ -17,13 +17,11 @@ from .geom_segment import geom_segment
 if typing.TYPE_CHECKING:
     from typing import Any
 
+    from matplotlib.axes import Axes
+
+    from plotnine.coords.coord import coord
     from plotnine.iapi import panel_view
-    from plotnine.typing import (
-        Aes,
-        Axes,
-        Coord,
-        DataLike,
-    )
+    from plotnine.typing import DataLike
 
 
 @document
@@ -57,7 +55,7 @@ class geom_hline(geom):
 
     def __init__(
         self,
-        mapping: Aes | None = None,
+        mapping: aes | None = None,
         data: DataLike | None = None,
         **kwargs: Any,
     ):
@@ -80,7 +78,7 @@ class geom_hline(geom):
         self,
         data: pd.DataFrame,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
         ax: Axes,
         **params: Any,
     ):

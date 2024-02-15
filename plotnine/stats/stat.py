@@ -21,15 +21,12 @@ from ..mapping import aes
 if typing.TYPE_CHECKING:
     from typing import Any
 
+    from plotnine import ggplot
+    from plotnine.facets.layout import Layout
+    from plotnine.geoms.geom import geom
     from plotnine.iapi import pos_scales
     from plotnine.mapping import Environment
-    from plotnine.typing import (
-        Aes,
-        DataLike,
-        Geom,
-        Ggplot,
-        Layout,
-    )
+    from plotnine.typing import DataLike
 
 from abc import ABC
 
@@ -72,7 +69,7 @@ class stat(ABC, metaclass=Register):
 
     def __init__(
         self,
-        mapping: Aes | None = None,
+        mapping: aes | None = None,
         data: DataLike | None = None,
         **kwargs: Any,
     ):
@@ -85,7 +82,7 @@ class stat(ABC, metaclass=Register):
         }
 
     @staticmethod
-    def from_geom(geom: Geom) -> stat:
+    def from_geom(geom: geom) -> stat:
         """
         Return an instantiated stat object
 
@@ -393,7 +390,7 @@ class stat(ABC, metaclass=Register):
         msg = "{} should implement this method."
         raise NotImplementedError(msg.format(cls.__name__))
 
-    def __radd__(self, plot: Ggplot) -> Ggplot:
+    def __radd__(self, plot: ggplot) -> ggplot:
         """
         Add layer representing stat object on the right
 

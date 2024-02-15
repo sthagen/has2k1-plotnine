@@ -15,9 +15,13 @@ if typing.TYPE_CHECKING:
     from typing import Any
 
     import pandas as pd
+    from matplotlib.axes import Axes
+    from matplotlib.offsetbox import DrawingArea
 
+    from plotnine.coords.coord import coord
     from plotnine.iapi import panel_view
-    from plotnine.typing import Axes, Coord, DrawingArea, FloatSeries, Layer
+    from plotnine.layer import layer
+    from plotnine.typing import FloatSeries
 
 
 @document
@@ -180,7 +184,7 @@ class geom_dotplot(geom):
     def draw_group(
         data: pd.DataFrame,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
         ax: Axes,
         **params: Any,
     ):
@@ -229,7 +233,7 @@ class geom_dotplot(geom):
 
     @staticmethod
     def draw_legend(
-        data: pd.Series[Any], da: DrawingArea, lyr: Layer
+        data: pd.Series[Any], da: DrawingArea, lyr: layer
     ) -> DrawingArea:
         """
         Draw a point in the box

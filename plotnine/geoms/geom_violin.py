@@ -14,8 +14,12 @@ from .geom_polygon import geom_polygon
 if typing.TYPE_CHECKING:
     from typing import Any
 
+    from matplotlib.axes import Axes
+
+    from plotnine import aes
+    from plotnine.coords.coord import coord
     from plotnine.iapi import panel_view
-    from plotnine.typing import Aes, Axes, Coord, DataLike, FloatArray
+    from plotnine.typing import DataLike, FloatArray
 
 
 @document
@@ -66,7 +70,7 @@ class geom_violin(geom):
 
     def __init__(
         self,
-        mapping: Aes | None = None,
+        mapping: aes | None = None,
         data: DataLike | None = None,
         **kwargs: Any,
     ):
@@ -107,7 +111,7 @@ class geom_violin(geom):
         self,
         data: pd.DataFrame,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
         ax: Axes,
         **params: Any,
     ):

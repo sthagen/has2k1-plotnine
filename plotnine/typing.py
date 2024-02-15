@@ -12,38 +12,11 @@ from typing import (
 
 import numpy as np
 import pandas as pd
-from matplotlib.artist import Artist
-from matplotlib.axes import Axes
-from matplotlib.axis import Axis, XAxis, XTick, YAxis, YTick
-from matplotlib.figure import Figure
-from matplotlib.offsetbox import DrawingArea
-from matplotlib.patches import PathPatch
-from matplotlib.text import Text
-from mizani.transforms import trans
 from numpy.typing import NDArray
 from typing_extensions import TypeAlias  # noqa: TCH002
 
-from plotnine.coords.coord import coord
-from plotnine.facets.facet import facet
-from plotnine.facets.facet_grid import facet_grid
-from plotnine.facets.facet_wrap import facet_wrap
-from plotnine.facets.layout import Layout
-from plotnine.facets.strips import Strips
-from plotnine.geoms.geom import geom
-from plotnine.ggplot import ggplot
-from plotnine.guides import guide_colorbar, guide_legend
-from plotnine.guides.guide import guide
+from plotnine import ggplot, guide_colorbar, guide_legend
 from plotnine.iapi import strip_label_details
-from plotnine.layer import Layers, layer
-from plotnine.mapping.aes import aes
-from plotnine.positions.position import position
-from plotnine.scales.scale import scale
-from plotnine.scales.scale_continuous import scale_continuous
-from plotnine.scales.scale_discrete import scale_discrete
-from plotnine.scales.scales import Scales
-from plotnine.stats.stat import stat
-from plotnine.themes.theme import theme
-from plotnine.watermark import watermark
 
 
 class PlotAddable(Protocol):
@@ -134,9 +107,6 @@ ColorsLike: TypeAlias = (
     ColorLike | list[ColorLike] | pd.Series[ColorLike] | StrArray
 )
 
-# Mizani
-Trans: TypeAlias = trans
-
 # Plotting
 FigureFormat: TypeAlias = Literal["png", "retina", "jpeg", "jpg", "svg", "pdf"]
 
@@ -166,24 +136,6 @@ CanBeStripLabellingFunc: TypeAlias = (
 )
 
 StripPosition: TypeAlias = Literal["top", "right"]
-
-# Plotnine Classes
-Aes: TypeAlias = aes
-Coord: TypeAlias = coord
-Facet: TypeAlias = facet
-FacetGrid: TypeAlias = facet_grid
-FacetWrap: TypeAlias = facet_wrap
-Geom: TypeAlias = geom
-Ggplot: TypeAlias = ggplot
-Guide: TypeAlias = guide
-Layer: TypeAlias = layer
-Position: TypeAlias = position
-Scale: TypeAlias = scale
-ScaleContinuous: TypeAlias = scale_continuous
-ScaleDiscrete: TypeAlias = scale_discrete
-Stat: TypeAlias = stat
-Theme: TypeAlias = theme
-Watermark: TypeAlias = watermark
 
 ## Scales
 

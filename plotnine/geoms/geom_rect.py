@@ -13,8 +13,10 @@ from .geom_polygon import geom_polygon
 if typing.TYPE_CHECKING:
     from typing import Any
 
+    from matplotlib.axes import Axes
+
+    from plotnine.coords.coord import coord
     from plotnine.iapi import panel_view
-    from plotnine.typing import Axes, Coord
 
 
 @document
@@ -48,7 +50,7 @@ class geom_rect(geom):
         self,
         data: pd.DataFrame,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
         ax: Axes,
         **params: Any,
     ):
@@ -69,7 +71,7 @@ class geom_rect(geom):
     def draw_group(
         data: pd.DataFrame,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
         ax: Axes,
         **params: Any,
     ):

@@ -7,20 +7,16 @@ from matplotlib.layout_engine import LayoutEngine
 from matplotlib.text import Text
 
 if typing.TYPE_CHECKING:
-    from typing import Optional
+    from typing import Any, Optional
 
+    from matplotlib.axes import Axes
     from matplotlib.backend_bases import RendererBase
+    from matplotlib.figure import Figure
 
-    from plotnine import ggplot
+    from plotnine import ggplot, theme
     from plotnine._mpl.patches import StripTextPatch
+    from plotnine.facets.facet import facet
     from plotnine.iapi import legend_artists
-    from plotnine.typing import (
-        Any,
-        Axes,
-        Facet,
-        Figure,
-        Theme,
-    )
 
 
 @dataclass
@@ -32,8 +28,8 @@ class LayoutPack:
     axs: list[Axes]
     figure: Figure
     renderer: RendererBase
-    theme: Theme
-    facet: Facet
+    theme: theme
+    facet: facet
     axis_title_x: Optional[Text] = None
     axis_title_y: Optional[Text] = None
     # The legends references the structure that contains the

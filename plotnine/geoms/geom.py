@@ -23,20 +23,15 @@ if typing.TYPE_CHECKING:
     from typing import Any
 
     import pandas as pd
+    from matplotlib.axes import Axes
+    from matplotlib.offsetbox import DrawingArea
 
+    from plotnine import aes, ggplot
+    from plotnine.coords.coord import coord
+    from plotnine.facets.layout import Layout
     from plotnine.iapi import panel_view
     from plotnine.mapping import Environment
-    from plotnine.typing import (
-        Aes,
-        Axes,
-        Coord,
-        DataLike,
-        DrawingArea,
-        Ggplot,
-        Layer,
-        Layout,
-        TupleInt2,
-    )
+    from plotnine.typing import DataLike, TupleInt2
 
 
 class geom(ABC, metaclass=Register):
@@ -57,7 +52,7 @@ class geom(ABC, metaclass=Register):
     data: DataLike
     """Geom/layer specific dataframe"""
 
-    mapping: Aes
+    mapping: aes
     """Mappings i.e. `aes(x='col1', fill='col2')`{.py}"""
 
     aes_params: dict[str, Any] = {}  # setting of aesthetic
@@ -79,7 +74,7 @@ class geom(ABC, metaclass=Register):
 
     def __init__(
         self,
-        mapping: Aes | None = None,
+        mapping: aes | None = None,
         data: DataLike | None = None,
         **kwargs: Any,
     ):
@@ -264,7 +259,7 @@ class geom(ABC, metaclass=Register):
         return data
 
     def draw_layer(
-        self, data: pd.DataFrame, layout: Layout, coord: Coord, **params: Any
+        self, data: pd.DataFrame, layout: Layout, coord: coord, **params: Any
     ):
         """
         Draw layer across all panels
@@ -297,7 +292,7 @@ class geom(ABC, metaclass=Register):
         self,
         data: pd.DataFrame,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
         ax: Axes,
         **params: Any,
     ):
@@ -339,7 +334,7 @@ class geom(ABC, metaclass=Register):
     def draw_group(
         data: pd.DataFrame,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
         ax: Axes,
         **params: Any,
     ):
@@ -376,7 +371,7 @@ class geom(ABC, metaclass=Register):
     def draw_unit(
         data: pd.DataFrame,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
         ax: Axes,
         **params: Any,
     ):
@@ -428,7 +423,7 @@ class geom(ABC, metaclass=Register):
         msg = "The geom should implement this method."
         raise NotImplementedError(msg)
 
-    def __radd__(self, plot: Ggplot) -> Ggplot:
+    def __radd__(self, plot: ggplot) -> ggplot:
         """
         Add layer representing geom object on the right
 
@@ -445,7 +440,7 @@ class geom(ABC, metaclass=Register):
         plot += self.to_layer()  # Add layer
         return plot
 
-    def to_layer(self) -> Layer:
+    def to_layer(self) -> layer:
         """
         Make a layer that represents this geom
 
@@ -515,7 +510,7 @@ class geom(ABC, metaclass=Register):
 
     @staticmethod
     def draw_legend(
-        data: pd.Series[Any], da: DrawingArea, lyr: Layer
+        data: pd.Series[Any], da: DrawingArea, lyr: layer
     ) -> DrawingArea:
         """
         Draw a rectangle in the box

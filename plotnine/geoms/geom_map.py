@@ -16,18 +16,16 @@ if typing.TYPE_CHECKING:
     from typing import Any
 
     import numpy.typing as npt
+    from matplotlib.axes import Axes
+    from matplotlib.offsetbox import DrawingArea
+    from matplotlib.patches import PathPatch
     from shapely.geometry.polygon import LinearRing, Polygon
 
+    from plotnine import aes
+    from plotnine.coords.coord import coord
     from plotnine.iapi import panel_view
-    from plotnine.typing import (
-        Aes,
-        Axes,
-        Coord,
-        DataLike,
-        DrawingArea,
-        Layer,
-        PathPatch,
-    )
+    from plotnine.layer import layer
+    from plotnine.typing import DataLike
 
 
 @document
@@ -68,7 +66,7 @@ class geom_map(geom):
 
     def __init__(
         self,
-        mapping: Aes | None = None,
+        mapping: aes | None = None,
         data: DataLike | None = None,
         **kwargs: Any,
     ):
@@ -119,7 +117,7 @@ class geom_map(geom):
         self,
         data: pd.DataFrame,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
         ax: Axes,
         **params: Any,
     ):
@@ -197,7 +195,7 @@ class geom_map(geom):
 
     @staticmethod
     def draw_legend(
-        data: pd.Series[Any], da: DrawingArea, lyr: Layer
+        data: pd.Series[Any], da: DrawingArea, lyr: layer
     ) -> DrawingArea:
         """
         Draw a rectangle in the box

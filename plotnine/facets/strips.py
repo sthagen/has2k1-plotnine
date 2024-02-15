@@ -7,16 +7,14 @@ from ..iapi import strip_draw_info, strip_label_details
 if TYPE_CHECKING:
     from typing import Sequence
 
+    from matplotlib.axes import Axes
     from typing_extensions import Self
 
+    from plotnine import theme
+    from plotnine.facets.facet import facet
+    from plotnine.facets.layout import Layout
     from plotnine.iapi import layout_details
-    from plotnine.typing import (
-        Axes,
-        Facet,
-        Layout,
-        StripPosition,
-        Theme,
-    )
+    from plotnine.typing import StripPosition
 
 
 class strip:
@@ -38,7 +36,7 @@ class strip:
         self,
         vars: Sequence[str],
         layout_info: layout_details,
-        facet: Facet,
+        facet: facet,
         ax: Axes,
         position: StripPosition,
     ):
@@ -152,10 +150,10 @@ class Strips(List[strip]):
     List of strips for a plot
     """
 
-    facet: Facet
+    facet: facet
 
     @staticmethod
-    def from_facet(facet: Facet) -> Strips:
+    def from_facet(facet: facet) -> Strips:
         new = Strips()
         new.facet = facet
         new.setup()
@@ -170,7 +168,7 @@ class Strips(List[strip]):
         return self.facet.layout
 
     @property
-    def theme(self) -> Theme:
+    def theme(self) -> theme:
         return self.facet.theme
 
     @property

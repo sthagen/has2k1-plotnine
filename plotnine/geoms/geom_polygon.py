@@ -13,9 +13,12 @@ if typing.TYPE_CHECKING:
     from typing import Any
 
     import pandas as pd
+    from matplotlib.axes import Axes
+    from matplotlib.offsetbox import DrawingArea
 
+    from plotnine.coords.coord import coord
     from plotnine.iapi import panel_view
-    from plotnine.typing import Axes, Coord, DrawingArea, Layer
+    from plotnine.layer import layer
 
 
 @document
@@ -57,7 +60,7 @@ class geom_polygon(geom):
         self,
         data: pd.DataFrame,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
         ax: Axes,
         **params: Any,
     ):
@@ -70,7 +73,7 @@ class geom_polygon(geom):
     def draw_group(
         data: pd.DataFrame,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
         ax: Axes,
         **params: Any,
     ):
@@ -113,7 +116,7 @@ class geom_polygon(geom):
 
     @staticmethod
     def draw_legend(
-        data: pd.Series[Any], da: DrawingArea, lyr: Layer
+        data: pd.Series[Any], da: DrawingArea, lyr: layer
     ) -> DrawingArea:
         """
         Draw a rectangle in the box

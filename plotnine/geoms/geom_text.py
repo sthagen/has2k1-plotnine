@@ -16,17 +16,14 @@ if typing.TYPE_CHECKING:
     from typing import Any
 
     import pandas as pd
+    from matplotlib.axes import Axes
+    from matplotlib.offsetbox import DrawingArea
 
+    from plotnine import aes
+    from plotnine.coords.coord import coord
     from plotnine.iapi import panel_view
-    from plotnine.typing import (
-        Aes,
-        Axes,
-        Coord,
-        DataLike,
-        DrawingArea,
-        Layer,
-        TupleInt2,
-    )
+    from plotnine.layer import layer
+    from plotnine.typing import DataLike, TupleInt2
 
 
 # Note: hjust & vjust are parameters instead of aesthetics
@@ -125,7 +122,7 @@ class geom_text(geom):
 
     def __init__(
         self,
-        mapping: Aes | None = None,
+        mapping: aes | None = None,
         data: DataLike | None = None,
         **kwargs: Any,
     ):
@@ -180,7 +177,7 @@ class geom_text(geom):
         self,
         data: pd.DataFrame,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
         ax: Axes,
         **params: Any,
     ):
@@ -190,7 +187,7 @@ class geom_text(geom):
     def draw_group(
         data: pd.DataFrame,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
         ax: Axes,
         **params: Any,
     ):
@@ -274,7 +271,7 @@ class geom_text(geom):
 
     @staticmethod
     def draw_legend(
-        data: pd.Series[Any], da: DrawingArea, lyr: Layer
+        data: pd.Series[Any], da: DrawingArea, lyr: layer
     ) -> DrawingArea:
         """
         Draw letter 'a' in the box
@@ -312,7 +309,7 @@ class geom_text(geom):
 
     @staticmethod
     def legend_key_size(
-        data: pd.Series[Any], min_size: TupleInt2, lyr: Layer
+        data: pd.Series[Any], min_size: TupleInt2, lyr: layer
     ) -> TupleInt2:
         w, h = min_size
         _w = _h = data["size"]

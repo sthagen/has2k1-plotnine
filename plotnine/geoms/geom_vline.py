@@ -16,15 +16,13 @@ from .geom_segment import geom_segment
 if typing.TYPE_CHECKING:
     from typing import Any
 
+    from matplotlib.axes import Axes
+    from matplotlib.offsetbox import DrawingArea
+
+    from plotnine.coords.coord import coord
     from plotnine.iapi import panel_view
-    from plotnine.typing import (
-        Aes,
-        Axes,
-        Coord,
-        DataLike,
-        DrawingArea,
-        Layer,
-    )
+    from plotnine.layer import layer
+    from plotnine.typing import DataLike
 
 
 @document
@@ -57,7 +55,7 @@ class geom_vline(geom):
 
     def __init__(
         self,
-        mapping: Aes | None = None,
+        mapping: aes | None = None,
         data: DataLike | None = None,
         **kwargs: Any,
     ):
@@ -80,7 +78,7 @@ class geom_vline(geom):
         self,
         data: pd.DataFrame,
         panel_params: panel_view,
-        coord: Coord,
+        coord: coord,
         ax: Axes,
         **params: Any,
     ):
@@ -100,7 +98,7 @@ class geom_vline(geom):
 
     @staticmethod
     def draw_legend(
-        data: pd.Series[Any], da: DrawingArea, lyr: Layer
+        data: pd.Series[Any], da: DrawingArea, lyr: layer
     ) -> DrawingArea:
         """
         Draw a vertical line in the box

@@ -11,13 +11,12 @@ from .exceptions import PlotnineError
 if typing.TYPE_CHECKING:
     from typing import Iterable
 
-    from plotnine.typing import (
-        Artist,
-        Axes,
-        Figure,
-        Ggplot,
-        Scale,
-    )
+    from matplotlib.artist import Artist
+    from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
+
+    from plotnine import ggplot
+    from plotnine.scales.scale import scale
 
 __all__ = ("PlotnineAnimation",)
 
@@ -53,7 +52,7 @@ class PlotnineAnimation(ArtistAnimation):
 
     def __init__(
         self,
-        plots: Iterable[Ggplot],
+        plots: Iterable[ggplot],
         interval: int = 200,
         repeat_delay: int | None = None,
         repeat: bool = True,
@@ -71,13 +70,13 @@ class PlotnineAnimation(ArtistAnimation):
         )
 
     def _draw_plots(
-        self, plots: Iterable[Ggplot]
+        self, plots: Iterable[ggplot]
     ) -> tuple[Figure, list[list[Artist]]]:
         with pd.option_context("mode.chained_assignment", None):
             return self.__draw_plots(plots)
 
     def __draw_plots(
-        self, plots: Iterable[Ggplot]
+        self, plots: Iterable[ggplot]
     ) -> tuple[Figure, list[list[Artist]]]:
         """
         Plot and return the figure and artists
@@ -143,7 +142,7 @@ class PlotnineAnimation(ArtistAnimation):
                     artist_offsets[name][i] += len(new_artists)
             return frame_artists
 
-        def set_scale_limits(scales: list[Scale]):
+        def set_scale_limits(scales: list[scale]):
             """
             Set limits of all the scales in the animation
 
@@ -159,7 +158,7 @@ class PlotnineAnimation(ArtistAnimation):
                 ae = sc.aesthetics[0]
                 scale_limits[ae] = sc.limits
 
-        def check_scale_limits(scales: list[Scale], frame_no: int):
+        def check_scale_limits(scales: list[scale], frame_no: int):
             """
             Check limits of the scales of a plot in the animation
 

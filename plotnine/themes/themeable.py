@@ -27,10 +27,12 @@ if TYPE_CHECKING:
     from typing import Any, Optional, Sequence, Type
 
     from matplotlib.artist import Artist
+    from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
     from matplotlib.patches import Patch
 
+    from plotnine import theme
     from plotnine.themes.targets import ThemeTargets
-    from plotnine.typing import Axes, Figure, Theme
 
 
 class themeable(metaclass=RegistryHierarchyMeta):
@@ -204,7 +206,7 @@ class themeable(metaclass=RegistryHierarchyMeta):
                 del d[key]
         return d
 
-    def apply(self, theme: Theme):
+    def apply(self, theme: theme):
         """
         Called by the theme to apply the themeable
 
