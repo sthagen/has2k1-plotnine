@@ -72,13 +72,13 @@ Release: plotnine-<VERSION>
   git push -u origin release-v<VERSION>
   ```
   - [ ] GHA [release job](https://github.com/has2k1/plotnine/actions/workflows/release.yml) passes
-  - [ ] Plotnine test release is on [TestPyPi](https://test.pypi.org/project/plotnine)
+  - [ ] Plotnine test release is on [TestPyPi](https://test.pypi.org/project/plotnine/#history)
 
 
 - [ ] Update changelog
 
   ```sh
-  nvim doc/changelog.rst
+  nvim doc/changelog.qmd
   git commit -am "Update changelog for release"
   git push
   ```
