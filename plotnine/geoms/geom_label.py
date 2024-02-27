@@ -75,8 +75,8 @@ class geom_label(geom_text):
 
     See Also
     --------
-    plotnine.geoms.geom_text : For documentation of the
-        parameters. :class:`matplotlib.patches.BoxStyle` for the
+    plotnine.geom_text : For documentation of the
+        parameters. [](`~matplotlib.patches.BoxStyle`) for the
         parameters that affect the boxstyle.
     """
 

@@ -25,12 +25,12 @@ class stat_quantile(stat):
         Formula relating y variables to x variables
     method_args : dict, default=None
         Extra arguments passed on to the model fitting method,
-        :meth:`statsmodels.regression.quantile_regression.QuantReg.fit`.
+        [](`~statsmodels.regression.quantile_regression.QuantReg.fit`).
 
     See Also
     --------
     statsmodels.regression.quantile_regression.QuantReg
-    plotnine.geoms.geom_quantile
+    plotnine.geom_quantile
     """
 
     _aesthetics_doc = """

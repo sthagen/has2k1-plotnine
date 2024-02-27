@@ -34,12 +34,12 @@ class geom_jitter(geom_point):
         [](`~plotnine.positions.position_jitter`).
     random_state : int | ~numpy.random.RandomState, default=None
         Seed or Random number generator to use. If `None`, then
-        numpy global generator :class:`numpy.random` is used.
+        numpy global generator [](`numpy.random`) is used.
 
     See Also
     --------
-    plotnine.positions.position_jitter
-    plotnine.geoms.geom_point
+    plotnine.position_jitter
+    plotnine.geom_point
     """
 
     DEFAULT_PARAMS = {

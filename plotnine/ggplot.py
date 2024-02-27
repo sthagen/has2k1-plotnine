@@ -558,7 +558,7 @@ class ggplot:
 
         Notes
         -----
-        This method has the same arguments as :meth:`ggplot.save`.
+        This method has the same arguments as [](`~plotnine.ggplot.save`).
         Use it to get access to the figure that will be saved.
         """
         fig_kwargs: Dict[str, Any] = {"format": format, **kwargs}
@@ -690,7 +690,7 @@ def save_as_pdf_pages(
     ----------
     plots :
         Plot objects to write to file. `plots` may be either a
-        collection such as a :py:class:`list` or :py:class:`set`:
+        collection such as a [](:class:`list`) or [](:class:`set`)
 
         ```python
         base_plot = ggplot(…)
@@ -716,30 +716,31 @@ def save_as_pdf_pages(
         If `True`, print the saving information.
     kwargs :
         Additional arguments to pass to
-        :py:meth:`matplotlib.figure.Figure.savefig`.
+        [](:meth:`~matplotlib.figure.Figure.savefig`).
 
     Notes
     -----
-    Using pandas :meth:`~pandas.DataFrame.groupby` methods, tidy data
-    can be “faceted” across pages:
+    Using pandas [](:meth:`~pandas.DataFrame.groupby`) methods, tidy data
+    can be "faceted" across pages:
 
     ```python
     from plotnine.data import mtcars
 
     def facet_pages(column)
         base_plot = [
-            aes(x='wt', y='mpg', label='name'),
+            aes(x="wt", y="mpg", label="name"),
             geom_text(),
-            ]
+        ]
         for label, group_data in mtcars.groupby(column):
             yield ggplot(group_data) + base_plot + ggtitle(label)
 
     save_as_pdf_pages(facet_pages('cyl'))
     ```
 
-    Unlike :meth:`ggplot.save`, :meth:`save_as_pdf_pages` does not
-    process arguments for `height` or `width`. To set the figure size,
-    add [](`~plotnine.themes.themeable.figure_size`) to the theme
+    Unlike [](:meth:`~plotnine.ggplot.save`),
+    [](:meth:`~plotnine.save_as_pdf_pages`)
+    does not process arguments for `height` or `width`. To set the figure
+    size, add [](`~plotnine.themes.themeable.figure_size`) to the theme
     for some or all of the objects in `plots`:
 
     ```python

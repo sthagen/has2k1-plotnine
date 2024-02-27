@@ -19,7 +19,6 @@ from ..iapi import (
     outside_legend,
 )
 from ..mapping.aes import rename_aesthetics
-from ..themes import theme
 from .guide import guide
 
 if TYPE_CHECKING:
@@ -27,7 +26,7 @@ if TYPE_CHECKING:
 
     from matplotlib.offsetbox import OffsetBox, PackerBase
 
-    from plotnine import ggplot
+    from plotnine import ggplot, theme
     from plotnine.iapi import labels_view
     from plotnine.scales.scales import Scales
     from plotnine.typing import (
@@ -61,25 +60,33 @@ class guides:
     """
     Guides for each scale
 
-    Used to assign a particular guide to an aesthetic(s).
-
-    Parameters
-    ----------
-    kwargs : dict
-        aesthetic - guide pairings. e.g
-        ```python
-        guides(color=guide_colorbar())
-        ```
+    Used to assign or remove a particular guide to the scale
+    of an aesthetic.
     """
 
     alpha: Optional[LegendOrColorbar | NoGuide] = None
+    """Guide for alpha scale."""
+
     color: Optional[LegendOrColorbar | NoGuide] = None
+    """Guide for color scale."""
+
     fill: Optional[LegendOrColorbar | NoGuide] = None
+    """Guide for fill scale."""
+
     linetype: Optional[LegendOnly | NoGuide] = None
+    """Guide for linetype scale."""
+
     shape: Optional[LegendOnly | NoGuide] = None
+    """Guide for shape scale."""
+
     size: Optional[LegendOnly | NoGuide] = None
+    """Guide for size scale."""
+
     stroke: Optional[LegendOnly | NoGuide] = None
+    """Guide for stroke scale."""
+
     colour: Optional[LegendOnly | NoGuide] = None
+    """Guide for colour scale."""
 
     def __post_init__(self):
         self.plot: ggplot
@@ -267,7 +274,7 @@ class guides:
         Apply the theme for each guide
         """
         for g in gdefs:
-            g.theme = cast(theme, g.theme)
+            g.theme = cast("theme", g.theme)
             g.theme.apply()
 
     def _assemble_guides(

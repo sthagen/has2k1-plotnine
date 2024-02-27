@@ -18,14 +18,14 @@ class stat_ecdf(stat):
     {common_parameters}
     n  : int, default=None
         This is the number of points to interpolate with.
-        If :py:`None`, do not interpolate.
+        If `None`{.py}, do not interpolate.
     pad : bool, default=True
         If True, pad the domain with `-inf` and `+inf` so that
         ECDF does not have discontinuities at the extremes.
 
     See Also
     --------
-    plotnine.geoms.geom_step
+    plotnine.geom_step
     """
 
     _aesthetics_doc = """

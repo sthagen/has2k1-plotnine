@@ -165,7 +165,7 @@ class facet:
 
         Notes
         -----
-        This method will be called after :meth:`setup_params`,
+        This method will be called after [](`~plotnine.facet.setup_params`),
         therefore the `params` property will be set.
         """
         return data
@@ -417,7 +417,7 @@ class facet:
             if not self.as_table:
                 axsarr = np.array([row[::-1] for row in axsarr])
         else:
-            raise ValueError(f"Bad value `dir='{self.dir}'` for direction")
+            raise ValueError(f'Bad value `dir="{self.dir}"` for direction')
 
         axs = axsarr.ravel(order)
 

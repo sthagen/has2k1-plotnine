@@ -15,7 +15,6 @@ from .._utils import get_opposite_side
 from ..exceptions import PlotnineError, PlotnineWarning
 from ..mapping.aes import rename_aesthetics
 from ..scales.scale_continuous import scale_continuous
-from ..themes import theme
 from .guide import GuideElements, guide
 
 if TYPE_CHECKING:
@@ -25,6 +24,7 @@ if TYPE_CHECKING:
     from matplotlib.offsetbox import AuxTransformBox, PackerBase
     from matplotlib.text import Text
 
+    from plotnine import theme
     from plotnine.scales.scale import scale
     from plotnine.typing import SidePosition
 
@@ -34,23 +34,6 @@ class guide_colorbar(guide):
     """
     Guide colorbar
 
-    Parameters
-    ----------
-    nbin :
-        Number of bins for drawing a colorbar. A larger value yields
-        a smoother colorbar
-    display :
-        How to render the colorbar.
-    alpha :
-        Opacity (in the range `[0, 1]`) of the colorbar. The defualt
-        `None`, is to use the opacity of the plot.
-    draw_ulim :
-        Whether to show the upper limit tick marks.
-    draw_llim :
-        Whether to show the lower limit tick marks.
-    kwargs : dict
-        Parameters passed on to :class:`.guide`
-
     Notes
     -----
     To correctly place a rasterized colorbar when saving the plot as an `svg`
@@ -58,10 +41,25 @@ class guide_colorbar(guide):
     """
 
     nbin: Optional[int] = None
+    """
+    Number of bins for drawing a colorbar. A larger value yields
+    a smoother colorbar
+    """
+
     display: Literal["gradient", "rectangles", "raster"] = "gradient"
+    """How to render the colorbar."""
+
     alpha: Optional[float] = None
+    """
+    Opacity (in the range `[0, 1]`) of the colorbar. The defualt
+    `None`, is to use the opacity of the plot.
+    """
+
     draw_ulim: bool = True
+    """Whether to show the upper limit tick marks."""
+
     draw_llim: bool = True
+    """Whether to show the lower limit tick marks. """
 
     # Non-Parameter Attributes
     available_aes: set[str] = field(
@@ -171,7 +169,7 @@ class guide_colorbar(guide):
 
         from .._mpl.offsetbox import DPICorAuxTransformBox
 
-        self.theme = cast(theme, self.theme)
+        self.theme = cast("theme", self.theme)
 
         obverse = slice(0, None)
         reverse = slice(None, None, -1)
