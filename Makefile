@@ -91,6 +91,7 @@ install: clean
 
 doc-deps:
 	pip install -e ".[doc]"
+	pip install -r requirements/doc.txt
 
 develop: clean-cache
 	pip install -e ".[all]"
