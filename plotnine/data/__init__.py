@@ -1,6 +1,7 @@
 """
 Plotnine Data
 """
+
 from pathlib import Path
 
 import pandas as pd
@@ -102,13 +103,13 @@ _process_categories()
 mtcars.__doc__ = """
 Motor Trend Car Road Tests
 
-**Description**
+## Description
 
 The data was extracted from the 1974 *Motor Trend* US magazine,
 and comprises fuel consumption and 10 aspects of automobile
 design and performance for 32 automobiles (1973–74 models).
 
-**Format**
+## Format
 
 A data frame with 32 observations on 11 variables.
 
@@ -126,13 +127,36 @@ A data frame with 32 observations on 11 variables.
 | gear   | Number of forward gears                  |
 | carb   | Number of carburetors                    |
 
-**Source**
+## Source
 
 Henderson and Velleman (1981), Building multiple regression
 models interactively. *Biometrics*, **37**, 391–411.
 """
 
 meat.__doc__ = """
+US Meat Production
+
+Description**
+
+Monthly production weight of red meat and poultry. The values are in
+units of 1 million lbs.
+
+| Column            | Description           |
+|-------------------|-----------------------|
+| date              | Month of the year     |
+| beef              | Beef weight           |
+| veal              | Veal weight           |
+| pork              | Pork weight           |
+| lamb_and_mutton   | Lamb & Mutton weight  |
+| broilers          | Broiler weight        |
+| other_chicken     | Other Chicken weight  |
+| turkey            | Turkey weight         |
+
+## Source
+
+[Livestock and Meat Dosmestic Data]\
+(https://www.ers.usda.gov/data-products/livestock-and-meat-domestic-data/)
+from the Economic Research Service of the U.S. DEPARTMENT OF AGRICULTURE.
 
 """
 
@@ -142,11 +166,11 @@ pageviews.__doc__ = """
 huron.__doc__ = """
 Level of Lake Huron 1875–1972
 
-**Description**
+Description**
 
 Annual measurements of the level, in feet, of Lake Huron 1875–1972.
 
-**Format**
+## Format
 
 | Column | Description |
 |--------|-------------|
@@ -154,7 +178,7 @@ Annual measurements of the level, in feet, of Lake Huron 1875–1972.
 | level  | Water level |
 | decade | Decade      |
 
-**Source**
+Source**
 
 Brockwell, P. J. and Davis, R. A. (1991). Time Series and Forecasting Methods.
 Second edition. Springer, New York. Series A, page 555.
@@ -166,7 +190,7 @@ Forecasting. Springer, New York. Sections 5.1 and 7.6.
 seals.__doc__ = """
 Vector field of seal movements.
 
-**Description**
+## Description
 
 This vector field was produced from the data described in Brillinger,
 D.R., Preisler, H.K., Ager, A.A. and Kie, J.G.
@@ -175,7 +199,7 @@ Statistical Planning and Inference 122 (2004), 43-63, using the methods
 of Brillinger, D.R., "Learning a potential function from a trajectory",
 Signal Processing Letters. December (2007).
 
-**Format**
+## Format
 
 A data frame with 1155 rows and 4 variables
 
@@ -186,7 +210,7 @@ A data frame with 1155 rows and 4 variables
 | delta_long | Change in Longitude |
 | delta_lat  | Change in Latitude  |
 
-**References**
+## References
 
 <http://www.stat.berkeley.edu/~brill/Papers/jspifinal.pdf>
 """
@@ -194,13 +218,13 @@ A data frame with 1155 rows and 4 variables
 economics.__doc__ = """
 US economic time series.
 
-**Description**
+## Description
 
 This dataset was produced from US economic time series data available
 from http://research.stlouisfed.org/fred2.
 `economics` is in "wide" format, `economics_long` is in "long" format.
 
-**Format**
+## Format
 
 A data frame with 478 rows and 6 variables
 
@@ -225,13 +249,13 @@ economics_long.__doc__ = economics.__doc__
 presidential.__doc__ = """
 Terms of 11 presidents from Eisenhower to Obama.
 
-**Description**
+## Description
 
 The names of each president, the start and end date
 of their term, and their party of 11 US presidents
 from Eisenhower to Obama.
 
-**Format**
+## Format
 
 A data frame with 11 rows and 4 variables
 
@@ -247,12 +271,12 @@ A data frame with 11 rows and 4 variables
 txhousing.__doc__ = """
 Housing sales in TX.
 
-**Description**
+## Description
 
 Information about the housing market in Texas provided
 by the TAMU real estate center, http://recenter.tamu.edu/.
 
-**Format**
+## Format
 
 A data frame with 8602 observations and 9 variables:
 
@@ -285,11 +309,11 @@ A data frame with 8602 observations and 9 variables:
 luv_colours.__doc__ = """
 colors in Luv space.
 
-**Description**
+## Description
 
 Named colors translated into Luv colour space.
 
-**Format**
+## Format
 
 A data frame with 657 observations and 4 variables:
 
@@ -304,13 +328,13 @@ A data frame with 657 observations and 4 variables:
 faithful.__doc__ = """
 Old Faithful Geyser Data
 
-**Description**
+## Description
 
 Waiting time between eruptions and the duration of the
 eruption for the Old Faithful geyser in Yellowstone
 National Park, Wyoming, USA.
 
-**Format**
+## Format
 
 A data frame with 272 observations on 2 variables.
 
@@ -319,7 +343,7 @@ A data frame with 272 observations on 2 variables.
 | eruptions | Eruption time in mins                  |
 | waiting W | aiting time to next eruption (in mins) |
 
-**Details**
+## Details
 
 A closer look at `faithful.eruptions` reveals that these are
 heavily rounded times originally in seconds, where multiples
@@ -329,11 +353,11 @@ For a better version of the eruption times, see the example below.
 There are many versions of this dataset around:
 Azzalini and Bowman (1990) use a more complete version.
 
-**Source**
+## Source
 
 W. Härdle.
 
-**References**
+## References
 
 Härdle, W. (1991) *Smoothing Techniques with Implementation in S*.
 New York: Springer.
@@ -345,13 +369,13 @@ on the Old Faithful geyser. **Applied Statistics** *39*, 357–365.
 faithfuld.__doc__ = """
 Old Faithful Geyser Data
 
-**Description**
+## Description
 
 Waiting time between eruptions and the duration of the
 eruption for the Old Faithful geyser in Yellowstone
 National Park, Wyoming, USA.
 
-**Format**
+## Format
 
 A data frame with *grid data* for 272 observations on 2
 variables and the density at those locations.
@@ -362,7 +386,7 @@ variables and the density at those locations.
 | waiting W | aiting time to next eruption (in mins) |
 | density D | ensity Estimate                        |
 
-**Details**
+## Details
 
 A closer look at `faithful.eruptions` reveals that these are
 heavily rounded times originally in seconds, where multiples
@@ -372,11 +396,11 @@ For a better version of the eruption times, see the example below.
 There are many versions of this dataset around:
 Azzalini and Bowman (1990) use a more complete version.
 
-**Source**
+## Source
 
 W. Härdle.
 
-**References**
+## References
 
 Härdle, W. (1991) *Smoothing Techniques with Implementation in S*.
 New York: Springer.
@@ -388,12 +412,12 @@ on the Old Faithful geyser. **Applied Statistics** *39*, 357–365.
 diamonds.__doc__ = """
 Prices of 50,000 round cut diamonds
 
-**Description**
+## Description
 
 A dataset containing the prices and other attributes
 of almost 54,000 diamonds. The variables are as follows:
 
-**Format**
+## Format
 
 A data frame with 53940 rows and 10 variables:
 
@@ -427,11 +451,11 @@ A data frame with 53940 rows and 10 variables:
 midwest.__doc__ = """
 Midwest demographics.
 
-**Description**
+## Description
 
 Demographic information of midwest counties
 
-**Format**
+## Format
 
 A data frame with 437 rows and 28 variables
 
@@ -470,7 +494,7 @@ A data frame with 437 rows and 28 variables
 mpg.__doc__ = """
 Fuel economy data from 1999 and 2008 for 38 popular models of car
 
-**Description**
+## Description
 
 This dataset contains a subset of the fuel economy data that
 the EPA makes available on http://fueleconomy.gov.
@@ -478,7 +502,7 @@ It contains only models which had a new release every year
 between 1999 and 2008 - this was used as a proxy for
 the popularity of the car.
 
-**Format**
+## Format
 
 A data frame with 234 rows and 11 variables
 
@@ -514,7 +538,7 @@ A data frame with 234 rows and 11 variables
 msleep.__doc__ = """
 An updated and expanded version of the mammals sleep dataset.
 
-**Description**
+## Description
 
 This is an updated and expanded version of the mammals
 sleep dataset. Updated sleep times and weights were taken
@@ -522,7 +546,7 @@ from V. M. Savage and G. B. West. A quantitative, theoretical
 framework for understanding mammalian sleep. Proceedings of
 the National Academy of Sciences, 104 (3):1051-1056, 2007.
 
-**Format**
+## Format
 
 A data frame with 83 rows and 11 variables
 
@@ -538,7 +562,7 @@ A data frame with 83 rows and 11 variables
 | brainwt      | brain weight in kilograms             |
 | bodywt       | body weight in kilograms              |
 
-**Details**
+## Details
 
 Additional variables order, conservation status and
 vore were added from wikipedia.

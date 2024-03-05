@@ -32,7 +32,7 @@ clean-test:
 	rm -fr tests/result_images/*
 
 ruff:
-	ruff . $(args)
+	ruff check . $(args)
 
 format:
 	ruff format . --check
@@ -92,6 +92,7 @@ install: clean
 doc-deps:
 	pip install -e ".[doc]"
 	pip install -r requirements/doc.txt
+	cd doc && make deps
 
 develop: clean-cache
 	pip install -e ".[all]"
