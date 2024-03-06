@@ -24,7 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "matplotlib>=3.6.0",
-    "pandas>=2.1.0",
+    "pandas>=2.1.0,<3.0.0",
     "mizani~=0.11.0",
     "numpy>=1.23.0",
     "scipy>=1.7.0",
@@ -78,7 +78,7 @@ dev = [
 ]
 
 typing = [
-    "pyright==1.1.350",
+    "pyright==1.1.352",
     "ipython",
     "pandas-stubs",
 ]
