@@ -7,8 +7,26 @@ title: Changelog
 
 ### Bug Fixes
 
-- Fix bug in [](:class:`~plotnine.stat_smooth`) where you could not set the
+- Fixed bug in [](:class:`~plotnine.stat_smooth`) where you could not set the
   family when using a `glm`. ({{< issue 769 >}})
+
+- Fixed bug in [](:class:`~plotnine.position_dodge2`) the widths of the
+  dodged objects were mixed up. ({{< issue 772 >}})
+
+- Fixed [](:class:`~plotnine.geom_text`) to work better with
+  [adjustText](https://pypi.org/project/adjustText/) `v1.0.0` and above.
+
+- Fixed images generated in quarto so that they have the dimensions
+  (taking the dpi into account) that are specified in theme. ({{< issue 773 >}})
+
+### New
+
+- Added themeable [](:class:`~plotnine.themes.themeable.svg_usefonts`).
+  ({{< issue 756 >}})
+
+### Enhancements
+
+- Added _palmerpenguins_ dataset.
 
 ## v0.13.4
 (2024-04-03)
