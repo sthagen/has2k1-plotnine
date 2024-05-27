@@ -31,22 +31,21 @@ class plot_context:
 
         # Contexts
         self.rc_context = mpl.rc_context(plot.theme.rcParams)
-        # Pandas deprecated is_copy, and when we create new dataframes
-        # from slices we do not want complaints. We always uses the
-        # new frames knowing that they are separate from the original.
+        # TODO: Remove this context when copy-on-write is permanent, i.e.
+        # pandas >= 3.0
         self.pd_option_context = pd.option_context(
-            "mode.chained_assignment",
-            None,
             "mode.copy_on_write",
-            False,
+            True,
         )
 
     def __enter__(self) -> Self:
         """
         Enclose in matplolib & pandas environments
         """
+
         self.rc_context.__enter__()
         self.pd_option_context.__enter__()
+
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):

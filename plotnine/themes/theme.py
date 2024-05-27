@@ -22,7 +22,7 @@ if typing.TYPE_CHECKING:
 
 # All complete themes are initiated with these rcparams. They
 # can be overridden.
-default_rcparams = {
+DEFAULT_RCPARAMS = {
     "axes.axisbelow": "True",
     "font.sans-serif": [
         "Helvetica",
@@ -225,7 +225,7 @@ class theme:
         self.complete = complete
 
         if complete:
-            self._rcParams = deepcopy(default_rcparams)
+            self._rcParams = deepcopy(DEFAULT_RCPARAMS)
         else:
             self._rcParams = {}
 
