@@ -16,14 +16,19 @@ title: Changelog
 - [](:class:`~plotnine.ggtitle`) now accepts `title` and `subtitle` as
   keyword arguments. ({{<issue 804 >}})
 
+- Gained the option [](:attr:`~plotnine.options.limitsize`) that makes
+  it possible to display plots of any size.
+
+  ```python
+  from plotnine.options import set_option
+
+  set_option("figure_format", False)
+  ```
+
 ### New Features
 
 - [](:class:`~plotnine.geom_text`) has gained new aesthetics
   `fontvariant` and `fontstretch`.
-
-- [](:stat:`~plotnine.stat_density`) has gained a new parameter `bounds`
-  that you can use remove asymptotic boundary effects that arise from
-  density estimates on an infinite domain. ({{< issue 796 >}})
 
 ### Bug Fixes
 
