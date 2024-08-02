@@ -18,18 +18,12 @@ if typing.TYPE_CHECKING:
     from typing import Any, Literal, Optional, Sequence
 
     from matplotlib.axes import Axes
-    from mizani.transforms import trans
 
     from plotnine.coords.coord import coord
     from plotnine.facets.layout import Layout
     from plotnine.geoms.geom import geom
     from plotnine.iapi import panel_view
-    from plotnine.typing import (
-        AnyArray,
-        TupleFloat2,
-        TupleFloat3,
-        TupleFloat4,
-    )
+    from plotnine.typing import AnyArray
 
 
 class _geom_logticks(geom_rug):
@@ -70,7 +64,7 @@ class _geom_logticks(geom_rug):
         sides: str,
         panel_params: panel_view,
         coord: coord,
-    ) -> TupleFloat2:
+    ) -> tuple[float, float]:
         """
         Check the log transforms
 
@@ -96,17 +90,10 @@ class _geom_logticks(geom_rug):
             The bases (base_x, base_y) to use when generating the ticks.
         """
 
-        def is_log_trans(t: trans) -> bool:
-            return hasattr(t, "base") and t.__class__.__name__.startswith(
-                "log"
-            )
-
         def get_base(sc, ubase: Optional[float]) -> float:
             ae = sc.aesthetics[0]
 
-            if not isinstance(sc, ScaleContinuous) or not is_log_trans(
-                sc.trans
-            ):
+            if not isinstance(sc, ScaleContinuous) or not sc.is_log_scale:
                 warnings.warn(
                     f"annotation_logticks for {ae}-axis which does not have "
                     "a log scale. The logticks may not make sense.",
@@ -114,7 +101,7 @@ class _geom_logticks(geom_rug):
                 )
                 return 10 if ubase is None else ubase
 
-            base = sc.trans.base  # pyright: ignore
+            base = sc._trans.base  # pyright: ignore
             if ubase is not None and base != ubase:
                 warnings.warn(
                     f"The x-axis is log transformed in base={base} ,"
@@ -143,7 +130,7 @@ class _geom_logticks(geom_rug):
 
     @staticmethod
     def _calc_ticks(
-        value_range: TupleFloat2, base: float
+        value_range: tuple[float, float], base: float
     ) -> tuple[AnyArray, AnyArray, AnyArray]:
         """
         Calculate tick marks within a range
@@ -276,11 +263,13 @@ class annotation_logticks(annotate):
         self,
         sides: str = "bl",
         alpha: float = 1,
-        color: str | TupleFloat3 | TupleFloat4 = "black",
+        color: str
+        | tuple[float, float, float]
+        | tuple[float, float, float, float] = "black",
         size: float = 0.5,
         linetype: Literal["solid", "dashed", "dashdot", "dotted"]
         | Sequence[float] = "solid",
-        lengths: TupleFloat3 = (0.036, 0.0225, 0.012),
+        lengths: tuple[float, float, float] = (0.036, 0.0225, 0.012),
         base: float | None = None,
     ):
         if len(lengths) != 3:

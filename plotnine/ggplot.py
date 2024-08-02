@@ -36,6 +36,8 @@ from .scales.scales import Scales
 from .themes.theme import theme, theme_get
 
 if TYPE_CHECKING:
+    from typing import Protocol
+
     from matplotlib.axes import Axes
     from matplotlib.figure import Figure
     from typing_extensions import Self
@@ -44,7 +46,29 @@ if TYPE_CHECKING:
     from plotnine.coords.coord import coord
     from plotnine.facets.facet import facet
     from plotnine.layer import layer
-    from plotnine.typing import DataLike, PlotAddable
+    from plotnine.typing import DataLike
+
+    class PlotAddable(Protocol):
+        """
+        Object that can be added to a ggplot object
+        """
+
+        def __radd__(self, plot: ggplot) -> ggplot:
+            """
+            Add to ggplot object
+
+            Parameters
+            ----------
+            other :
+                ggplot object
+
+            Returns
+            -------
+            :
+                ggplot object
+            """
+            ...
+
 
 __all__ = ("ggplot", "ggsave", "save_as_pdf_pages")
 
@@ -101,34 +125,12 @@ class ggplot:
 
     def __str__(self) -> str:
         """
-        Print/show the plot
-        """
-        msg = (
-            "Using print(plot) to draw and show the plot figure is "
-            "deprecated and will be removed in a future version. "
-            "Use plot.show()."
-        )
-        warn(msg, category=FutureWarning, stacklevel=2)
-        self.show()
-        # Return and empty string so that print(p) is as clean as possible
-        return ""
-
-    def __repr__(self) -> str:
-        """
-        Print/show the plot
+        Return a wrapped pixel size of the plot
         """
         dpi = self.theme.getp("dpi")
         width, height = self.theme.getp("figure_size")
         W, H = int(width * dpi), int(height * dpi)
-
-        msg = (
-            "Using repr(plot) to draw and show the plot figure is "
-            "deprecated and will be removed in a future version. "
-            "Use plot.show()."
-        )
-        warn(msg, category=FutureWarning, stacklevel=2)
-        self.show()
-        return f"<Figure Size: ({W} x {H})>"
+        return f"<ggplot: ({W} x {H})>"
 
     def _ipython_display_(self):
         """

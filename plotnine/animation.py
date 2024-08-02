@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import typing
-from copy import copy
+from copy import deepcopy
 
-import pandas as pd
 from matplotlib.animation import ArtistAnimation
 
 from .exceptions import PlotnineError
@@ -70,12 +69,6 @@ class PlotnineAnimation(ArtistAnimation):
         )
 
     def _draw_plots(
-        self, plots: Iterable[ggplot]
-    ) -> tuple[Figure, list[list[Artist]]]:
-        with pd.option_context("mode.chained_assignment", None):
-            return self.__draw_plots(plots)
-
-    def __draw_plots(
         self, plots: Iterable[ggplot]
     ) -> tuple[Figure, list[list[Artist]]]:
         """
@@ -156,7 +149,7 @@ class PlotnineAnimation(ArtistAnimation):
             """
             for sc in scales:
                 ae = sc.aesthetics[0]
-                scale_limits[ae] = sc.limits
+                scale_limits[ae] = sc.final_limits
 
         def check_scale_limits(scales: list[scale], frame_no: int):
             """
@@ -189,7 +182,7 @@ class PlotnineAnimation(ArtistAnimation):
                         f"The plot for frame {frame_no} does not "
                         f"have a scale for the {ae} aesthetic."
                     )
-                if sc.limits != scale_limits[ae]:
+                if sc.final_limits != scale_limits[ae]:
                     raise PlotnineError(
                         f"The {ae} scale of plot for frame {frame_no} has "
                         "different limits from those of the first frame."
@@ -212,9 +205,9 @@ class PlotnineAnimation(ArtistAnimation):
                 scales = p._build_objs.scales
                 set_scale_limits(scales)
             else:
-                p = copy(p)
-                plot = p._draw_using_figure(figure, axs)
+                plot = self._draw_animation_plot(p, figure, axs)
                 check_scale_limits(plot.scales, frame_no)
+
             artists.append(get_frame_artists(axs))
 
         if figure is None:
@@ -224,3 +217,22 @@ class PlotnineAnimation(ArtistAnimation):
         # Prevent Jupyter from plotting any static figure
         plt.close(figure)
         return figure, artists
+
+    def _draw_animation_plot(
+        self, plot: ggplot, figure: Figure, axs: list[Axes]
+    ) -> ggplot:
+        """
+        Draw a plot/frame of the animation
+
+        This methods draws plots from the 2nd onwards
+        """
+        from ._utils.context import plot_context
+
+        plot = deepcopy(plot)
+        plot.figure = figure
+        plot.axs = axs
+        with plot_context(plot):
+            plot._build()
+            plot.figure, plot.axs = plot.facet.setup(plot)
+            plot._draw_layers()
+        return plot

@@ -22,11 +22,8 @@ if TYPE_CHECKING:
     from plotnine.typing import (
         CoordRange,
         FloatArrayLike,
-        ScaleBreaks,
         ScaledAestheticsName,
-        ScaleLimits,
         StripPosition,
-        TupleFloat2,
     )
 
     from ._mpl.offsetbox import FlexibleAnchoredOffsetbox
@@ -42,10 +39,10 @@ class scale_view:
     aesthetics: list[ScaledAestheticsName]
     name: Optional[str]
     # Trained limits of the scale
-    limits: ScaleLimits
+    limits: tuple[float, float] | Sequence[str]
     # Physical size of scale, including expansions
     range: CoordRange
-    breaks: ScaleBreaks
+    breaks: Sequence[float] | Sequence[str]
     minor_breaks: FloatArrayLike
     labels: Sequence[str]
 
@@ -56,8 +53,8 @@ class range_view:
     Range information after training
     """
 
-    range: TupleFloat2
-    range_coord: TupleFloat2
+    range: tuple[float, float]
+    range_coord: tuple[float, float]
 
 
 @dataclass
@@ -147,8 +144,8 @@ class panel_ranges:
     Ranges for the panel
     """
 
-    x: TupleFloat2
-    y: TupleFloat2
+    x: tuple[float, float]
+    y: tuple[float, float]
 
 
 @dataclass
@@ -316,7 +313,7 @@ class legend_justifications_view:
     right: float = 0.5
     top: float = 0.5
     bottom: float = 0.5
-    inside: Optional[TupleFloat2] = None
+    inside: Optional[tuple[float, float]] = None
 
 
 @dataclass
@@ -336,8 +333,8 @@ class inside_legend:
     """
 
     box: FlexibleAnchoredOffsetbox
-    justification: TupleFloat2
-    position: TupleFloat2
+    justification: tuple[float, float]
+    position: tuple[float, float]
 
 
 @dataclass
