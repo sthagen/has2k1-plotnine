@@ -11,6 +11,10 @@ title: Changelog
   in `v0.13.0` and it has now been removed.
   Use [ggplot.show()](`plotnine.ggplot.show`)
 
+- The color_space parameter of [](:class:`~plotnine.scale_color_hue`) now
+  accepts the value `"hlsuv"` instead of `"husl"`. The meaning of has
+  not changed, and `"husl"` is silently accepted.
+
 ### Enhancements
 
 - The `family`, `fontstyle` and `fontweight` parameters of
@@ -35,6 +39,8 @@ title: Changelog
   by giving them no shape, now they do not affect the limits of the plot.
   ({{< issue 814 >}})
 
+- Made it possile to map an aesthetic value to `None`. ({{< issue 791 >}})
+
 ### New Features
 
 - [](:class:`~plotnine.geom_text`) has gained new aesthetics
@@ -53,6 +59,8 @@ title: Changelog
 
 - Fixed [](:class:`~plotnine.PlotnineAnimation`) not to draw a second legend
   at the bottom-left corner. ({{< issue 816 }}>)
+
+- Fixed bug where setting `theme(text=element_blank())` would raise and exception.
 
 ## v0.13.6
 (2024-05-09)
