@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import typing
+from typing import TYPE_CHECKING
 
 import numpy as np
 from mizani.bounds import expand_range_distinct
@@ -8,9 +8,7 @@ from mizani.bounds import expand_range_distinct
 from .._utils import ignore_warnings
 from ..iapi import range_view
 
-if typing.TYPE_CHECKING:
-    from typing import Type
-
+if TYPE_CHECKING:
     from mizani.transforms import trans
 
     from plotnine.typing import CoordRange
@@ -32,7 +30,7 @@ def _expand_range_distinct(
 def expand_range(
     x: CoordRange,
     expand: tuple[float, float] | tuple[float, float, float, float],
-    trans: trans | Type[trans],
+    trans: trans,
 ) -> range_view:
     """
     Expand Coordinate Range in coordinate space

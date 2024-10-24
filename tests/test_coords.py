@@ -1,15 +1,19 @@
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
 import pytest
-from mizani.transforms import trans_new
+from mizani.transforms import trans
 
 from plotnine import (
     aes,
+    coord_cartesian,
     coord_fixed,
     coord_flip,
     coord_trans,
     geom_bar,
     geom_line,
+    geom_point,
     ggplot,
     xlim,
 )
@@ -36,11 +40,17 @@ def test_coord_fixed():
 
 
 def test_coord_trans():
-    double_trans = trans_new("double", np.square, np.sqrt)
+    class double_trans(trans):
+        def transform(self, x):
+            return np.square(x)
+
+        def inverse(self, x):
+            return np.sqrt(x)
+
     # Warns probably because of a bad value around the left
     # edge of the domain.
     with pytest.warns(RuntimeWarning):
-        assert p + coord_trans(y=double_trans) == "coord_trans"
+        assert p + coord_trans(y=double_trans()) == "coord_trans"
 
 
 def test_coord_trans_reverse():
@@ -62,3 +72,22 @@ def test_coord_trans_backtransforms():
         + coord_trans(x="log10")
     )
     assert p == "coord_trans_backtransform"
+
+
+def test_datetime_coord_limits():
+    n = 6
+
+    data = pd.DataFrame(
+        {
+            "x": [datetime(x, 1, 1) for x in range(2000, 2000 + n)],
+            "y": range(n),
+        }
+    )
+
+    p = (
+        ggplot(data, aes("x", "y"))
+        + geom_point()
+        + coord_cartesian(xlim=(datetime(1999, 1, 1), datetime(2006, 1, 1)))
+    )
+
+    assert p == "datetime_scale_limits"
