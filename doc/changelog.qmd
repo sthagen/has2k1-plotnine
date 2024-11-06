@@ -1,6 +1,22 @@
 ---
 title: Changelog
 ---
+## v0.14.1
+(2024-11-05)
+
+[![](https://zenodo.org/badge/DOI/10.5281/zenodo.14041304.svg)](https://doi.org/10.5281/zenodo.14041304)
+
+### Bug Fixes
+
+- Fix expansion of datetime and timedelta scales when using both the lower
+  and upper addition constants.
+
+- In quarto documents make the output `retina` even if the `fig-format` is
+  `png`.
+
+- Fixed bug where you could not save as pdf if also specifying the
+  `aspect_ratio`. ({{< issue 885 >}})
+
 ## v0.14.0
 (2024-10-28)
 
