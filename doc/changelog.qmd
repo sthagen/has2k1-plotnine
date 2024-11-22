@@ -2,13 +2,16 @@
 title: Changelog
 ---
 ## v0.14.2
-(not-yet-released)
+(2024-11-21)
 
 ### Bug Fixes
 
 - Fixed bugs that affected [](:class:`~plotnine.geom_dotplot`) and
   [](:class:`~plotnine.geom_sina`) where data with an index that
   did not include 0 led to a crash. ({{< issue 888 >}})
+
+- Fixed `v0.14.0` regression that made [](:class:`~plotnine.scale_color_cmap_d`)
+  unusable. ({{< issue 890 >}})
 
 ## v0.14.1
 (2024-11-05)
