@@ -316,10 +316,10 @@ def ninteraction(df: pd.DataFrame, drop: bool = False) -> list[int]:
     if drop:
         return _id_var(res, drop)
     else:
-        return list(res)
+        return res
 
 
-def _id_var(x: pd.Series[Any], drop: bool = False) -> list[int]:
+def _id_var(x: AnyArrayLike, drop: bool = False) -> list[int]:
     """
     Assign ids to items in x. If two items
     are the same, they get the same id.
@@ -334,7 +334,7 @@ def _id_var(x: pd.Series[Any], drop: bool = False) -> list[int]:
     if len(x) == 0:
         return []
 
-    if array_kind.categorical(x):
+    if isinstance(x, pd.Series) and array_kind.categorical(x):
         if drop:
             x = x.cat.remove_unused_categories()
             lst = list(x.cat.codes + 1)
@@ -985,7 +985,7 @@ def cross_join(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
     if len(df2) == 0:
         return df1
 
-    return df1.join(df2, how="cross")  # type: ignore
+    return df1.join(df2, how="cross")
 
 
 def to_inches(value: float, units: str) -> float:

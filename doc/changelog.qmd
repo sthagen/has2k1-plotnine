@@ -1,8 +1,34 @@
 ---
 title: Changelog
 ---
+
+## v0.14.4
+(not-yet-released)
+
+### Bug Fixes
+
+- Fixed [](:class:`~plotnine.geom_text`) with `adjust_text` so that the
+  the arrows are drawn at the same layer (zorder) as the text.
+
+- Fixed [](:class:`~plotnine.geom_text`) with `adjust_text` for some
+  cases where the text are placed outside the panels. {{< issue 899 >}}
+
+- The default aesthetics and aesthetic parameters of geoms (and stats) are
+  now transformed. So you can now set date values as aesthetic parameters.
+  e.g.
+
+  ```python
+  geom_point(y=datetime(2024, 12, 11))
+  ```
+
+  if the `y` aesthetic is mapped to datetime column in another layer.
+
+- Fixed bug for matplotlib>3.10 where the `axis_ticks_length` for the x-axis
+  had no effect.
+
 ## v0.14.3
 (2024-11-26)
+[![](https://zenodo.org/badge/DOI/10.5281/zenodo.14224336.svg)](https://doi.org/10.5281/zenodo.14224336)
 
 ### Enhancements
 
@@ -14,7 +40,7 @@ title: Changelog
 
 - Changed the threshold number of keys for when the legend is split into multiple
   columns from 20 to 15. This only applies in the default case when the user does
-  not set the number of rows or columns i.e. `guide_legend(nrow=None, ncol=None).
+  not set the number of rows or columns i.e. `guide_legend(nrow=None, ncol=None)`.
   ({{< issue 757 >}})
 
 ## v0.14.2
