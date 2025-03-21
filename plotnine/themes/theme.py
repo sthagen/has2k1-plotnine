@@ -19,6 +19,8 @@ if typing.TYPE_CHECKING:
 
     from plotnine import ggplot
 
+    from .elements import margin
+
 
 # All complete themes are initiated with these rcparams. They
 # can be overridden.
@@ -122,6 +124,11 @@ class theme:
         plot_title=None,
         plot_subtitle=None,
         plot_caption=None,
+        plot_tag=None,
+        plot_title_position=None,
+        plot_caption_position=None,
+        plot_tag_location=None,
+        plot_tag_position=None,
         strip_text_x=None,
         strip_text_y=None,
         strip_text=None,
@@ -169,13 +176,6 @@ class theme:
         axis_ticks_length_minor_y=None,
         axis_ticks_length_minor=None,
         axis_ticks_length=None,
-        axis_ticks_pad_major_x=None,
-        axis_ticks_pad_major_y=None,
-        axis_ticks_pad_major=None,
-        axis_ticks_pad_minor_x=None,
-        axis_ticks_pad_minor_y=None,
-        axis_ticks_pad_minor=None,
-        axis_ticks_pad=None,
         panel_spacing_x=None,
         panel_spacing_y=None,
         panel_spacing=None,
@@ -269,6 +269,12 @@ class theme:
         Convenient access into the properties of the themeables
         """
         return self.themeables.getp
+
+    def get_margin(self, name: str) -> margin:
+        """
+        Return the margin propery of a element_text themeables
+        """
+        return self.themeables.getp((name, "margin"))
 
     def apply(self):
         """

@@ -107,9 +107,11 @@ class facet_grid(facet):
         self.space = space
         self.margins = margins
 
-    def _make_figure(self):
-        import matplotlib.pyplot as plt
-        from matplotlib.gridspec import GridSpec
+    def _get_panels_gridspec(self):
+        """
+        Create gridspec for the panels
+        """
+        from plotnine._mpl.gridspec import p9GridSpec
 
         layout = self.layout
         space = self.space
@@ -155,7 +157,12 @@ class facet_grid(facet):
             ratios["width_ratios"] = self.space.get("x")
             ratios["height_ratios"] = self.space.get("y")
 
-        return plt.figure(), GridSpec(self.nrow, self.ncol, **ratios)
+        return p9GridSpec(
+            self.nrow,
+            self.ncol,
+            nest_into=self.plot._gridspec[0],
+            **ratios,
+        )
 
     def compute_layout(self, data: list[pd.DataFrame]) -> pd.DataFrame:
         if not self.rows and not self.cols:

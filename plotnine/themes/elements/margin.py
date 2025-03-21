@@ -4,7 +4,9 @@ Theme elements used to decorate the graph.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from contextlib import suppress
+from copy import copy
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -12,80 +14,91 @@ if TYPE_CHECKING:
 
     from plotnine import theme
 
-    from .element_base import element_base
-
 
 @dataclass
-class Margin:
-    element: element_base
+class margin:
     t: float = 0
+    r: float = 0
     b: float = 0
     l: float = 0
-    r: float = 0
-    units: Literal["pt", "in", "lines", "fig"] = "pt"
+    unit: Literal["pt", "in", "lines", "fig"] = "pt"
 
-    def __post_init__(self):
-        self.theme: theme
-        self.themeable_name: str
+    # These are set by the themeable when it is applied
+    fontsize: float = field(init=False, default=0)
+    figure_size: tuple[float, float] = field(init=False, default=(0, 0))
 
-        if self.units in ("pts", "points", "px", "pixels"):
-            self.units = "pt"
-        elif self.units in ("in", "inch", "inches"):
-            self.units = "in"
-        elif self.units in ("line", "lines"):
-            self.units = "lines"
+    def setup(self, theme: theme, themeable_name: str):
+        self.fontsize = theme.getp((themeable_name, "size"), 11)
+        self.figure_size = theme.getp("figure_size")
 
-    def __eq__(self, other: object) -> bool:
-        def _size(m: Margin):
-            return m.element.properties.get("size")
-
-        return other is self or (
-            isinstance(other, type(self))
-            and other.t == self.t
-            and other.b == self.b
-            and other.l == self.l
-            and other.r == self.r
-            and other.units == self.units
-            and _size(other) == _size(self)
-        )
-
-    def get_as(
-        self,
-        loc: Literal["t", "b", "l", "r"],
-        units: Literal["pt", "in", "lines", "fig"] = "pt",
-    ) -> float:
+    @property
+    def pt(self) -> margin:
         """
-        Return key in given units
+        Return margin in points
         """
+        return self.to("pt")
+
+    @property
+    def inch(self) -> margin:
+        """
+        Return margin in inches
+        """
+        return self.to("in")
+
+    @property
+    def lines(self) -> margin:
+        """
+        Return margin in lines units
+        """
+        return self.to("lines")
+
+    @property
+    def fig(self) -> margin:
+        """
+        Return margin in figure units
+        """
+        return self.to("fig")
+
+    def to(self, unit: Literal["pt", "in", "lines", "fig"]) -> margin:
+        """
+        Return margin in request unit
+        """
+        m = copy(self)
+        if self.unit == unit:
+            return m
+
+        conversion = f"{self.unit}-{unit}"
+        W, H = self.figure_size
+
+        with suppress(ZeroDivisionError):
+            m.t = self._convert(conversion, H, self.t)
+        with suppress(ZeroDivisionError):
+            m.r = self._convert(conversion, W, self.r)
+        with suppress(ZeroDivisionError):
+            m.b = self._convert(conversion, H, self.b)
+        with suppress(ZeroDivisionError):
+            m.l = self._convert(conversion, W, self.l)
+
+        m.unit = unit
+        return m
+
+    def _convert(self, conversion: str, D: float, value: float) -> float:
         dpi = 72
-        size: float = self.theme.getp((self.themeable_name, "size"), 11)
-        from_units = self.units
-        to_units = units
-        W: float
-        H: float
-        W, H = self.theme.getp("figure_size")  # inches
-        L = (W * dpi) if loc in "tb" else (H * dpi)  # pts
+        L = D * dpi  # pts
 
         functions: dict[str, Callable[[float], float]] = {
             "fig-in": lambda x: x * L / dpi,
-            "fig-lines": lambda x: x * L / size,
+            "fig-lines": lambda x: x * L / self.fontsize,
             "fig-pt": lambda x: x * L,
             "in-fig": lambda x: x * dpi / L,
-            "in-lines": lambda x: x * dpi / size,
+            "in-lines": lambda x: x * dpi / self.fontsize,
             "in-pt": lambda x: x * dpi,
-            "lines-fig": lambda x: x * size / L,
-            "lines-in": lambda x: x * size / dpi,
-            "lines-pt": lambda x: x * size,
+            "lines-fig": lambda x: x * self.fontsize / L,
+            "lines-in": lambda x: x * self.fontsize / dpi,
+            "lines-pt": lambda x: x * self.fontsize,
             "pt-fig": lambda x: x / L,
             "pt-in": lambda x: x / dpi,
-            "pt-lines": lambda x: x / size,
+            "pt-lines": lambda x: x / self.fontsize,
         }
 
-        value: float = getattr(self, loc)
-        if from_units != to_units:
-            conversion = f"{self.units}-{units}"
-            try:
-                value = functions[conversion](value)
-            except ZeroDivisionError:
-                value = 0
-        return value
+        return functions[conversion](value)

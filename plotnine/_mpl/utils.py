@@ -1,17 +1,20 @@
 from __future__ import annotations
 
-import typing
+from typing import TYPE_CHECKING
 
 from matplotlib.transforms import Affine2D, Bbox
 
 from .transforms import ZEROS_BBOX
 
-if typing.TYPE_CHECKING:
+if TYPE_CHECKING:
     from matplotlib.artist import Artist
     from matplotlib.axes import Axes
     from matplotlib.backend_bases import RendererBase
     from matplotlib.figure import Figure
+    from matplotlib.gridspec import SubplotSpec
     from matplotlib.transforms import Transform
+
+    from .gridspec import p9GridSpec
 
 
 def bbox_in_figure_space(
@@ -51,28 +54,86 @@ def pts_in_figure_space(fig: Figure, pts: float) -> float:
     return fig.transFigure.inverted().transform([0, pts])[1]
 
 
-def get_transPanels(fig: Figure) -> Transform:
+def get_transPanels(fig: Figure, gs: p9GridSpec) -> Transform:
     """
     Coordinate system of the Panels (facets) area
 
     (0, 0) is the bottom-left of the bottom-left panel and
     (1, 1) is the top right of the top-right panel.
 
-    The subplot parameters must be set before calling this function.
-    i.e. fig.subplots_adjust should have been called.
+    The gridspec parameters must be set before calling this function.
+    i.e. gs.update have been called.
     """
-    # Contains the layout information from which the panel area
-    # is derived
-    params = fig.subplotpars
+    # The position of the panels area in figure coordinates
+    params = gs.get_subplot_params(fig)
 
     # Figure width & height in display coordinates
     W, H = fig.bbox.width, fig.bbox.height
 
     # 1. The panels occupy space that is smaller than the figure
     # 2. That space is contained within the figure
-    # We create a transform that represent these separable aspects
-    # (but order matters), and use to transform transFigure
+    # We create a transform that represents these separable aspects
+    # (but order matters), and use it to transform transFigure
     sx, sy = params.right - params.left, params.top - params.bottom
     dx, dy = params.left * W, params.bottom * H
     transFiguretoPanels = Affine2D().scale(sx, sy).translate(dx, dy)
     return fig.transFigure + transFiguretoPanels
+
+
+def rel_position(rel: float, length: float, low: float, high: float) -> float:
+    """
+    Relatively position an object of a given length between two position
+
+    Parameters
+    ----------
+    rel:
+        Relative position of the object between the limits.
+    length:
+        Length of the object
+    low:
+        Lower limit position
+    high:
+        Upper limit position
+    """
+    return low * (1 - rel) + (high - length) * rel
+
+
+def get_subplotspecs(axs: list[Axes]) -> list[SubplotSpec]:
+    """
+    Return the SubplotSpecs of the given axes
+
+    Parameters
+    ----------
+    axs:
+        List of axes
+
+    Notes
+    -----
+    This functions returns the innermost subplotspec and it expects
+    every axes object to have one.
+    """
+    subplotspecs: list[SubplotSpec] = []
+    for ax in axs:
+        if not (subplotspec := ax.get_subplotspec()):
+            raise ValueError("Axes has no suplotspec")
+        subplotspecs.append(subplotspec)
+    return subplotspecs
+
+
+def draw_gridspec(gs: p9GridSpec, color="black", **kwargs):
+    """
+    A debug function to draw a rectangle around the gridspec
+    """
+    from matplotlib.patches import Rectangle
+
+    gs.figure.add_artist(
+        Rectangle(
+            xy=gs.bbox_relative.p0,
+            width=gs.bbox_relative.width,
+            height=gs.bbox_relative.height,
+            edgecolor=color,
+            fill=False,
+            clip_on=False,
+            **kwargs,
+        )
+    )
