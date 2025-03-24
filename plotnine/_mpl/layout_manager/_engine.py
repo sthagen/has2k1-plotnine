@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 from typing import TYPE_CHECKING
 from warnings import warn
 
 from matplotlib.layout_engine import LayoutEngine
 
 from ...exceptions import PlotnineWarning
+from ._layout_tree import LayoutTree
 from ._spaces import LayoutSpaces
 
 if TYPE_CHECKING:
@@ -42,7 +42,7 @@ class PlotnineLayoutEngine(LayoutEngine):
             spaces = LayoutSpaces(self.plot)
 
         gsparams = spaces.get_gridspec_params()
-        self.plot.facet._panels_gridspec.update(**asdict(gsparams))
+        self.plot.facet._panels_gridspec.layout(gsparams)
         spaces.items._adjust_positions(spaces)
 
 
@@ -56,24 +56,24 @@ class PlotnineCompositionLayoutEngine(LayoutEngine):
 
     def __init__(self, composition: Compose):
         self.composition = composition
-        self.lookup_spaces: dict[ggplot, LayoutSpaces] = {}
 
     def execute(self, fig: Figure):
         from contextlib import nullcontext
 
         renderer = fig._get_renderer()  # pyright: ignore[reportAttributeAccessIssue]
 
-        def get_spaces(plot):
-            with getattr(renderer, "_draw_disabled", nullcontext)():
-                return LayoutSpaces(plot)
+        # Caculate the space taken up by all plot artists
+        lookup_spaces: dict[ggplot, LayoutSpaces] = {}
+        with getattr(renderer, "_draw_disabled", nullcontext)():
+            for ps in self.composition.plotspecs:
+                lookup_spaces[ps.plot] = LayoutSpaces(ps.plot)
 
-        for ps in self.composition.plotspecs:
-            spaces = get_spaces(ps.plot)
-            self.lookup_spaces[ps.plot] = spaces
+        # Adjust the size and placements of the plots
+        tree = LayoutTree.create(self.composition, lookup_spaces)
+        tree.harmonise()
 
-        self.align()
-
-        for plot, spaces in self.lookup_spaces.items():
+        # Set the final positions of the artists in each plot
+        for plot, spaces in lookup_spaces.items():
             gsparams = spaces.get_gridspec_params()
             if not gsparams.valid:
                 warn(
@@ -83,11 +83,5 @@ class PlotnineCompositionLayoutEngine(LayoutEngine):
                     PlotnineWarning,
                 )
                 break
-            plot.facet._panels_gridspec.update(**asdict(gsparams))
+            plot.facet._panels_gridspec.layout(gsparams)
             spaces.items._adjust_positions(spaces)
-
-    def align(self):
-        from ._layout_tree import LayoutTree
-
-        tree = LayoutTree.create(self.composition, self.lookup_spaces)
-        tree.align()

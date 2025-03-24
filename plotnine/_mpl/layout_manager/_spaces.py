@@ -155,7 +155,7 @@ class _side_spaces(ABC):
         """
         return self.items.plot._gridspec
 
-    @cached_property
+    @property
     def offset(self) -> float:
         """
         Distance in figure dimensions from the edge of the figure
@@ -273,7 +273,7 @@ class left_spaces(_side_spaces):
 
         return self.items.calc.size(self.items.legends.left.box)
 
-    @cached_property
+    @property
     def offset(self) -> float:
         """
         Distance from left of the figure to the left of the plot gridspec
@@ -378,7 +378,7 @@ class right_spaces(_side_spaces):
 
         return self.items.calc.size(self.items.legends.right.box)
 
-    @cached_property
+    @property
     def offset(self):
         """
         Distance from right of the figure to the right of the plot gridspec
@@ -503,7 +503,7 @@ class top_spaces(_side_spaces):
 
         return self.items.calc.size(self.items.legends.top.box)
 
-    @cached_property
+    @property
     def offset(self) -> float:
         """
         Distance from top of the figure to the top of the plot gridspec
@@ -634,7 +634,7 @@ class bottom_spaces(_side_spaces):
 
         return self.items.calc.size(self.items.legends.bottom.box)
 
-    @cached_property
+    @property
     def offset(self) -> float:
         """
         Distance from bottom of the figure to the bottom of the plot gridspec
@@ -769,6 +769,34 @@ class LayoutSpaces:
                 self._reduce_height(ratio)
 
         return self.gsparams
+
+    @property
+    def plot_width(self) -> float:
+        """
+        Width [figure dimensions] of the whole plot
+        """
+        return self.plot._gridspec.bbox_relative.width
+
+    @property
+    def plot_height(self) -> float:
+        """
+        Height [figure dimensions] of the whole plot
+        """
+        return self.plot._gridspec.bbox_relative.height
+
+    @property
+    def panel_width(self) -> float:
+        """
+        Width [figure dimensions] of panels
+        """
+        return self.r.right - self.l.left
+
+    @property
+    def panel_height(self) -> float:
+        """
+        Height [figure dimensions] of panels
+        """
+        return self.t.top - self.b.bottom
 
     def increase_horizontal_plot_margin(self, dw: float):
         """

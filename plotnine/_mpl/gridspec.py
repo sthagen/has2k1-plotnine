@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from dataclasses import asdict
+from functools import cached_property
+from typing import TYPE_CHECKING, cast
 
 try:
     from matplotlib.gridspec import GridSpecBase, SubplotParams
@@ -16,6 +18,8 @@ if TYPE_CHECKING:
     from matplotlib.gridspec import SubplotSpec
     from matplotlib.patches import Rectangle
     from matplotlib.transforms import Transform
+
+    from plotnine._mpl.layout_manager._spaces import GridSpecParams
 
 
 class p9GridSpec(GridSpecBase):
@@ -35,7 +39,6 @@ class p9GridSpec(GridSpecBase):
         If given, this gridspec will be contained in the subplot.
     """
 
-    _figure: Figure | None
     _subplot_params: SubplotParams
     """
     The subplot spacing parameters of this gridspec
@@ -44,30 +47,41 @@ class p9GridSpec(GridSpecBase):
     gridspec is contained. Use .get_subplot_params to get the absolute
     values (those in figure coordinates).
     """
+    _nested_gridspecs: list[p9GridSpec]
+    """
+    All gridspecs that are nested into any of the subplots of this one
+    """
     _patch: Rectangle
 
     def __init__(
         self,
         nrows,
         ncols,
-        figure=None,
+        figure: Figure,
         *,
         width_ratios=None,
         height_ratios=None,
         nest_into: SubplotSpec | None = None,
     ):
+        self.figure = figure
+        self._nested_gridspecs = []
+
         super().__init__(
             nrows,
             ncols,
             width_ratios=width_ratios,
             height_ratios=height_ratios,
         )
-        self._figure = figure
+
         if nest_into:
             self._parent_subplot_spec = nest_into
             # MPL GridSpecBase expects only the subclasses that will be nested
             # to have the .get_topmost_subplotspec method.
             self.get_topmost_subplotspec = self._get_topmost_subplotspec
+
+            # Register this gridspec as nested
+            gs = cast("p9GridSpec", nest_into.get_gridspec())
+            gs._nested_gridspecs.append(self)
 
         self.update(
             left=0,
@@ -123,8 +137,6 @@ class p9GridSpec(GridSpecBase):
             wspace=wspace,
             hspace=hspace,
         )
-        self._update_patch_position()
-        self._update_axes_position()
 
     def _update_patch_position(self):
         """
@@ -145,15 +157,25 @@ class p9GridSpec(GridSpecBase):
         """
         Update the position of the axes in this gridspec
         """
-        try:
-            figure = self.figure
-        except ValueError:
-            return
-
-        # Adapted from matplotlib.figure.Figure.subplots_adjust
-        for ax in figure.axes:
+        for ax in self.figure.axes:
             if ss := ax.get_subplotspec():
                 ax._set_position(ss.get_position(self))  # pyright: ignore[reportAttributeAccessIssue, reportArgumentType]
+
+    def _update_artists(self):
+        """
+        Update the artist positions that depend on this gridspec
+        """
+        self._update_patch_position()
+        self._update_axes_position()
+        for gs in self._nested_gridspecs:
+            gs._update_artists()
+
+    def layout(self, gsparams: GridSpecParams):
+        """
+        Update the layout of the gridspec
+        """
+        self.update(**asdict(gsparams))
+        self._update_artists()
 
     def get_subplot_params(self, figure=None) -> SubplotParams:
         """
@@ -196,27 +218,10 @@ class p9GridSpec(GridSpecBase):
         """
         return self._parent_subplot_spec.get_topmost_subplotspec()
 
-    @property
-    def figure(self) -> Figure:
-        """
-        Return the figure that contains this GridSpec
-        """
-        if self._figure:
-            return self._figure
-        elif self.nested:
-            gs = self._parent_subplot_spec.get_gridspec()
-            if isinstance(gs, p9GridSpec):
-                return gs.figure  # pyright: ignore[reportReturnType]
-            ss = self.get_topmost_subplotspec()
-            return ss._gridspec.figure  # pyright: ignore[reportAttributeAccessIssue]
-
-        raise ValueError(
-            "Could not find a figure associated with this GridSpec."
-        )
-
-    @figure.setter
-    def figure(self, value: Figure):
-        self._figure = value
+    @cached_property
+    def parent_gridspec(self) -> p9GridSpec | None:
+        if self.nested and (ss := self._parent_subplot_spec):
+            return ss.get_gridspec()  # pyright: ignore[reportReturnType]
 
     @property
     def bbox_relative(self):
@@ -250,3 +255,11 @@ class p9GridSpec(GridSpecBase):
         The output of this transform is in the display units of the figure.
         """
         return BboxTransformTo(self.bbox)
+
+    def set_height_ratios(self, height_ratios):
+        super().set_height_ratios(height_ratios)
+        self._update_artists()
+
+    def set_width_ratios(self, width_ratios):
+        super().set_width_ratios(width_ratios)
+        self._update_artists()
