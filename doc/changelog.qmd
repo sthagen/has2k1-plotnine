@@ -68,11 +68,21 @@ title: Changelog
   )
   ```
 
+- Geoms [](:class:`~plotnine.geom_bar`) and [](:class:`~plotnine.geom_col`) have
+  gained new parameter `just` that controls how the bars align with the axis break point.
+
+- [](:class:`~plotnine.geom_sina`) has gained new parameter `style` just like
+  [](:class:`~plotnine.geom_violin`), which make one-sided (half) sina plots.
+
 ### Enhancements
 
 - Included datasets [](:attr:`~plotnine.data.mpg`), [](:attr:`~plotnine.data.msleep`) and
   [](:attr:`~plotnine.data.midwest`) no longer have any of their columns as categoricals.
   This matches the respective datasets in R. {{< issue 913 >}}
+
+- When the `width` of the violins in [](:class:`~plotnine.geom_violin`) is wider than their
+  normal area, they now overlap with those closest to the origin on top. This makes it possible
+  to create overlapping ridge plots using half violins.
 
 ### Bug Fixes
 
@@ -90,6 +100,7 @@ title: Changelog
 - Fixed bug where computed aesthetic from `after_scale` are were not applied to the legend.
   {{< issue 926 >}}
 
+- Fixed theming of minor x axis ticks.
 
 ## v0.14.5
 (2025-01-02)
