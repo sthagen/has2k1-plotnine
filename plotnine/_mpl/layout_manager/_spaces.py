@@ -14,7 +14,7 @@ from __future__ import annotations
 from abc import ABC
 from dataclasses import dataclass, field, fields
 from functools import cached_property
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from plotnine.facets import facet_grid, facet_null, facet_wrap
 
@@ -26,7 +26,8 @@ if TYPE_CHECKING:
 
     from plotnine import ggplot
     from plotnine._mpl.gridspec import p9GridSpec
-
+    from plotnine.iapi import outside_legend
+    from plotnine.typing import Side
 
 # Note
 # Margins around the plot are specified in figure coordinates
@@ -69,16 +70,12 @@ class _side_spaces(ABC):
     """
 
     items: LayoutItems
-    alignment_margin: float = 0
-    """
-    A margin added to align this plot with others in a composition
-
-    This value is calculated during the layout process in a tree structure
-    that has convenient access to the sides/edges of the panels in the
-    composition.
-    """
 
     def __post_init__(self):
+        self.side: Side = cast("Side", self.__class__.__name__[:-7])
+        """
+        Side of the panel(s) that this class applies to
+        """
         self._calculate()
 
     def _calculate(self):
@@ -132,17 +129,21 @@ class _side_spaces(ABC):
         values e.g. 0.2, instead of just left, right, top,  bottom &
         center.
         """
-        return (0, 0)
+        if not self.has_legend:
+            return (0, 0)
+
+        ol: outside_legend = getattr(self.items.legends, self.side)
+        return self.items.calc.size(ol.box)
 
     @cached_property
-    def _legend_width(self) -> float:
+    def legend_width(self) -> float:
         """
         Return width of legend in figure coordinates
         """
         return self._legend_size[0]
 
     @cached_property
-    def _legend_height(self) -> float:
+    def legend_height(self) -> float:
         """
         Return height of legend in figure coordinates
         """
@@ -204,6 +205,53 @@ class _side_spaces(ABC):
         """
         return self.offset + rel_value
 
+    @property
+    def has_tag(self) -> bool:
+        """
+        Return True if the space/margin to this side of the panel has a tag
+
+        If it does, then it will be included in the layout
+        """
+        getp = self.items.plot.theme.getp
+        return getp("plot_tag_location") == "margin" and self.side in getp(
+            "plot_tag_position"
+        )
+
+    @property
+    def has_legend(self) -> bool:
+        """
+        Return True if the space/margin to this side of the panel has a legend
+
+        If it does, then it will be included in the layout
+        """
+        if not self.items.legends:
+            return False
+        return hasattr(self.items.legends, self.side)
+
+    @property
+    def tag_width(self) -> float:
+        """
+        The width of the tag including the margins
+
+        The value is zero expect if all these are true:
+            - The tag is in the margin `theme(plot_tag_position = "margin")`
+            - The tag at one one of the the following locations;
+              left, right, topleft, topright, bottomleft or bottomright
+        """
+        return 0
+
+    @property
+    def tag_height(self) -> float:
+        """
+        The height of the tag including the margins
+
+        The value is zero expect if all these are true:
+            - The tag is in the margin `theme(plot_tag_position = "margin")`
+            - The tag at one one of the the following locations;
+              top, bottom, topleft, topright, bottomleft or bottomright
+        """
+        return 0
+
 
 @dataclass
 class left_spaces(_side_spaces):
@@ -214,9 +262,50 @@ class left_spaces(_side_spaces):
     """
 
     plot_margin: float = 0
+    tag_alignment: float = 0
+    """
+    Space added to align the tag in this plot with others in a composition
+
+    This value is calculated during the layout process, and it ensures that
+    all tags on this side of the plot take up the same amount of space in
+    the margin. e.g. from
+
+         ------------------------------------
+        | plot_margin | tag | artists        |
+        |------------------------------------|
+        | plot_margin | A long tag | artists |
+         ------------------------------------
+
+    to
+
+         ------------------------------------
+        | plot_margin |     tag    | artists |
+        |------------------------------------|
+        | plot_margin | A long tag | artists |
+         ------------------------------------
+
+    And the tag is justified within that space e.g if ha="left" we get
+
+         ------------------------------------
+        | plot_margin | tag        | artists |
+        |------------------------------------|
+        | plot_margin | A long tag | artists |
+         ------------------------------------
+
+    So, contrary to the order in which the space items are laid out, the 
+    tag_alignment does not necessarily come before the plot_tag.
+    """
     plot_tag_margin_left: float = 0
     plot_tag: float = 0
     plot_tag_margin_right: float = 0
+    margin_alignment: float = 0
+    """
+    Space added to align this plot with others in a composition
+
+    This value is calculated during the layout process in a tree structure
+    that has convenient access to the sides/edges of the panels in the
+    composition.
+    """
     legend: float = 0
     legend_box_spacing: float = 0
     axis_title_y_margin_left: float = 0
@@ -232,22 +321,16 @@ class left_spaces(_side_spaces):
         calc = self.items.calc
         items = self.items
 
-        # If the plot_tag is in the margin, it is included in the layout.
-        # So we make space for it, including any margins it may have.
-        plot_tag_in_layout = theme.getp(
-            "plot_tag_location"
-        ) == "margin" and "left" in theme.getp("plot_tag_position")
-
         self.plot_margin = theme.getp("plot_margin_left")
 
-        if items.plot_tag and plot_tag_in_layout:
+        if self.has_tag and items.plot_tag:
             m = theme.get_margin("plot_tag").fig
             self.plot_tag_margin_left = m.l
             self.plot_tag = calc.width(items.plot_tag)
             self.plot_tag_margin_right = m.r
 
         if items.legends and items.legends.left:
-            self.legend = self._legend_width
+            self.legend = self.legend_width
             self.legend_box_spacing = theme.getp("legend_box_spacing")
 
         if items.axis_title_y:
@@ -272,13 +355,6 @@ class left_spaces(_side_spaces):
         adjustment = protrusion - (self.total - self.plot_margin)
         if adjustment > 0:
             self.plot_margin += adjustment
-
-    @cached_property
-    def _legend_size(self) -> tuple[float, float]:
-        if not (self.items.legends and self.items.legends.left):
-            return (0, 0)
-
-        return self.items.calc.size(self.items.legends.left.box)
 
     @property
     def offset(self) -> float:
@@ -329,6 +405,17 @@ class left_spaces(_side_spaces):
         """
         return self.x1("legend")
 
+    @property
+    def tag_width(self):
+        """
+        The width of the tag including the margins
+        """
+        return (
+            self.plot_tag_margin_left
+            + self.plot_tag
+            + self.plot_tag_margin_right
+        )
+
 
 @dataclass
 class right_spaces(_side_spaces):
@@ -339,9 +426,11 @@ class right_spaces(_side_spaces):
     """
 
     plot_margin: float = 0
+    tag_alignment: float = 0
     plot_tag_margin_right: float = 0
     plot_tag: float = 0
     plot_tag_margin_left: float = 0
+    margin_alignment: float = 0
     legend: float = 0
     legend_box_spacing: float = 0
     strip_text_y_width_right: float = 0
@@ -350,22 +439,17 @@ class right_spaces(_side_spaces):
         items = self.items
         theme = self.items.plot.theme
         calc = self.items.calc
-        # If the plot_tag is in the margin, it is included in the layout.
-        # So we make space for it, including any margins it may have.
-        plot_tag_in_layout = theme.getp(
-            "plot_tag_location"
-        ) == "margin" and "right" in theme.getp("plot_tag_position")
 
         self.plot_margin = theme.getp("plot_margin_right")
 
-        if items.plot_tag and plot_tag_in_layout:
+        if self.has_tag and items.plot_tag:
             m = theme.get_margin("plot_tag").fig
             self.plot_tag_margin_right = m.r
             self.plot_tag = calc.width(items.plot_tag)
             self.plot_tag_margin_left = m.l
 
         if items.legends and items.legends.right:
-            self.legend = self._legend_width
+            self.legend = self.legend_width
             self.legend_box_spacing = theme.getp("legend_box_spacing")
 
         self.strip_text_y_width_right = items.strip_text_y_width("right")
@@ -377,13 +461,6 @@ class right_spaces(_side_spaces):
         adjustment = protrusion - (self.total - self.plot_margin)
         if adjustment > 0:
             self.plot_margin += adjustment
-
-    @cached_property
-    def _legend_size(self) -> tuple[float, float]:
-        if not (self.items.legends and self.items.legends.right):
-            return (0, 0)
-
-        return self.items.calc.size(self.items.legends.right.box)
 
     @property
     def offset(self):
@@ -434,6 +511,17 @@ class right_spaces(_side_spaces):
         """
         return self.x2("legend")
 
+    @property
+    def tag_width(self):
+        """
+        The width of the tag including the margins
+        """
+        return (
+            self.plot_tag_margin_right
+            + self.plot_tag
+            + self.plot_tag_margin_left
+        )
+
 
 @dataclass
 class top_spaces(_side_spaces):
@@ -444,9 +532,11 @@ class top_spaces(_side_spaces):
     """
 
     plot_margin: float = 0
+    tag_alignment: float = 0
     plot_tag_margin_top: float = 0
     plot_tag: float = 0
     plot_tag_margin_bottom: float = 0
+    margin_alignment: float = 0
     plot_title_margin_top: float = 0
     plot_title: float = 0
     plot_title_margin_bottom: float = 0
@@ -463,15 +553,10 @@ class top_spaces(_side_spaces):
         calc = self.items.calc
         W, H = theme.getp("figure_size")
         F = W / H
-        # If the plot_tag is in the margin, it is included in the layout.
-        # So we make space for it, including any margins it may have.
-        plot_tag_in_layout = theme.getp(
-            "plot_tag_location"
-        ) == "margin" and "top" in theme.getp("plot_tag_position")
 
         self.plot_margin = theme.getp("plot_margin_top") * F
 
-        if items.plot_tag and plot_tag_in_layout:
+        if self.has_tag and items.plot_tag:
             m = theme.get_margin("plot_tag").fig
             self.plot_tag_margin_top = m.t
             self.plot_tag = calc.height(items.plot_tag)
@@ -490,7 +575,7 @@ class top_spaces(_side_spaces):
             self.plot_subtitle_margin_bottom = m.b * F
 
         if items.legends and items.legends.top:
-            self.legend = self._legend_height
+            self.legend = self.legend_height
             self.legend_box_spacing = theme.getp("legend_box_spacing") * F
 
         self.strip_text_x_height_top = items.strip_text_x_height("top")
@@ -502,13 +587,6 @@ class top_spaces(_side_spaces):
         adjustment = protrusion - (self.total - self.plot_margin)
         if adjustment > 0:
             self.plot_margin += adjustment
-
-    @cached_property
-    def _legend_size(self) -> tuple[float, float]:
-        if not (self.items.legends and self.items.legends.top):
-            return (0, 0)
-
-        return self.items.calc.size(self.items.legends.top.box)
 
     @property
     def offset(self) -> float:
@@ -562,6 +640,17 @@ class top_spaces(_side_spaces):
         """
         return self.y2("legend")
 
+    @property
+    def tag_height(self):
+        """
+        The height of the tag including the margins
+        """
+        return (
+            self.plot_tag_margin_top
+            + self.plot_tag
+            + self.plot_tag_margin_bottom
+        )
+
 
 @dataclass
 class bottom_spaces(_side_spaces):
@@ -572,9 +661,11 @@ class bottom_spaces(_side_spaces):
     """
 
     plot_margin: float = 0
+    tag_alignment: float = 0
     plot_tag_margin_bottom: float = 0
     plot_tag: float = 0
     plot_tag_margin_top: float = 0
+    margin_alignment: float = 0
     plot_caption_margin_bottom: float = 0
     plot_caption: float = 0
     plot_caption_margin_top: float = 0
@@ -594,15 +685,10 @@ class bottom_spaces(_side_spaces):
         calc = self.items.calc
         W, H = theme.getp("figure_size")
         F = W / H
-        # If the plot_tag is in the margin, it is included in the layout.
-        # So we make space for it, including any margins it may have.
-        plot_tag_in_layout = theme.getp(
-            "plot_tag_location"
-        ) == "margin" and "bottom" in theme.getp("plot_tag_position")
 
         self.plot_margin = theme.getp("plot_margin_bottom") * F
 
-        if items.plot_tag and plot_tag_in_layout:
+        if self.has_tag and items.plot_tag:
             m = theme.get_margin("plot_tag").fig
             self.plot_tag_margin_bottom = m.b
             self.plot_tag = calc.height(items.plot_tag)
@@ -615,7 +701,7 @@ class bottom_spaces(_side_spaces):
             self.plot_caption_margin_top = m.t * F
 
         if items.legends and items.legends.bottom:
-            self.legend = self._legend_height
+            self.legend = self.legend_height
             self.legend_box_spacing = theme.getp("legend_box_spacing") * F
 
         if items.axis_title_x:
@@ -639,13 +725,6 @@ class bottom_spaces(_side_spaces):
         adjustment = protrusion - (self.total - self.plot_margin)
         if adjustment > 0:
             self.plot_margin += adjustment
-
-    @cached_property
-    def _legend_size(self) -> tuple[float, float]:
-        if not (self.items.legends and self.items.legends.bottom):
-            return (0, 0)
-
-        return self.items.calc.size(self.items.legends.bottom.box)
 
     @property
     def offset(self) -> float:
@@ -698,6 +777,17 @@ class bottom_spaces(_side_spaces):
         Distance up to the bottom-most artist in figure space
         """
         return self.y1("legend")
+
+    @property
+    def tag_height(self):
+        """
+        The height of the tag including the margins
+        """
+        return (
+            self.plot_tag_margin_bottom
+            + self.plot_tag
+            + self.plot_tag_margin_top
+        )
 
 
 @dataclass
@@ -810,6 +900,50 @@ class LayoutSpaces:
         Height [figure dimensions] of panels
         """
         return self.t.top - self.b.bottom
+
+    @property
+    def tag_width(self) -> float:
+        """
+        Width [figure dimensions] of space taken up by the tag
+        """
+        # Atleast one of these is zero
+        return max(self.l.tag_width, self.r.tag_width)
+
+    @property
+    def tag_height(self) -> float:
+        """
+        Height [figure dimensions] of space taken up by the tag
+        """
+        # Atleast one of these is zero
+        return max(self.t.tag_height, self.b.tag_height)
+
+    @property
+    def left_tag_width(self) -> float:
+        """
+        Width [figure dimensions] of space taken up by a left tag
+        """
+        return self.l.tag_width
+
+    @property
+    def right_tag_width(self) -> float:
+        """
+        Width [figure dimensions] of space taken up by a right tag
+        """
+        return self.r.tag_width
+
+    @property
+    def top_tag_height(self) -> float:
+        """
+        Width [figure dimensions] of space taken up by a top tag
+        """
+        return self.t.tag_height
+
+    @property
+    def bottom_tag_height(self) -> float:
+        """
+        Height [figure dimensions] of space taken up by a bottom tag
+        """
+        return self.b.tag_height
 
     def increase_horizontal_plot_margin(self, dw: float):
         """
