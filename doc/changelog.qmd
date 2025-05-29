@@ -19,6 +19,14 @@ title: Changelog
    or `axis_text_y` to control the spacing between the axis text and the ticks.
    ({{< issue 843 >}})
 
+- The `stat` class methods `stat.compute_layer`, `stat.compute_panel` and `stat.compute_group` are now instance methods and they no longer accept
+  `**params` arguments. Access to the parameters is through `self.params`.
+
+- The `geom` class methods `geom.draw_layer` and `geom.draw_panel` do no longer accept `**param` arguments. Access to the parameters is through `self.params`.
+
+- Method `geom.draw_group` now accepts the `params` argument as a dictionary and not `**params`.
+
+
 ### New Features
 
 - Plot Composition is here. Using an intuitive algebra, you can
@@ -136,6 +144,12 @@ title: Changelog
 
 - Fixed bug in [](:class:`~plotnine.geom_histogram`) where mapping to the `weight` aesthetic
   lead to an error. {{< issue 936 >}}
+
+- Fixed bug in [](:class:`~plotnine.geom_vline`) where you could not map the `xintercept`
+  aesthetic to a discrete variable.
+
+- Fixed bug in [](:class:`~plotnine.geom_hline`) where you could not map the `yintercept`
+  aesthetic to a discrete variable.
 
 ## v0.14.5
 (2025-01-02)
