@@ -118,6 +118,7 @@ class LayoutTree:
         """
         Align and resize plots in composition to look good
         """
+        self.align_axis_titles()
         self.align()
         self.resize()
 
@@ -147,6 +148,20 @@ class LayoutTree:
         for tree in self.sub_compositions:
             tree.align()
 
+    @abc.abstractmethod
+    def align_axis_titles(self):
+        """
+        Align the axis titles along the composing dimension
+
+        Since the alignment value used to for this purpose is one of
+        the fields in the _side_space, it affects the space created
+        for the panel.
+
+        We could align the titles within self.align but we would have
+        to store the value outside the _side_space and pick it up when
+        setting the position of the texts!
+        """
+
     def resize_sub_compositions(self):
         """
         Resize panels in the compositions contained in this one
@@ -163,62 +178,62 @@ class LayoutTree:
 
     @cached_property
     @abc.abstractmethod
-    def lefts(self) -> Sequence[float]:
+    def panel_lefts(self) -> Sequence[float]:
         """
         Left values [figure space] of nodes in this tree
         """
 
     @cached_property
     @abc.abstractmethod
-    def rights(self) -> Sequence[float]:
+    def panel_rights(self) -> Sequence[float]:
         """
         Right values [figure space] of nodes in this tree
         """
 
     @cached_property
     @abc.abstractmethod
-    def bottoms(self) -> Sequence[float]:
+    def panel_bottoms(self) -> Sequence[float]:
         """
         Bottom values [figure space] of nodes in this tree
         """
 
     @cached_property
     @abc.abstractmethod
-    def tops(self) -> Sequence[float]:
+    def panel_tops(self) -> Sequence[float]:
         """
         Top values [figure space] of nodes in this tree
         """
 
     @property
-    def lefts_align(self) -> bool:
+    def panel_lefts_align(self) -> bool:
         """
         Return True if panel lefts for the nodes are aligned
         """
-        arr = np.array(self.lefts)
+        arr = np.array(self.panel_lefts)
         return all(arr == arr[0])
 
     @property
-    def rights_align(self) -> bool:
+    def panel_rights_align(self) -> bool:
         """
         Return True if panel rights for the nodes are aligned
         """
-        arr = np.array(self.rights)
+        arr = np.array(self.panel_rights)
         return all(arr == arr[0])
 
     @property
-    def bottoms_align(self) -> bool:
+    def panel_bottoms_align(self) -> bool:
         """
         Return True if panel bottoms for the nodes are aligned
         """
-        arr = np.array(self.bottoms)
+        arr = np.array(self.panel_bottoms)
         return all(arr == arr[0])
 
     @property
-    def tops_align(self) -> bool:
+    def panel_tops_align(self) -> bool:
         """
         Return True if panel tops for the nodes are aligned
         """
-        arr = np.array(self.tops)
+        arr = np.array(self.panel_tops)
         return all(arr == arr[0])
 
     @property
@@ -365,6 +380,50 @@ class LayoutTree:
         arr = np.array(self.top_tag_heights)
         return all(arr == arr[0])
 
+    @property
+    def left_axis_titles_align(self) -> bool:
+        """
+        Return True if the left axis titles align
+        """
+        arr = np.array(self.left_axis_title_clearances)
+        return all(arr == arr[0])
+
+    @property
+    def bottom_axis_titles_align(self) -> bool:
+        """
+        Return True if the bottom axis titles align
+        """
+        arr = np.array(self.bottom_axis_title_clearances)
+        return all(arr == arr[0])
+
+    @cached_property
+    @abc.abstractmethod
+    def left_axis_title_clearance(self) -> float:
+        """
+        Distance between the left y-axis title and the panel
+        """
+
+    @cached_property
+    @abc.abstractmethod
+    def bottom_axis_title_clearance(self) -> float:
+        """
+        Distance between the left x-axis title and the panel
+        """
+
+    @cached_property
+    def left_axis_title_clearances(self) -> list[float]:
+        """
+        Distances between the left y-axis titles and the panels
+        """
+        return [node.left_axis_title_clearance for node in self.nodes]
+
+    @cached_property
+    def bottom_axis_title_clearances(self) -> list[float]:
+        """
+        Distances between the bottom x-axis titles and the panels
+        """
+        return [node.bottom_axis_title_clearance for node in self.nodes]
+
     @abc.abstractmethod
     def set_left_margin_alignment(self, value: float):
         """
@@ -429,6 +488,22 @@ class LayoutTree:
         In figure dimenstions
         """
 
+    @abc.abstractmethod
+    def set_left_axis_title_alignment(self, value: float):
+        """
+        Set the space to align the left axis titles in this composition
+
+        In figure dimenstions
+        """
+
+    @abc.abstractmethod
+    def set_bottom_axis_title_alignment(self, value: float):
+        """
+        Set the space to align the bottom axis titles in this composition
+
+        In figure dimenstions
+        """
+
 
 @dataclass
 class ColumnsTree(LayoutTree):
@@ -454,9 +529,14 @@ class ColumnsTree(LayoutTree):
     def align(self):
         self.align_top_tags()
         self.align_bottom_tags()
-        self.align_tops()
-        self.align_bottoms()
+        self.align_panel_tops()
+        self.align_panel_bottoms()
         self.align_sub_compositions()
+
+    def align_axis_titles(self):
+        self.align_bottom_axis_titles()
+        for tree in self.sub_compositions:
+            tree.align_axis_titles()
 
     def resize(self):
         """
@@ -473,7 +553,7 @@ class ColumnsTree(LayoutTree):
         self.gridspec.set_width_ratios(width_ratios)
         self.resize_sub_compositions()
 
-    def align_bottoms(self):
+    def align_panel_bottoms(self):
         """
         Align the immediate bottom edges this composition
 
@@ -488,19 +568,19 @@ class ColumnsTree(LayoutTree):
         # If panels are aligned and have a non-zero margin_alignment,
         # aligning them again will set that value to zero and undoes
         # the alignment.
-        if self.bottoms_align:
+        if self.panel_bottoms_align:
             return
 
-        values = max(self.bottoms) - np.array(self.bottoms)
+        values = max(self.panel_bottoms) - np.array(self.panel_bottoms)
         for item, value in zip(self.nodes, values):
             if isinstance(item, LayoutSpaces):
                 item.b.margin_alignment = value
             else:
                 item.set_bottom_margin_alignment(value)
 
-        del self.bottoms
+        del self.panel_bottoms
 
-    def align_tops(self):
+    def align_panel_tops(self):
         """
         Align the immediate top edges in this composition
 
@@ -512,17 +592,17 @@ class ColumnsTree(LayoutTree):
         |     |     |      |     |     |
          -----------        -----------
         """
-        if self.tops_align:
+        if self.panel_tops_align:
             return
 
-        values = np.array(self.tops) - min(self.tops)
+        values = np.array(self.panel_tops) - min(self.panel_tops)
         for item, value in zip(self.nodes, values):
             if isinstance(item, LayoutSpaces):
                 item.t.margin_alignment = value
             else:
                 item.set_top_margin_alignment(value)
 
-        del self.tops
+        del self.panel_tops
 
     def align_bottom_tags(self):
         if self.bottom_tags_align:
@@ -552,40 +632,57 @@ class ColumnsTree(LayoutTree):
             else:
                 item.set_top_tag_alignment(value)
 
+    def align_bottom_axis_titles(self):
+        if self.bottom_axis_titles_align:
+            pass
+
+        values = max(self.bottom_axis_title_clearances) - np.array(
+            self.bottom_axis_title_clearances
+        )
+        # We ignore 0 values since they can undo values
+        # set to align this composition with an outer one.
+        for item, value in zip(self.nodes, values):
+            if value == 0:
+                continue
+            if isinstance(item, LayoutSpaces):
+                item.b.axis_title_alignment = value
+            else:
+                item.set_bottom_axis_title_alignment(value)
+
     @cached_property
-    def lefts(self):
+    def panel_lefts(self):
         left_item = self.nodes[0]
         if isinstance(left_item, LayoutSpaces):
-            return [left_item.l.left]
+            return [left_item.l.panel_left]
         else:
-            return left_item.lefts
+            return left_item.panel_lefts
 
     @cached_property
-    def rights(self):
+    def panel_rights(self):
         right_item = self.nodes[-1]
         if isinstance(right_item, LayoutSpaces):
-            return [right_item.r.right]
+            return [right_item.r.panel_right]
         else:
-            return right_item.rights
+            return right_item.panel_rights
 
     @cached_property
-    def bottoms(self):
+    def panel_bottoms(self):
         values = []
         for item in self.nodes:
             if isinstance(item, LayoutSpaces):
-                values.append(item.b.bottom)
+                values.append(item.b.panel_bottom)
             else:
-                values.append(max(item.bottoms))
+                values.append(max(item.panel_bottoms))
         return values
 
     @cached_property
-    def tops(self):
+    def panel_tops(self):
         values = []
         for item in self.nodes:
             if isinstance(item, LayoutSpaces):
-                values.append(item.t.top)
+                values.append(item.t.panel_top)
             else:
-                values.append(min(item.tops))
+                values.append(min(item.panel_tops))
         return values
 
     @property
@@ -619,6 +716,14 @@ class ColumnsTree(LayoutTree):
     @cached_property
     def top_tag_height(self) -> float:
         return max(self.top_tag_heights)
+
+    @cached_property
+    def left_axis_title_clearance(self) -> float:
+        return self.left_axis_title_clearances[0]
+
+    @cached_property
+    def bottom_axis_title_clearance(self) -> float:
+        return max(self.bottom_axis_title_clearances)
 
     def set_left_margin_alignment(self, value: float):
         left_item = self.nodes[0]
@@ -662,6 +767,20 @@ class ColumnsTree(LayoutTree):
             else:
                 item.set_top_tag_alignment(value)
 
+    def set_bottom_axis_title_alignment(self, value: float):
+        for item in self.nodes:
+            if isinstance(item, LayoutSpaces):
+                item.b.axis_title_alignment = value
+            else:
+                item.set_bottom_axis_title_alignment(value)
+
+    def set_left_axis_title_alignment(self, value: float):
+        left_item = self.nodes[0]
+        if isinstance(left_item, LayoutSpaces):
+            left_item.l.axis_title_alignment = value
+        else:
+            left_item.set_left_axis_title_alignment(value)
+
 
 @dataclass
 class RowsTree(LayoutTree):
@@ -684,9 +803,14 @@ class RowsTree(LayoutTree):
     def align(self):
         self.align_left_tags()
         self.align_right_tags()
-        self.align_lefts()
-        self.align_rights()
+        self.align_panel_lefts()
+        self.align_panel_rights()
         self.align_sub_compositions()
+
+    def align_axis_titles(self):
+        self.align_left_axis_titles()
+        for tree in self.sub_compositions:
+            tree.align_axis_titles()
 
     def resize(self):
         """
@@ -704,7 +828,7 @@ class RowsTree(LayoutTree):
         self.gridspec.set_height_ratios(height_ratios)
         self.resize_sub_compositions()
 
-    def align_lefts(self):
+    def align_panel_lefts(self):
         """
         Align the immediate left edges in this composition
 
@@ -718,19 +842,19 @@ class RowsTree(LayoutTree):
         |  #        |      |  #        |
          -----------        -----------
         """
-        if self.lefts_align:
+        if self.panel_lefts_align:
             return
 
-        values = max(self.lefts) - np.array(self.lefts)
+        values = max(self.panel_lefts) - np.array(self.panel_lefts)
         for item, value in zip(self.nodes, values):
             if isinstance(item, LayoutSpaces):
                 item.l.margin_alignment = value
             else:
                 item.set_left_margin_alignment(value)
 
-        del self.lefts
+        del self.panel_lefts
 
-    def align_rights(self):
+    def align_panel_rights(self):
         """
         Align the immediate right edges in this composition
 
@@ -744,17 +868,17 @@ class RowsTree(LayoutTree):
         |          #|      |        #  |
          -----------        -----------
         """
-        if self.rights_align:
+        if self.panel_rights_align:
             return
 
-        values = np.array(self.rights) - min(self.rights)
+        values = np.array(self.panel_rights) - min(self.panel_rights)
         for item, value in zip(self.nodes, values):
             if isinstance(item, LayoutSpaces):
                 item.r.margin_alignment = value
             else:
                 item.set_right_margin_alignment(value)
 
-        del self.rights
+        del self.panel_rights
 
     def align_left_tags(self):
         """
@@ -804,41 +928,56 @@ class RowsTree(LayoutTree):
             else:
                 item.set_right_tag_alignment(value)
 
+    def align_left_axis_titles(self):
+        if self.left_axis_titles_align:
+            pass
+
+        values = max(self.left_axis_title_clearances) - np.array(
+            self.left_axis_title_clearances
+        )
+        for item, value in zip(self.nodes, values):
+            if value == 0:
+                continue
+            if isinstance(item, LayoutSpaces):
+                item.l.axis_title_alignment = value
+            else:
+                item.set_left_axis_title_alignment(value)
+
     @cached_property
-    def lefts(self):
+    def panel_lefts(self):
         values = []
         for item in self.nodes:
             if isinstance(item, LayoutSpaces):
-                values.append(item.l.left)
+                values.append(item.l.panel_left)
             else:
-                values.append(max(item.lefts))
+                values.append(max(item.panel_lefts))
         return values
 
     @cached_property
-    def rights(self):
+    def panel_rights(self):
         values = []
         for item in self.nodes:
             if isinstance(item, LayoutSpaces):
-                values.append(item.r.right)
+                values.append(item.r.panel_right)
             else:
-                values.append(min(item.rights))
+                values.append(min(item.panel_rights))
         return values
 
     @cached_property
-    def bottoms(self):
+    def panel_bottoms(self):
         bottom_item = self.nodes[-1]
         if isinstance(bottom_item, LayoutSpaces):
-            return [bottom_item.b.bottom]
+            return [bottom_item.b.panel_bottom]
         else:
-            return bottom_item.bottoms
+            return bottom_item.panel_bottoms
 
     @cached_property
-    def tops(self):
+    def panel_tops(self):
         top_item = self.nodes[0]
         if isinstance(top_item, LayoutSpaces):
-            return [top_item.t.top]
+            return [top_item.t.panel_top]
         else:
-            return top_item.tops
+            return top_item.panel_tops
 
     @property
     def panel_width(self) -> float:
@@ -871,6 +1010,14 @@ class RowsTree(LayoutTree):
     @cached_property
     def bottom_tag_height(self) -> float:
         return self.bottom_tag_heights[-1]
+
+    @cached_property
+    def left_axis_title_clearance(self) -> float:
+        return max(self.left_axis_title_clearances)
+
+    @cached_property
+    def bottom_axis_title_clearance(self) -> float:
+        return self.bottom_axis_title_clearances[-1]
 
     def set_left_margin_alignment(self, value: float):
         for item in self.nodes:
@@ -913,3 +1060,17 @@ class RowsTree(LayoutTree):
                 item.r.tag_alignment = value
             else:
                 item.set_right_tag_alignment(value)
+
+    def set_left_axis_title_alignment(self, value: float):
+        for item in self.nodes:
+            if isinstance(item, LayoutSpaces):
+                item.l.axis_title_alignment = value
+            else:
+                item.set_left_axis_title_alignment(value)
+
+    def set_bottom_axis_title_alignment(self, value: float):
+        bottom_item = self.nodes[-1]
+        if isinstance(bottom_item, LayoutSpaces):
+            bottom_item.b.axis_title_alignment = value
+        else:
+            bottom_item.set_bottom_axis_title_alignment(value)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ._arrange import Arrange
@@ -8,6 +9,7 @@ if TYPE_CHECKING:
     from plotnine.ggplot import ggplot
 
 
+@dataclass
 class Beside(Arrange):
     """
     Place plots or compositions side by side
@@ -20,6 +22,11 @@ class Beside(Arrange):
         composition | composition
 
     Typically, you will use this class through the `|` operator.
+
+    See Also
+    --------
+    plotnine.composition.Stack : To arrange plots vertically
+    plotnine.composition.plot_spacer : To add a blank space between plots
     """
 
     @property
