@@ -109,7 +109,6 @@ class scale_color_hue(_scale_color_discrete):
 
         super().__post_init__()
         self.palette = hue_pal(h, c, l, direction)
-        self.palette.h
 
 
 @dataclass
@@ -350,7 +349,7 @@ class scale_color_gradientn(_scale_color_continuous):
     plotnine.scale_color_gradientn
     """
 
-    colors: InitVar[Sequence[str]] = "#832424"
+    colors: InitVar[Sequence[str]]
     """
     List of colors
     """
@@ -364,8 +363,8 @@ class scale_color_gradientn(_scale_color_continuous):
     def __post_init__(self, colors, values):
         from mizani.palettes import gradient_n_pal
 
-        self.palette = gradient_n_pal(colors, values)
         super().__post_init__()
+        self.palette = gradient_n_pal(colors, values)
 
 
 @dataclass
@@ -489,7 +488,7 @@ class scale_fill_cmap(scale_color_cmap):
 
 
 @dataclass
-class scale_color_cmap_d(scale_discrete):
+class scale_color_cmap_d(_scale_color_discrete):
     """
     A discrete color scales using Matplotlib colormaps
 
@@ -506,7 +505,6 @@ class scale_color_cmap_d(scale_discrete):
     `matplotlib.cm.cmap_d.keys()` or see the
     `documentation <http://matplotlib.org/users/colormaps.html>`_.
     """
-    _aesthetics = ["color"]
 
     def __post_init__(self, cmap_name):
         from mizani.palettes import cmap_d_pal
