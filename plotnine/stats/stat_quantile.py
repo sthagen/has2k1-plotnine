@@ -63,6 +63,9 @@ class stat_quantile(stat):
         if params["formula"] is None:
             params["formula"] = "y ~ x"
             warn("Formula not specified, using '{}'", PlotnineWarning)
+        else:
+            params["eval_env"] = self.environment.to_patsy_env()
+
         try:
             iter(params["quantiles"])
         except TypeError:
@@ -81,7 +84,11 @@ def quant_pred(q, data, params):
     """
     import statsmodels.formula.api as smf
 
-    mod = smf.quantreg(params["formula"], data)
+    mod = smf.quantreg(
+        params["formula"],
+        data,
+        eval_env=params.get("eval_env"),
+    )
     reg_res = mod.fit(q=q, **params["method_args"])
     out = pd.DataFrame(
         {
