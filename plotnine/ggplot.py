@@ -25,11 +25,11 @@ from ._utils import (
 )
 from ._utils.context import plot_context
 from ._utils.ipython import (
-    get_display_function,
     get_ipython,
+    get_mimebundle,
     is_inline_backend,
 )
-from ._utils.quarto import is_quarto_environment
+from ._utils.quarto import is_knitr_engine, is_quarto_environment
 from .coords import coord_cartesian
 from .exceptions import PlotnineError, PlotnineWarning
 from .facets import facet_null
@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     from plotnine.composition import Compose
     from plotnine.coords.coord import coord
     from plotnine.facets.facet import facet
-    from plotnine.typing import DataLike
+    from plotnine.typing import DataLike, FigureFormat, MimeBundle
 
     class PlotAddable(Protocol):
         """
@@ -137,47 +137,31 @@ class ggplot:
         w, h = self.theme._figure_size_px
         return f"<ggplot: ({w} x {h})>"
 
-    def _ipython_display_(self):
+    def __repr__(self):
+        # knitr relies on __repr__ to automatically print the last object
+        # in a cell.
+        if is_knitr_engine():
+            self.show()
+            return ""
+        return super().__repr__()
+
+    def _repr_mimebundle_(self, include=None, exclude=None) -> MimeBundle:
         """
-        Display plot in the output of the cell
+        Return dynamic MIME bundle for plot display
 
-        This method will always be called when a ggplot object is the
-        last in the cell.
-        """
-        self._display()
+        This method is called when a ggplot object is the last in the cell.
 
-    def show(self):
-        """
-        Show plot using the matplotlib backend set by the user
-
-        Users should prefer this method instead of printing or repring
-        the object.
-        """
-        # Prevent against any modifications to the users
-        # ggplot object. Do the copy here as we may/may not
-        # assign a default theme
-        self = deepcopy(self)
-
-        if is_inline_backend() or is_quarto_environment():
-            # Take charge of the display because we have to make
-            # adjustments for retina output.
-            self._display()
-        else:
-            self.draw(show=True)
-
-    def _display(self):
-        """
-        Display plot in the cells output
-
-        This function is called for its side-effects.
-
-        It plots the plot to an io buffer, then uses ipython display
-        methods to show the result
+        Notes
+        -----
+        - https://ipython.readthedocs.io/en/stable/config/integrating.html
         """
         ip = get_ipython()
-        format = get_option("figure_format") or ip.config.InlineBackend.get(
-            "figure_format", "retina"
+        format: FigureFormat = (
+            get_option("figure_format")
+            or (ip and ip.config.InlineBackend.get("figure_format"))
+            or "retina"
         )
+
         # While jpegs can be displayed as retina, we restrict the output
         # of "retina" to png
         if format == "retina":
@@ -187,8 +171,26 @@ class ggplot:
         buf = BytesIO()
         self.save(buf, "png" if format == "retina" else format, verbose=False)
         figure_size_px = self.theme._figure_size_px
-        display_func = get_display_function(format, figure_size_px)
-        display_func(buf.getvalue())
+        return get_mimebundle(buf.getvalue(), format, figure_size_px)
+
+    def show(self):
+        """
+        Show plot using the matplotlib backend set by the user
+
+        This function is called for its side-effects.
+        """
+        # Prevent against any modifications to the users
+        # ggplot object. Do the copy here as we may/may not
+        # assign a default theme
+        self = deepcopy(self)
+
+        if is_inline_backend() or is_quarto_environment():
+            from IPython.display import display
+
+            data, metadata = self._repr_mimebundle_()
+            display(data, metadata=metadata, raw=True)
+        else:
+            self.draw(show=True)
 
     def __deepcopy__(self, memo: dict[Any, Any]) -> ggplot:
         """

@@ -3,32 +3,24 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import Callable, Literal, TypeAlias
-
     from IPython.core.interactiveshell import InteractiveShell
 
-    FigureFormat: TypeAlias = Literal[
-        "png", "retina", "jpeg", "jpg", "svg", "pdf"
-    ]
+    from ..typing import DisplayMetadata, FigureFormat, MimeBundle
 
 
-def get_ipython() -> "InteractiveShell":
+def get_ipython() -> "None | InteractiveShell":
     """
     Return running IPython instance or None
     """
     try:
         from IPython.core.getipython import get_ipython as _get_ipython
-    except ImportError as err:
-        raise type(err)("IPython is has not been installed.") from err
+    except ImportError:
+        return None
 
-    ip = _get_ipython()
-    if ip is None:
-        raise RuntimeError("Not running in a juptyer session.")
-
-    return ip
+    return _get_ipython()
 
 
-def is_inline_backend():
+def is_inline_backend() -> bool:
     """
     Return True if the inline_backend is on
 
@@ -36,47 +28,39 @@ def is_inline_backend():
     """
     import matplotlib as mpl
 
-    return "matplotlib_inline.backend_inline" in mpl.get_backend()
+    backend = mpl.get_backend()
+    return backend in ("inline", "module://matplotlib_inline.backend_inline")
 
 
-def get_display_function(
-    format: FigureFormat, figure_size_px: tuple[int, int]
-) -> Callable[[bytes], None]:
+def get_mimebundle(
+    b: bytes, format: FigureFormat, figure_size_px: tuple[int, int]
+) -> MimeBundle:
     """
-    Return a function that will display the plot image
+    Return a the display MIME bundle from image data
+
+    Parameters
+    ----------
+    format :
+        The figure format
+    figure_size_px :
+        The figure size in pixels (width, height)
     """
-    from IPython.display import (
-        SVG,
-        Image,
-        display_jpeg,
-        display_pdf,
-        display_png,
-        display_svg,
-    )
-
-    w, h = figure_size_px
-
-    def png(b: bytes):
-        display_png(Image(b, format="png", width=w, height=h))
-
-    def retina(b: bytes):
-        display_png(Image(b, format="png", retina=True))
-
-    def jpeg(b: bytes):
-        display_jpeg(Image(b, format="jpeg", width=w, height=h))
-
-    def svg(b: bytes):
-        display_svg(SVG(b))
-
-    def pdf(b: bytes):
-        display_pdf(b, raw=True)
 
     lookup = {
-        "png": png,
-        "retina": retina,
-        "jpeg": jpeg,
-        "jpg": jpeg,
-        "svg": svg,
-        "pdf": pdf,
+        "png": "image/png",
+        "retina": "image/png",
+        "jpeg": "image/jpeg",
+        "svg": "image/svg+xml",
+        "pdf": "application/pdf",
     }
-    return lookup[format]
+    mimetype = lookup[format]
+
+    metadata: dict[str, DisplayMetadata] = {}
+    w, h = figure_size_px
+    if format in ("png", "jpeg"):
+        metadata = {mimetype: {"width": w, "height": h}}
+    elif format == "retina":
+        # `retina=True` in IPython.display.Image just halves width/height
+        metadata = {mimetype: {"width": w // 2, "height": h // 2}}
+
+    return {mimetype: b}, metadata

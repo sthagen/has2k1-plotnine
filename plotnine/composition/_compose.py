@@ -6,22 +6,25 @@ from dataclasses import dataclass, field
 from io import BytesIO
 from typing import TYPE_CHECKING, overload
 
+from .._utils.context import plot_composition_context
 from .._utils.ipython import (
-    get_display_function,
     get_ipython,
+    get_mimebundle,
+    is_inline_backend,
 )
+from .._utils.quarto import is_knitr_engine, is_quarto_environment
 from ..options import get_option
 from ._plotspec import plotspec
 
 if TYPE_CHECKING:
     from pathlib import Path
-    from typing import Generator, Iterator, Self
+    from typing import Generator, Iterator
 
     from matplotlib.figure import Figure
 
     from plotnine._mpl.gridspec import p9GridSpec
-    from plotnine._utils.ipython import FigureFormat
     from plotnine.ggplot import PlotAddable, ggplot
+    from plotnine.typing import FigureFormat, MimeBundle
 
 
 @dataclass
@@ -98,6 +101,22 @@ class Compose:
             op if isinstance(op, Compose) else deepcopy(op)
             for op in self.items
         ]
+
+    def __repr__(self):
+        """
+        repr
+
+        Notes
+        -----
+        Subclasses that are dataclasses should be declared with
+        `@dataclass(repr=False)`.
+        """
+        # knitr relies on __repr__ to automatically print the last object
+        # in a cell.
+        if is_knitr_engine():
+            self.show()
+            return ""
+        return super().__repr__()
 
     @abc.abstractmethod
     def __or__(self, rhs: ggplot | Compose) -> Compose:
@@ -218,11 +237,25 @@ class Compose:
     def __setitem__(self, key, value):
         self.items[key] = value
 
-    def _ipython_display_(self):
+    def _repr_mimebundle_(self, include=None, exclude=None) -> MimeBundle:
         """
-        Display plot in the output of the cell
+        Return dynamic MIME bundle for composition display
         """
-        return self._display()
+        ip = get_ipython()
+        format: FigureFormat = (
+            get_option("figure_format")
+            or (ip and ip.config.InlineBackend.get("figure_format"))
+            or "retina"
+        )
+
+        if format == "retina":
+            self = deepcopy(self)
+            self._to_retina()
+
+        buf = BytesIO()
+        self.save(buf, "png" if format == "retina" else format)
+        figure_size_px = self.last_plot.theme._figure_size_px
+        return get_mimebundle(buf.getvalue(), format, figure_size_px)
 
     @property
     def nrow(self) -> int:
@@ -305,6 +338,15 @@ class Compose:
             self.nrow, self.ncol, figure, nest_into=nest_into
         )
 
+    def _setup(self) -> Figure:
+        """
+        Setup this instance for the building process
+        """
+        if not hasattr(self, "figure"):
+            self._create_figure()
+
+        return self.figure
+
     def _create_figure(self):
         import matplotlib.pyplot as plt
 
@@ -348,29 +390,31 @@ class Compose:
         self.figure = plt.figure()
         self.plotspecs = list(_make_plotspecs(self, None))
 
-    def _display(self):
+    def _draw_plots(self):
+        """
+        Draw all plots in the composition
+        """
+        for ps in self.plotspecs:
+            ps.plot.draw()
+
+    def show(self):
         """
         Display plot in the cells output
 
         This function is called for its side-effects.
-
-        It draws the plot to an io buffer then uses ipython display
-        methods to show the result.
         """
-        ip = get_ipython()
-        format: FigureFormat = get_option(
-            "figure_format"
-        ) or ip.config.InlineBackend.get("figure_format", "retina")
+        # Prevent against any modifications to the users
+        # ggplot object. Do the copy here as we may/may not
+        # assign a default theme
+        self = deepcopy(self)
 
-        if format == "retina":
-            self = deepcopy(self)
-            self._to_retina()
+        if is_inline_backend() or is_quarto_environment():
+            from IPython.display import display
 
-        buf = BytesIO()
-        self.save(buf, "png" if format == "retina" else format)
-        figure_size_px = self.last_plot.theme._figure_size_px
-        display_func = get_display_function(format, figure_size_px)
-        display_func(buf.getvalue())
+            data, metadata = self._repr_mimebundle_()
+            display(data, metadata=metadata, raw=True)
+        else:
+            self.draw(show=True)
 
     def draw(self, *, show: bool = False) -> Figure:
         """
@@ -389,15 +433,9 @@ class Compose:
         from .._mpl.layout_manager import PlotnineCompositionLayoutEngine
 
         with plot_composition_context(self, show):
-            self._create_figure()
-            figure = self.figure
-
-            for ps in self.plotspecs:
-                ps.plot.draw()
-
-            self.figure.set_layout_engine(
-                PlotnineCompositionLayoutEngine(self)
-            )
+            figure = self._setup()
+            self._draw_plots()
+            figure.set_layout_engine(PlotnineCompositionLayoutEngine(self))
         return figure
 
     def save(
@@ -431,42 +469,3 @@ class Compose:
         plot = (self + theme(dpi=dpi)) if dpi else self
         figure = plot.draw()
         figure.savefig(filename, format=format)
-
-
-@dataclass
-class plot_composition_context:
-    cmp: Compose
-    show: bool
-
-    def __post_init__(self):
-        import matplotlib as mpl
-
-        # The dpi is needed when the figure is created, either as
-        # a parameter to plt.figure() or an rcParam.
-        # https://github.com/matplotlib/matplotlib/issues/24644
-        # When drawing the Composition, the dpi themeable is infective
-        # because it sets the rcParam after this figure is created.
-        rcParams = {"figure.dpi": self.cmp.last_plot.theme.getp("dpi")}
-        self._rc_context = mpl.rc_context(rcParams)
-
-    def __enter__(self) -> Self:
-        """
-        Enclose in matplolib & pandas environments
-        """
-        self._rc_context.__enter__()
-        return self
-
-    def __exit__(self, exc_type, exc_value, exc_traceback):
-        import matplotlib.pyplot as plt
-
-        if exc_type is None:
-            if self.show:
-                plt.show()
-            else:
-                plt.close(self.cmp.figure)
-        else:
-            # There is an exception, close any figure
-            if hasattr(self.cmp, "figure"):
-                plt.close(self.cmp.figure)
-
-        self._rc_context.__exit__(exc_type, exc_value, exc_traceback)
