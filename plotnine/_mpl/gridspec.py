@@ -11,15 +11,16 @@ except ImportError:
     from matplotlib.figure import SubplotParams
     from matplotlib.gridspec import GridSpecBase
 
+from matplotlib.gridspec import SubplotSpec
 from matplotlib.transforms import Bbox, BboxTransformTo, TransformedBbox
 
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
-    from matplotlib.gridspec import SubplotSpec
     from matplotlib.patches import Rectangle
     from matplotlib.transforms import Transform
 
     from plotnine._mpl.layout_manager._spaces import GridSpecParams
+    from plotnine.composition._plot_layout import plot_layout
 
 
 class p9GridSpec(GridSpecBase):
@@ -27,8 +28,7 @@ class p9GridSpec(GridSpecBase):
     Gridspec for plotnine plots
 
     This gridspec does not read any subplot parameter values from matplotlib's
-    rcparams and the default a grid that fills up all the available space;
-    there is no space along the edges and between the subplots.
+    rcparams. And there is no space along the edges and between the subplots.
 
     This gridspec can also be initialised while contained/nested in a given
     subplot.
@@ -61,10 +61,12 @@ class p9GridSpec(GridSpecBase):
         *,
         width_ratios=None,
         height_ratios=None,
+        byrow: bool = True,
         nest_into: SubplotSpec | None = None,
     ):
         self.figure = figure
         self._nested_gridspecs = []
+        self.byrow = byrow
 
         super().__init__(
             nrows,
@@ -91,6 +93,34 @@ class p9GridSpec(GridSpecBase):
             wspace=0,
             hspace=0,
         )
+
+    @staticmethod
+    def from_layout(
+        layout: plot_layout,
+        figure: Figure,
+        *,
+        nest_into: SubplotSpec | None = None,
+    ) -> p9GridSpec:
+        """
+        Create gridspec from a plot_layout instance
+        """
+        return p9GridSpec(
+            layout.nrow,
+            layout.ncol,
+            figure,
+            byrow=True if layout.byrow is None else layout.byrow,
+            nest_into=nest_into,
+        )
+
+    def __iter__(self):
+        from itertools import product
+
+        if self.byrow:
+            for r, c in product(range(self.nrows), range(self.ncols)):
+                yield SubplotSpec(self, r * self.ncols + c)
+        else:
+            for c, r in product(range(self.ncols), range(self.nrows)):
+                yield SubplotSpec(self, r * self.ncols + c)
 
     @property
     def patch(self) -> Rectangle:
@@ -170,9 +200,9 @@ class p9GridSpec(GridSpecBase):
         for gs in self._nested_gridspecs:
             gs._update_artists()
 
-    def layout(self, gsparams: GridSpecParams):
+    def update_params_and_artists(self, gsparams: GridSpecParams):
         """
-        Update the layout of the gridspec
+        Update gridpspec params and the artists
         """
         self.update(**asdict(gsparams))
         self._update_artists()
@@ -243,6 +273,20 @@ class p9GridSpec(GridSpecBase):
         This bbox is in display coordinates.
         """
         return TransformedBbox(self.bbox_relative, self.figure.transSubfigure)
+
+    @property
+    def width(self) -> float:
+        """
+        Width of bbox in figure space
+        """
+        return self.bbox_relative.width
+
+    @property
+    def height(self) -> float:
+        """
+        Height of bbox in figure space
+        """
+        return self.bbox_relative.height
 
     def to_transform(self) -> Transform:
         """

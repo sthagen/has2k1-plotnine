@@ -4,10 +4,7 @@ import abc
 from copy import copy, deepcopy
 from dataclasses import dataclass, field
 from io import BytesIO
-from typing import TYPE_CHECKING, overload
-
-from plotnine.composition._plot_layout import plot_layout
-from plotnine.composition._types import ComposeAddable
+from typing import TYPE_CHECKING, cast, overload
 
 from .._utils.context import plot_composition_context
 from .._utils.ipython import (
@@ -16,6 +13,8 @@ from .._utils.ipython import (
     is_inline_backend,
 )
 from .._utils.quarto import is_knitr_engine, is_quarto_environment
+from ..composition._plot_layout import plot_layout
+from ..composition._types import ComposeAddable
 from ..options import get_option
 from ._plotspec import plotspec
 
@@ -59,6 +58,11 @@ class Compose:
     :   Arrange operands side by side _and_ at the same nesting level.
         Also powered by the subclass [](`~plotnine.composition.Beside`).
 
+    `+`
+
+    :   Arrange operands in a 2D grid.
+        Powered by the subclass [](`~plotnine.composition.Wrap`).
+
     ### 2. Plot Modifying Operators
 
     The modify all or some of the plots in a composition.
@@ -83,6 +87,7 @@ class Compose:
     --------
     plotnine.composition.Beside : To arrange plots side by side
     plotnine.composition.Stack : To arrange plots vertically
+    plotnine.composition.Stack : To arrange in a grid
     plotnine.composition.plot_spacer : To add a blank space between plots
     """
 
@@ -91,9 +96,13 @@ class Compose:
     The objects to be arranged (composed)
     """
 
-    _plot_layout: plot_layout = field(init=False, repr=False)
+    _layout: plot_layout = field(
+        init=False, repr=False, default_factory=plot_layout
+    )
     """
-    The instance of plot_layout added to the composition
+    Every composition gets initiated with an empty plot_layout whose
+    attributes are either dynamically generated before the composition
+    is drawn, or they are overwritten by a layout added by the user.
     """
 
     # These are created in the _create_figure method
@@ -125,6 +134,29 @@ class Compose:
             self.show()
             return ""
         return super().__repr__()
+
+    @property
+    def layout(self) -> plot_layout:
+        """
+        The plot_layout of this composition
+        """
+        return self._layout
+
+    @layout.setter
+    def layout(self, value: plot_layout):
+        """
+        Add (or merge) a plot_layout to this composition
+        """
+        self._layout = copy(self.layout)
+        self._layout.update(value)
+
+    @property
+    def nrow(self) -> int:
+        return cast("int", self.layout.nrow)
+
+    @property
+    def ncol(self) -> int:
+        return cast("int", self.layout.ncol)
 
     @abc.abstractmethod
     def __or__(self, rhs: ggplot | Compose) -> Compose:
@@ -224,7 +256,7 @@ class Compose:
 
     def __len__(self) -> int:
         """
-        Number of operand
+        Number of operands
         """
         return len(self.items)
 
@@ -268,20 +300,6 @@ class Compose:
         self.save(buf, "png" if format == "retina" else format)
         figure_size_px = self.last_plot.theme._figure_size_px
         return get_mimebundle(buf.getvalue(), format, figure_size_px)
-
-    @property
-    def nrow(self) -> int:
-        """
-        Number of rows in the composition
-        """
-        return 0
-
-    @property
-    def ncol(self) -> int:
-        """
-        Number of cols in the composition
-        """
-        return 0
 
     @property
     def last_plot(self) -> ggplot:
@@ -346,14 +364,10 @@ class Compose:
         """
         from plotnine._mpl.gridspec import p9GridSpec
 
-        self.gridspec = p9GridSpec(
-            self.nrow, self.ncol, figure, nest_into=nest_into
+        self.layout._setup(self)
+        self.gridspec = p9GridSpec.from_layout(
+            self.layout, figure=figure, nest_into=nest_into
         )
-
-        if not hasattr(self, "_plot_layout"):
-            self._plot_layout = plot_layout()
-
-        self._plot_layout._setup(self.nrow, self.ncol)
 
     def _setup(self) -> Figure:
         """
@@ -389,7 +403,7 @@ class Compose:
             # "subplot" in the grid. The SubplotSpec is the handle that
             # allows us to set it up for a plot or to nest another gridspec
             # in it.
-            for item, subplot_spec in zip(cmp, cmp.gridspec):  # pyright: ignore[reportArgumentType]
+            for item, subplot_spec in zip(cmp, cmp.gridspec):
                 if isinstance(item, ggplot):
                     yield plotspec(
                         item,

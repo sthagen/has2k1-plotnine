@@ -26,17 +26,10 @@ class Beside(Compose):
     See Also
     --------
     plotnine.composition.Stack : To arrange plots vertically
+    plotnine.composition.Wrap : To arrange plots in a grid
     plotnine.composition.plot_spacer : To add a blank space between plots
     plotnine.composition.Compose : For more on composing plots
     """
-
-    @property
-    def nrow(self) -> int:
-        return 1
-
-    @property
-    def ncol(self) -> int:
-        return len(self)
 
     def __or__(self, rhs: ggplot | Compose) -> Compose:
         """
@@ -44,7 +37,7 @@ class Beside(Compose):
         """
         # This is adjacent or i.e. (OR | rhs) so we collapse the
         # operands into a single operation
-        return Beside([*self, rhs])
+        return Beside([*self, rhs]) + self.layout
 
     def __truediv__(self, rhs: ggplot | Compose) -> Compose:
         """
@@ -53,3 +46,14 @@ class Beside(Compose):
         from ._stack import Stack
 
         return Stack([self, rhs])
+
+    def __add__(self, rhs):
+        """
+        Add rhs into the besides composition
+        """
+        from plotnine import ggplot
+
+        if not isinstance(rhs, (ggplot, Compose)):
+            return super().__add__(rhs)
+
+        return self | rhs
