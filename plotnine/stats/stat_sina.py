@@ -1,13 +1,18 @@
+from typing import TYPE_CHECKING, cast
+
 import numpy as np
 import pandas as pd
 
-from .._utils import array_kind, jitter, resolution
+from .._utils import array_kind, jitter, nextafter_range, resolution
 from ..doctools import document
 from ..exceptions import PlotnineError
 from ..mapping.aes import has_groups
 from .binning import breaks_from_bins, breaks_from_binwidth
 from .stat import stat
 from .stat_density import compute_density
+
+if TYPE_CHECKING:
+    from plotnine.typing import FloatArray, IntArray
 
 
 @document
@@ -142,17 +147,6 @@ class stat_sina(stat):
         params = self.params
         maxwidth = params["maxwidth"]
         random_state = params["random_state"]
-        fuzz = 1e-8
-        y_dim = scales.y.dimension()
-        y_dim_fuzzed = (y_dim[0] - fuzz, y_dim[1] + fuzz)
-
-        if params["binwidth"] is not None:
-            params["bins"] = breaks_from_binwidth(
-                y_dim_fuzzed, params["binwidth"]
-            )
-        else:
-            params["bins"] = breaks_from_bins(y_dim_fuzzed, params["bins"])
-
         data = super().compute_panel(data, scales)
 
         if not len(data):
@@ -198,8 +192,8 @@ class stat_sina(stat):
         return data
 
     def compute_group(self, data, scales):
+        binwidth = self.params["binwidth"]
         maxwidth = self.params["maxwidth"]
-        bins = self.params["bins"]
         bin_limit = self.params["bin_limit"]
         weight = None
         y = data["y"]
@@ -228,8 +222,14 @@ class stat_sina(stat):
             data["density"] = densf(y)
             data["scaled"] = data["density"] / dens["density"].max()
         else:
+            expanded_y_range = nextafter_range(scales.y.dimension())
+            if binwidth is not None:
+                bins = breaks_from_binwidth(expanded_y_range, binwidth)
+            else:
+                bins = breaks_from_bins(expanded_y_range, self.params["bins"])
+
             # bin based estimation
-            bin_index = pd.cut(y, bins, include_lowest=True, labels=False)
+            bin_index = pd.cut(y, bins, include_lowest=True, labels=False)  # pyright: ignore[reportCallIssue,reportArgumentType]
             data["density"] = (
                 pd.Series(bin_index)
                 .groupby(bin_index)
@@ -254,19 +254,18 @@ class stat_sina(stat):
     def finish_layer(self, data):
         # Rescale x in case positions have been adjusted
         style = self.params["style"]
-        x_mean = data["x"].to_numpy()
+        x_mean = cast("FloatArray", data["x"].to_numpy())
         x_mod = (data["xmax"] - data["xmin"]) / data["width"]
         data["x"] = data["x"] + data["x_diff"] * x_mod
-        x = data["x"].to_numpy()
-        even = data["group"].to_numpy() % 2 == 0
+        group = cast("IntArray", data["group"].to_numpy())
+        x = cast("FloatArray", data["x"].to_numpy())
+        even = group % 2 == 0
 
         def mirror_x(bool_idx):
             """
             Mirror x locations along the mean value
             """
-            data.loc[bool_idx, "x"] = (
-                2 * x_mean[bool_idx] - data.loc[bool_idx, "x"]
-            )
+            data.loc[bool_idx, "x"] = 2 * x_mean[bool_idx] - x[bool_idx]
 
         match style:
             case "left":
