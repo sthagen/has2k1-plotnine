@@ -107,7 +107,7 @@ class facet_grid(facet):
         self.space = space
         self.margins = margins
 
-    def _get_panels_gridspec(self):
+    def _make_gridspec(self):
         """
         Create gridspec for the panels
         """
@@ -189,7 +189,7 @@ class facet_grid(facet):
 
         n = len(base)
         panel = ninteraction(base, drop=True)
-        panel = pd.Categorical(panel, categories=range(1, n + 1))
+        panel = pd.Categorical(panel, categories=range(1, n + 1))  # pyright: ignore[reportArgumentType]
 
         if self.rows:
             rows = ninteraction(base[self.rows], drop=True)

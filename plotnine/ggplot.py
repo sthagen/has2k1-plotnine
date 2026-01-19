@@ -53,6 +53,7 @@ if TYPE_CHECKING:
 
     from plotnine import watermark
     from plotnine._mpl.gridspec import p9GridSpec
+    from plotnine._mpl.layout_manager._plot_side_space import PlotSideSpaces
     from plotnine.composition import Compose
     from plotnine.coords.coord import coord
     from plotnine.facets.facet import facet
@@ -105,6 +106,31 @@ class ggplot:
     figure: Figure
     axs: list[Axes]
     _gridspec: p9GridSpec
+    """
+    Gridspec (1x1) that contains the whole plot
+    """
+
+    _sub_gridspec: p9GridSpec
+    """
+    Gridspec (nxn) that contains the facet panels
+
+     -------------------------
+    |  title                  |<----- ._gridspec
+    |  subtitle               |
+    |                         |
+    |   -------------         |
+    |  |      |      |<-------+------ ._sub_gridspec
+    |  |      |      |        |
+    |  |      |      | legend |
+    |   -------------         |
+    |   axis_ticks            |
+    |   axis_text             |
+    |   axis_title            |
+    |                 caption |
+     -------------------------
+    """
+
+    _sidespaces: PlotSideSpaces
 
     def __init__(
         self,
@@ -129,7 +155,7 @@ class ggplot:
         self.watermarks: list[watermark] = []
 
         # build artefacts
-        self._build_objs = NS()
+        self._build_objs = NS(meta={})
 
     def __str__(self) -> str:
         """
@@ -324,9 +350,14 @@ class ggplot:
             self._build()
 
             # setup
-            self.axs = self.facet.setup(self)
+            self._sub_gridspec, self.axs = self.facet.setup(self)
             self.guides._setup(self)
-            self.theme.setup(self)
+            self.theme._setup(
+                figure,
+                self.axs,
+                self.labels.title,
+                self.labels.subtitle,
+            )
 
             # Drawing
             self._draw_layers()
@@ -335,7 +366,7 @@ class ggplot:
             self.guides.draw()
             self._draw_figure_texts()
             self._draw_watermarks()
-            self._draw_figure_background()
+            self._draw_plot_background()
 
             # Artist object theming
             self.theme.apply()
@@ -347,9 +378,7 @@ class ggplot:
         """
         Setup this instance for the building process
         """
-        if not hasattr(self, "figure"):
-            self._create_figure()
-
+        self._create_figure()
         self.labels.add_defaults(self.mapping.labels)
         return self.figure
 
@@ -357,6 +386,9 @@ class ggplot:
         """
         Create gridspec for the panels
         """
+        if hasattr(self, "figure"):
+            return
+
         import matplotlib.pyplot as plt
 
         from ._mpl.gridspec import p9GridSpec
@@ -554,7 +586,7 @@ class ggplot:
         for wm in self.watermarks:
             wm.draw(self.figure)
 
-    def _draw_figure_background(self):
+    def _draw_plot_background(self):
         from matplotlib.patches import Rectangle
 
         rect = Rectangle((0, 0), 0, 0, facecolor="none", zorder=-1000)
@@ -595,6 +627,9 @@ class ggplot:
         This method has the same arguments as [](`~plotnine.ggplot.save`).
         Use it to get access to the figure that will be saved.
         """
+        if format is None and isinstance(filename, (str, Path)):
+            format = str(filename).split(".")[-1]
+
         fig_kwargs: Dict[str, Any] = {"format": format, **kwargs}
 
         if limitsize is None:
@@ -644,6 +679,7 @@ class ggplot:
         if dpi is not None:
             self.theme = self.theme + theme(dpi=dpi)
 
+        self._build_objs.meta["figure_format"] = format
         figure = self.draw(show=False)
         return mpl_save_view(figure, fig_kwargs)
 

@@ -11,6 +11,8 @@ import numpy as np
 import pandas as pd
 from mizani.bounds import rescale
 
+from plotnine.iapi import guide_text
+
 from .._utils import get_opposite_side
 from ..exceptions import PlotnineError, PlotnineWarning
 from ..mapping.aes import rename_aesthetics
@@ -26,6 +28,7 @@ if TYPE_CHECKING:
     from matplotlib.text import Text
 
     from plotnine import theme
+    from plotnine.guides import guides
     from plotnine.scales.scale import scale
     from plotnine.typing import Side
 
@@ -48,7 +51,12 @@ class guide_colorbar(guide):
     """
 
     display: Literal["gradient", "rectangles", "raster"] = "gradient"
-    """How to render the colorbar."""
+    """
+    How to render the colorbar
+
+    SVG figures will always use "rectangles" to create gradients. This has
+    better support across applications that render svg images.
+    """
 
     alpha: Optional[float] = None
     """
@@ -73,6 +81,12 @@ class guide_colorbar(guide):
 
         if self.nbin is None:
             self.nbin = 300  # if self.display == "gradient" else 300
+
+    def setup(self, guides: guides):
+        super().setup(guides)
+        # See: add_segmented_colorbar
+        if guides.plot._build_objs.meta.get("figure_format") == "svg":
+            self.display = "rectangles"
 
     def train(self, scale: scale, aesthetic=None):
         self.nbin = cast("int", self.nbin)
@@ -119,12 +133,6 @@ class guide_colorbar(guide):
             ]
         )
         self.hash = hashlib.sha256(info.encode("utf-8")).hexdigest()
-        return self
-
-    def merge(self, other):
-        """
-        Simply discards the other guide
-        """
         return self
 
     def create_geoms(self):
@@ -177,6 +185,7 @@ class guide_colorbar(guide):
         nbars = len(self.bar)
         elements = self.elements
         raster = self.display == "raster"
+        alpha = self.alpha
 
         colors = self.bar["color"].tolist()
         labels = self.key["label"].tolist()
@@ -225,9 +234,9 @@ class guide_colorbar(guide):
 
         # colorbar
         if self.display == "rectangles":
-            add_segmented_colorbar(auxbox, colors, elements)
+            add_segmented_colorbar(auxbox, colors, alpha, elements)
         else:
-            add_gradient_colorbar(auxbox, colors, elements, raster)
+            add_gradient_colorbar(auxbox, colors, alpha, elements, raster)
 
         # ticks
         visible = slice(
@@ -270,6 +279,7 @@ guide_colourbar = guide_colorbar
 def add_gradient_colorbar(
     auxbox: AuxTransformBox,
     colors: Sequence[str],
+    alpha: float | None,
     elements: GuideElementsColorbar,
     raster: bool = False,
 ):
@@ -325,6 +335,7 @@ def add_gradient_colorbar(
         shading="gouraud",
         cmap=cmap,
         array=Z.ravel(),
+        alpha=alpha,
         rasterized=raster,
     )
     auxbox.add_artist(coll)
@@ -333,6 +344,7 @@ def add_gradient_colorbar(
 def add_segmented_colorbar(
     auxbox: AuxTransformBox,
     colors: Sequence[str],
+    alpha: float | None,
     elements: GuideElementsColorbar,
 ):
     """
@@ -341,6 +353,21 @@ def add_segmented_colorbar(
     from matplotlib.collections import PolyCollection
 
     nbreak = len(colors)
+    # Problem:
+    # 1. Webbrowsers do not properly render SVG with QuadMesh
+    #    colorbars. Also when the QuadMesh is "rasterized",
+    #    the colorbar is misplaced within the SVG (and pdfs!).
+    #    So SVGs cannot use `add_gradient_colobar` at all.
+    # 2. Webbrowsers do not properly render SVG with PolyCollection
+    #    colorbars when the adjacent rectangles that make up the
+    #    colorbar touch each other precisely. The "bars" appear to
+    #    be separated by lines.
+    #
+    # For a wayout, we overlap the bars. Overlapping creates artefacts
+    # when alpha < 1, but having a gradient + alpha is rare. And, we can
+    # minimise apparent artefacts by using a large overlap_factor.
+    # A value of 2 gives the best results in the rare case should alpha < 1.
+    overlap_factor = 2
     if elements.is_vertical:
         colorbar_height = elements.key_height
         colorbar_width = elements.key_width
@@ -351,6 +378,8 @@ def add_segmented_colorbar(
         for i in range(nbreak):
             y1 = i * linewidth
             y2 = y1 + linewidth
+            if i > 1:
+                y1 -= linewidth * overlap_factor
             verts.append(((x1, y1), (x1, y2), (x2, y2), (x2, y1)))
     else:
         colorbar_width = elements.key_height
@@ -362,12 +391,15 @@ def add_segmented_colorbar(
         for i in range(nbreak):
             x1 = i * linewidth
             x2 = x1 + linewidth
+            if i > 1:
+                x1 -= linewidth * overlap_factor
             verts.append(((x1, y1), (x1, y2), (x2, y2), (x2, y1)))
 
     coll = PolyCollection(
         verts,
         facecolors=colors,
         linewidth=0,
+        alpha=alpha,
         antialiased=False,
     )
     auxbox.add_artist(coll)
@@ -417,26 +449,26 @@ def add_labels(
     """
     from matplotlib.text import Text
 
-    n = len(labels)
-    sep = elements.text.margin
+    seps = elements.text.margins
     texts: list[Text] = []
-    has = elements.has(n)
-    vas = elements.vas(n)
+    has = elements.text.has
+    vas = elements.text.vas
+    width = elements.key_width
 
     # The horizontal and vertical alignments are set in the theme
     # or dynamically calculates in GuideElements and added to the
     # themeable properties dict
     if elements.is_vertical:
-        if elements.text_position == "right":
-            xs = [elements.key_width + sep] * n
-        else:
-            xs = [-sep] * n
+        xs = [
+            width + sep if side == "right" else -sep
+            for side, sep in zip(elements.text_positions, seps)
+        ]
     else:
         xs = ys
-        if elements.text_position == "bottom":
-            ys = [-sep] * n
-        else:
-            ys = [elements.key_width + sep] * n
+        ys = [
+            -sep if side == "bottom" else width + sep
+            for side, sep in zip(elements.text_positions, seps)
+        ]
 
     for x, y, s, ha, va in zip(xs, ys, labels, has, vas):
         t = Text(x, y, s, ha=ha, va=va)
@@ -475,43 +507,52 @@ class GuideElementsColorbar(GuideElements):
         ha = self.theme.getp(("legend_text_colorbar", "ha"))
         va = self.theme.getp(("legend_text_colorbar", "va"))
         is_blank = self.theme.T.is_blank("legend_text_colorbar")
+        n = self.guide.num_breaks
 
         # Default text alignment depends on the direction of the
         # colorbar
-        _loc = get_opposite_side(self.text_position)
+        centers = ("center",) * n
+        has = (ha,) * n if isinstance(ha, str) else ha
+        vas = (va,) * n if isinstance(va, str) else va
+        opposite_sides = [get_opposite_side(s) for s in self.text_positions]
         if self.is_vertical:
-            ha = ha or _loc
-            va = va or "center"
+            has = has or opposite_sides
+            vas = vas or centers
         else:
-            va = va or _loc
-            ha = ha or "center"
-
-        return NS(
-            margin=self._text_margin,
-            align=None,
+            vas = vas or opposite_sides
+            has = has or centers
+        return guide_text(
+            self._text_margin,
+            aligns=centers,
             fontsize=size,
-            ha=ha,
-            va=va,
+            has=has,  # pyright: ignore[reportArgumentType]
+            vas=vas,  # pyright: ignore[reportArgumentType]
             is_blank=is_blank,
         )
 
     @cached_property
-    def text_position(self) -> Side:
-        if not (position := self.theme.getp("legend_text_position")):
+    def text_positions(self) -> Sequence[Side]:
+        if not (user_position := self.theme.getp("legend_text_position")):
             position = "right" if self.is_vertical else "bottom"
+            return (position,) * self.guide.num_breaks
 
-        if self.is_vertical and position not in ("right", "left"):
-            msg = (
-                "The text position for a vertical legend must be "
-                "either left or right."
+        alternate = {"left-right", "right-left", "bottom-top", "top-bottom"}
+        if user_position in alternate:
+            tup = user_position.split("-")
+            return [tup[i % 2] for i in range(self.guide.num_breaks)]
+
+        position = cast("Side | Sequence[Side]", user_position)
+
+        if isinstance(position, str):
+            position = (position,) * self.guide.num_breaks
+
+        valid = {"right", "left"} if self.is_vertical else {"bottom", "top"}
+        if any(p for p in position if p not in valid):
+            raise PlotnineError(
+                "The text position for a horizontal legend must be "
+                f"either one of {valid!r}. I got {user_position!r}."
             )
-            raise PlotnineError(msg)
-        elif self.is_horizontal and position not in ("bottom", "top"):
-            msg = (
-                "The text position for a horizonta legend must be "
-                "either top or bottom."
-            )
-            raise PlotnineError(msg)
+
         return position
 
     @cached_property

@@ -122,8 +122,13 @@ GuideKind: TypeAlias = Literal["legend", "colorbar", "colourbar"]
 NoGuide: TypeAlias = Literal["none", False]
 VerticalJustification: TypeAlias = Literal["bottom", "center", "top"]
 HorizontalJustification: TypeAlias = Literal["left", "center", "right"]
+Justification: TypeAlias = HorizontalJustification | VerticalJustification
+HorizontalTextJustification: TypeAlias = HorizontalJustification
+VerticalTextJustification: TypeAlias = (
+    VerticalJustification | Literal["baseline", "center_baseline"]
+)
 TextJustification: TypeAlias = (
-    VerticalJustification | HorizontalJustification | Literal["baseline"]
+    HorizontalTextJustification | VerticalTextJustification
 )
 
 # Type Variables
@@ -152,4 +157,6 @@ class DisplayMetadata(TypedDict):
     height: NotRequired[int]
 
 
-MimeBundle: TypeAlias = tuple[dict[str, bytes], dict[str, DisplayMetadata]]
+MimeBundle: TypeAlias = tuple[
+    dict[str, bytes | str], dict[str, DisplayMetadata]
+]
