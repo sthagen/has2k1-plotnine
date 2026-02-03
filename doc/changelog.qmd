@@ -19,11 +19,34 @@ title: Changelog
 - Added [](:class:`~plotnine.composition.plot_annotation`), allowing you to add title,
   subtitle or caption to a composition.
 
+
+- [](:class:`~plotnine.labs`) can now be used to create a `footer`.
+  This footer can be styled using the `plot_footer` parameter to [](:class:`~plotnine.theme`).
+
+  ```python
+  theme(plot_footer=element_text(size=13))
+  ```
+  And you can also give the footer a background with:
+
+  ```python
+  theme(plot_footer_background=element_text(fill="pink"))
+  ```
+
+ Or separate it from the `caption` or the rest of the plot with a line.
+
+  ```python
+  theme(plot_footer_line=element_line(color="black"))
+  ```
+
 ### Bug Fixes
 
 - Fixed [](:class:`~plotnine.geom_smooth`) / [](:class:`~plotnine.stat_smooth`) when using a linear model via "lm" with weights for the model to do a weighted regression. This bug did not affect the formula API of the linear model. ({{< issue 1005 >}})
 
 - Fixed rendering of SVGs in jupyter notebooks.
+
+- Fixed [](:class:`~plotnine.geom_legend`) to show an empty key for
+  [](:class:`~plotnine.geom_point`) when the shape is mapped to variable with missing
+  values.
 
 ## v0.15.3
 (2025-01-28)

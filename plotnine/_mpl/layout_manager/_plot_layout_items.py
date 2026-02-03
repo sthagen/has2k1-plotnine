@@ -26,6 +26,8 @@ if TYPE_CHECKING:
 
     from matplotlib.axes import Axes
     from matplotlib.axis import Tick
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Rectangle
     from matplotlib.transforms import Transform
 
     from plotnine import ggplot
@@ -86,11 +88,17 @@ class PlotLayoutItems:
         # # AnchoredOffsetboxes (groups of legends)
         self.legends: legend_artists | None = get("legends")
         self.plot_caption: Text | None = get("plot_caption")
+        self.plot_footer: Text | None = get("plot_footer")
         self.plot_subtitle: Text | None = get("plot_subtitle")
         self.plot_title: Text | None = get("plot_title")
         self.plot_tag: Text | None = get("plot_tag")
         self.strip_text_x: list[StripText] | None = get("strip_text_x")
         self.strip_text_y: list[StripText] | None = get("strip_text_y")
+
+        self.plot_footer_background: Rectangle | None = get(
+            "plot_footer_background"
+        )
+        self.plot_footer_line: Line2D | None = get("plot_footer_line")
 
     def _is_blank(self, name: str) -> bool:
         return self.plot.theme.T.is_blank(name)
@@ -345,6 +353,7 @@ class PlotLayoutItems:
         theme = self.plot.theme
         plot_title_position = theme.getp("plot_title_position", "panel")
         plot_caption_position = theme.getp("plot_caption_position", "panel")
+        plot_footer_position = theme.getp("plot_footer_position", "plot")
         justify = PlotTextJustifier(spaces)
 
         if self.plot_tag:
@@ -370,6 +379,15 @@ class PlotLayoutItems:
             justify.horizontally_about(
                 self.plot_caption, ha, plot_caption_position
             )
+
+        if self.plot_footer:
+            ha = theme.getp(("plot_footer", "ha"), "left")
+            self.plot_footer.set_y(spaces.b.y1("plot_footer"))
+            justify.horizontally_about(
+                self.plot_footer, ha, plot_footer_position
+            )
+            self._resize_plot_footer_background(spaces)
+            self._resize_plot_footer_line(spaces)
 
         if self.axis_title_x:
             ha = theme.getp(("axis_title_x", "ha"), "center")
@@ -504,6 +522,31 @@ class PlotLayoutItems:
         relative_widths = [max_width / w for w in widths]
         for text, scale in zip(self.strip_text_y, relative_widths):
             text.patch.expand = scale
+
+    def _resize_plot_footer_background(self, spaces: PlotSideSpaces):
+        """
+        Resize the plot footer to the size of the footer
+        """
+        if not self.plot_footer_background:
+            return
+
+        self.plot_footer_background.set_x(spaces.l.offset)
+        self.plot_footer_background.set_y(spaces.b.offset)
+        self.plot_footer_background.set_height(spaces.b.footer_height)
+        self.plot_footer_background.set_width(spaces.plot_width)
+
+    def _resize_plot_footer_line(self, spaces: PlotSideSpaces):
+        """
+        Resize the footer line to be a border above the footer
+        """
+        if not self.plot_footer_line:
+            return
+
+        x1 = spaces.l.offset
+        x2 = x1 + spaces.plot_width
+        y1 = y2 = spaces.b.offset + spaces.b.footer_height
+        self.plot_footer_line.set_xdata([x1, x2])
+        self.plot_footer_line.set_ydata([y1, y2])
 
 
 def _text_is_visible(text: Text) -> bool:

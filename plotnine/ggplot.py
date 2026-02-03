@@ -127,6 +127,8 @@ class ggplot:
     |   axis_text             |
     |   axis_title            |
     |                 caption |
+    |-------------------------|
+    |          footer         |
      -------------------------
     """
 
@@ -553,6 +555,7 @@ class ggplot:
         subtitle = self.labels.get("subtitle", "")
         caption = self.labels.get("caption", "")
         tag = self.labels.get("tag", "")
+        footer = self.labels.get("footer", "")
 
         # Get the axis labels (default or specified by user)
         # and let the coordinate modify them e.g. flip
@@ -569,6 +572,9 @@ class ggplot:
 
         if caption:
             targets.plot_caption = figure.text(0, 0, caption)
+
+        if footer:
+            targets.plot_footer = figure.text(0, 0, footer)
 
         if tag:
             targets.plot_tag = figure.text(0, 0, tag)
@@ -587,12 +593,29 @@ class ggplot:
             wm.draw(self.figure)
 
     def _draw_plot_background(self):
+        from matplotlib.lines import Line2D
         from matplotlib.patches import Rectangle
 
-        rect = Rectangle((0, 0), 0, 0, facecolor="none", zorder=-1000)
+        zorder = -1000
+        rect = Rectangle((0, 0), 0, 0, facecolor="none", zorder=zorder)
         self.figure.add_artist(rect)
         self._gridspec.patch = rect
         self.theme.targets.plot_background = rect
+
+        # Footer background and line only if there is a footer, and put
+        # it on top of the plot background
+        if self.labels.get("footer", ""):
+            rect = Rectangle(
+                (0, 0), 0, 0, facecolor="none", linewidth=0, zorder=zorder + 1
+            )
+            self.figure.add_artist(rect)
+            self.theme.targets.plot_footer_background = rect
+
+            line = Line2D(
+                [0, 0], [0, 0], color="none", linewidth=0, zorder=zorder + 2
+            )
+            self.figure.add_artist(line)
+            self.theme.targets.plot_footer_line = line
 
     def _save_filename(self, ext: str) -> Path:
         """

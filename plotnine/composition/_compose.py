@@ -123,6 +123,8 @@ class Compose:
     |   -------------   |
     |                   |
     |           caption |
+    |-------------------|
+    |       footer      |
      -------------------
     """
     _sidespaces: CompositionSideSpaces
@@ -573,12 +575,27 @@ class Compose:
         """
         Draw the background rectangle of the composition
         """
+        from matplotlib.lines import Line2D
         from matplotlib.patches import Rectangle
 
-        rect = Rectangle((0, 0), 0, 0, facecolor="none", zorder=-1000)
+        zorder = -1000
+        rect = Rectangle((0, 0), 0, 0, facecolor="none", zorder=zorder)
         self.figure.add_artist(rect)
         self._gridspec.patch = rect
         self.theme.targets.plot_background = rect
+
+        if self.annotation.footer:
+            rect = Rectangle(
+                (0, 0), 0, 0, facecolor="none", linewidth=0, zorder=zorder + 1
+            )
+            self.figure.add_artist(rect)
+            self.theme.targets.plot_footer_background = rect
+
+            line = Line2D(
+                [0, 0], [0, 0], color="none", linewidth=0, zorder=zorder + 2
+            )
+            self.figure.add_artist(line)
+            self.theme.targets.plot_footer_line = line
 
     def _draw_annotation(self):
         """
@@ -601,6 +618,9 @@ class Compose:
 
         if caption := self.annotation.caption:
             targets.plot_caption = figure.text(0, 0, caption)
+
+        if footer := self.annotation.footer:
+            targets.plot_footer = figure.text(0, 0, footer)
 
     def save(
         self,

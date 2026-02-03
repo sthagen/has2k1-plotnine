@@ -14,6 +14,9 @@ from plotnine._mpl.utils import (
 if TYPE_CHECKING:
     from typing import Any
 
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Rectangle
+
     from plotnine.composition._compose import Compose
 
     from ._composition_side_space import CompositionSideSpaces
@@ -44,6 +47,11 @@ class CompositionLayoutItems:
         self.plot_title: Text | None = get("plot_title")
         self.plot_subtitle: Text | None = get("plot_subtitle")
         self.plot_caption: Text | None = get("plot_caption")
+        self.plot_footer: Text | None = get("plot_footer")
+        self.plot_footer_background: Rectangle | None = get(
+            "plot_footer_background"
+        )
+        self.plot_footer_line: Line2D | None = get("plot_footer_line")
 
     def _is_blank(self, name: str) -> bool:
         return self.cmp.theme.T.is_blank(name)
@@ -55,6 +63,7 @@ class CompositionLayoutItems:
         theme = self.cmp.theme
         plot_title_position = theme.getp("plot_title_position", "panel")
         plot_caption_position = theme.getp("plot_caption_position", "panel")
+        plot_footer_position = theme.getp("plot_footer_position", "plot")
         justify = CompositionTextJustifier(spaces)
 
         if self.plot_title:
@@ -77,6 +86,40 @@ class CompositionLayoutItems:
             justify.horizontally_about(
                 self.plot_caption, ha, plot_caption_position
             )
+
+        if self.plot_footer:
+            ha = theme.getp(("plot_footer", "ha"), "left")
+            self.plot_footer.set_y(spaces.b.y1("plot_footer"))
+            justify.horizontally_about(
+                self.plot_footer, ha, plot_footer_position
+            )
+            self._resize_plot_footer_background(spaces)
+            self._resize_plot_footer_line(spaces)
+
+    def _resize_plot_footer_background(self, spaces: CompositionSideSpaces):
+        """
+        Resize the plot footer to the size of the footer
+        """
+        if not self.plot_footer_background:
+            return
+
+        self.plot_footer_background.set_x(spaces.l.offset)
+        self.plot_footer_background.set_y(spaces.b.offset)
+        self.plot_footer_background.set_height(spaces.b.footer_height)
+        self.plot_footer_background.set_width(spaces.plot_width)
+
+    def _resize_plot_footer_line(self, spaces: CompositionSideSpaces):
+        """
+        Resize the footer line to be a border above the footer
+        """
+        if not self.plot_footer_line:
+            return
+
+        x1 = spaces.l.offset
+        x2 = x1 + spaces.plot_width
+        y1 = y2 = spaces.b.offset + spaces.b.footer_height
+        self.plot_footer_line.set_xdata([x1, x2])
+        self.plot_footer_line.set_ydata([y1, y2])
 
 
 class CompositionTextJustifier(TextJustifier):
