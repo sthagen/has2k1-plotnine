@@ -12,8 +12,7 @@ from .._utils import (
     remove_missing,
     uniquecols,
 )
-from .._utils.registry import Register, Registry
-from ..exceptions import PlotnineError
+from .._utils.registry import Register
 from ..layer import layer
 from ..mapping import aes
 
@@ -22,7 +21,6 @@ if typing.TYPE_CHECKING:
 
     from plotnine import ggplot
     from plotnine.facets.layout import Layout
-    from plotnine.geoms.geom import geom
     from plotnine.iapi import pos_scales
     from plotnine.mapping import Environment
     from plotnine.typing import DataLike
@@ -42,7 +40,7 @@ class stat(ABC, metaclass=Register):
     NON_MISSING_AES: set[str] = set()
     """Required aesthetics for the stat"""
 
-    DEFAULT_PARAMS: dict[str, Any] = {}
+    DEFAULT_PARAMS: dict[str, Any] = {"geom": "blank"}
     """Required parameters for the stat"""
 
     CREATES: set[str] = set()
@@ -73,7 +71,7 @@ class stat(ABC, metaclass=Register):
         **kwargs: Any,
     ):
         kwargs = data_mapping_as_kwargs((data, mapping), kwargs)
-        self._kwargs = kwargs  # Will be used to create the geom
+        self._raw_kwargs = kwargs  # Will be used to create the geom
         self.params = self.DEFAULT_PARAMS | {
             k: v for k, v in kwargs.items() if k in self.DEFAULT_PARAMS
         }
@@ -81,52 +79,6 @@ class stat(ABC, metaclass=Register):
         self.aes_params = {
             ae: kwargs[ae] for ae in self.aesthetics() & set(kwargs)
         }
-
-    @staticmethod
-    def from_geom(geom: geom) -> stat:
-        """
-        Return an instantiated stat object
-
-        stats should not override this method.
-
-        Parameters
-        ----------
-        geom :
-            A geom object
-
-        Returns
-        -------
-        stat
-            A stat object
-
-        Raises
-        ------
-        [](`~plotnine.exceptions.PlotnineError`) if unable to create a `stat`.
-        """
-        name = geom.params["stat"]
-        kwargs = geom._kwargs
-        # More stable when reloading modules than
-        # using issubclass
-        if not isinstance(name, type) and hasattr(name, "compute_layer"):
-            return name
-
-        if isinstance(name, stat):
-            return name
-        elif isinstance(name, type) and issubclass(name, stat):
-            klass = name
-        elif isinstance(name, str):
-            if not name.startswith("stat_"):
-                name = f"stat_{name}"
-            klass = Registry[name]
-        else:
-            raise PlotnineError(f"Unknown stat of type {type(name)}")
-
-        valid_kwargs = (
-            klass.aesthetics() | klass.DEFAULT_PARAMS.keys()
-        ) & kwargs.keys()
-
-        params = {k: kwargs[k] for k in valid_kwargs}
-        return klass(geom=geom, **params)
 
     def __deepcopy__(self, memo: dict[Any, Any]) -> stat:
         """
@@ -140,8 +92,8 @@ class stat(ABC, metaclass=Register):
         old = self.__dict__
         new = result.__dict__
 
-        # don't make a _kwargs
-        shallow = {"_kwargs"}
+        # don't make a _raw_kwargs
+        shallow = {"_raw_kwargs"}
         for key, item in old.items():
             if key in shallow:
                 new[key] = item  # pyright: ignore[reportIndexIssue]
@@ -394,19 +346,5 @@ class stat(ABC, metaclass=Register):
         out :
             ggplot object with added layer
         """
-        other += self.to_layer()  # Add layer
+        other += layer(stat=self)
         return other
-
-    def to_layer(self) -> layer:
-        """
-        Make a layer that represents this stat
-
-        Returns
-        -------
-        out :
-            Layer
-        """
-        # Create, geom from stat, then layer from geom
-        from ..geoms.geom import geom
-
-        return layer.from_geom(geom.from_stat(self))

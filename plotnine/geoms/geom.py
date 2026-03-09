@@ -12,13 +12,11 @@ from .._utils import (
     data_mapping_as_kwargs,
     remove_missing,
 )
-from .._utils.registry import Register, Registry
+from .._utils.registry import Register
 from ..exceptions import PlotnineError
 from ..layer import layer
 from ..mapping.aes import rename_aesthetics
 from ..mapping.evaluation import evaluate
-from ..positions.position import position
-from ..stats.stat import stat
 
 if typing.TYPE_CHECKING:
     from typing import Any
@@ -81,7 +79,7 @@ class geom(ABC, metaclass=Register):
     ):
         kwargs = rename_aesthetics(kwargs)
         kwargs = data_mapping_as_kwargs((data, mapping), kwargs)
-        self._kwargs = kwargs  # Will be used to create stat & layer
+        self._raw_kwargs = kwargs  # Will be used to create stat & layer
 
         # separate aesthetics and parameters
         self.aes_params = {
@@ -92,47 +90,6 @@ class geom(ABC, metaclass=Register):
         }
         self.mapping = kwargs["mapping"]
         self.data = kwargs["data"]
-        self._stat = stat.from_geom(self)
-        self._position = position.from_geom(self)
-        self._verify_arguments(kwargs)  # geom, stat, layer
-
-    @staticmethod
-    def from_stat(stat: stat) -> geom:
-        """
-        Return an instantiated geom object
-
-        geoms should not override this method.
-
-        Parameters
-        ----------
-        stat :
-            `stat`
-
-        Returns
-        -------
-        :
-            A geom object
-
-        Raises
-        ------
-        PlotnineError
-            If unable to create a `geom`.
-        """
-        name = stat.params["geom"]
-
-        if isinstance(name, geom):
-            return name
-
-        if isinstance(name, type) and issubclass(name, geom):
-            klass = name
-        elif isinstance(name, str):
-            if not name.startswith("geom_"):
-                name = f"geom_{name}"
-            klass = Registry[name]
-        else:
-            raise PlotnineError(f"Unknown geom of type {type(name)}")
-
-        return klass(stat=stat, **stat._kwargs)
 
     @classmethod
     def aesthetics(cls: type[geom]) -> set[str]:
@@ -163,7 +120,7 @@ class geom(ABC, metaclass=Register):
         new = result.__dict__
 
         # don't make a deepcopy of data, or environment
-        shallow = {"data", "_kwargs", "environment"}
+        shallow = {"data", "_raw_kwargs", "environment"}
         for key, item in old.items():
             if key in shallow:
                 new[key] = item  # pyright: ignore[reportIndexIssue]
@@ -473,45 +430,8 @@ class geom(ABC, metaclass=Register):
         :
             ggplot object with added layer.
         """
-        other += self.to_layer()  # Add layer
+        other += layer(geom=self)
         return other
-
-    def to_layer(self) -> layer:
-        """
-        Make a layer that represents this geom
-
-        Returns
-        -------
-        :
-            Layer
-        """
-        return layer.from_geom(self)
-
-    def _verify_arguments(self, kwargs: dict[str, Any]):
-        """
-        Verify arguments passed to the geom
-        """
-        geom_stat_args = kwargs.keys() | self._stat._kwargs.keys()
-        unknown = (
-            geom_stat_args
-            - self.aesthetics()
-            - self.DEFAULT_PARAMS.keys()  # geom aesthetics
-            - self._stat.aesthetics()  # geom parameters
-            - self._stat.DEFAULT_PARAMS.keys()  # stat aesthetics
-            - {  # stat parameters
-                "data",
-                "mapping",
-                "show_legend",  # layer parameters
-                "inherit_aes",
-                "raster",
-            }
-        )  # layer parameters
-        if unknown:
-            msg = (
-                "Parameters {}, are not understood by "
-                "either the geom, stat or layer."
-            )
-            raise PlotnineError(msg.format(unknown))
 
     def handle_na(self, data: pd.DataFrame) -> pd.DataFrame:
         """

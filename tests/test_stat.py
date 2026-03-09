@@ -5,6 +5,7 @@ from plotnine import aes, geom_bar, ggplot
 from plotnine.data import mtcars
 from plotnine.exceptions import PlotnineError, PlotnineWarning
 from plotnine.geoms.geom import geom
+from plotnine.layer import layer
 from plotnine.stats.stat import stat
 
 
@@ -55,11 +56,25 @@ def test_stat_parameter_sharing():
     # not a geom manual setting
     g = geom_abc(weight=4)
     assert "weight" in g.aes_params
-    assert "weight" in g._stat.params
+    lyr = layer(geom=g)
+    assert "weight" in lyr.stat.params
 
     g = geom_abc(aes(weight="mpg"))
     assert "weight" in g.mapping
-    assert "weight" in g._stat.params
+    lyr = layer(geom=g)
+    assert "weight" in lyr.stat.params
+
+
+def test_stat_extending():
+    class stat_xyz(stat):
+        REQUIRED_AES = {"x", "y"}
+
+        def compute_group(self, data, scales):
+            return data
+
+    p = ggplot(mtcars, aes("wt", "mpg")) + stat_xyz(geom="point", size=1)
+
+    p.draw_test()  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def test_calculated_expressions():
