@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import typing
 from copy import deepcopy
+from warnings import warn
 
 import pandas as pd
 
@@ -27,6 +28,19 @@ if typing.TYPE_CHECKING:
 
 from abc import ABC
 
+_BASE_PARAMS = {
+    "geom": "blank",
+    "position": "identity",
+    "na_rm": False,
+}
+
+DROPPED_TPL = """
+The following aesthetics were dropped during processing: {dropped}.
+plotnine could not infer the correct grouping.
+Did you forget to specify a `group` aesthetic or to convert a numerical \
+variable into a categorial?
+"""
+
 
 class stat(ABC, metaclass=Register):
     """Base class of all stats"""
@@ -40,7 +54,7 @@ class stat(ABC, metaclass=Register):
     NON_MISSING_AES: set[str] = set()
     """Required aesthetics for the stat"""
 
-    DEFAULT_PARAMS: dict[str, Any] = {"geom": "blank"}
+    DEFAULT_PARAMS: dict[str, Any] = {}
     """Required parameters for the stat"""
 
     CREATES: set[str] = set()
@@ -70,10 +84,12 @@ class stat(ABC, metaclass=Register):
         data: DataLike | None = None,
         **kwargs: Any,
     ):
+        possible_params = _BASE_PARAMS | self.DEFAULT_PARAMS
+        possible_params_set = set(possible_params)
         kwargs = data_mapping_as_kwargs((data, mapping), kwargs)
         self._raw_kwargs = kwargs  # Will be used to create the geom
-        self.params = self.DEFAULT_PARAMS | {
-            k: v for k, v in kwargs.items() if k in self.DEFAULT_PARAMS
+        self.params = possible_params | {
+            k: v for k, v in kwargs.items() if k in possible_params_set
         }
         self.DEFAULT_AES = aes(**self.DEFAULT_AES)
         self.aes_params = {
@@ -299,6 +315,9 @@ class stat(ABC, metaclass=Register):
             stats.append(group_result)
 
         stats = pd.concat(stats, axis=0, ignore_index=True)
+        dropped = data.columns.difference(stats.columns).to_list()
+        if dropped:
+            warn(DROPPED_TPL.format(dropped=dropped))
         # Note: If the data coming in has columns with non-unique
         # values with-in group(s), this implementation loses the
         # columns. Individual stats may want to do some preparation
