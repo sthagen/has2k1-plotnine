@@ -4,10 +4,11 @@ Margin
 
 from __future__ import annotations
 
-from contextlib import suppress
 from copy import copy
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
+
+from ...exceptions import PlotnineError
 
 if TYPE_CHECKING:
     from typing import Callable, Literal
@@ -18,7 +19,30 @@ if TYPE_CHECKING:
 @dataclass
 class margin:
     """
-    Margin
+    Margin around a themeable
+
+    Holds four edge values (top, right, bottom, left) in one of
+    several coordinate spaces selected by the `unit` attribute.
+
+    Notes
+    -----
+    Supported units:
+
+    - `"pt"`: typographic points (1/72 in).
+    - `"in"`: inches.
+    - `"lines"`: multiples of the element's font size, applied
+      uniformly to all four edges. One line equals `fontsize/72`
+      inches of space on every edge — roughly a CSS em horizontally
+      and fontsize-tall vertically, not a line-height-with-leading
+      as the name may suggest.
+    - `"fig"`: figure-fraction, interpreted per edge: top and bottom
+      as a fraction of figure height, left and right as a fraction
+      of figure width.
+
+    For `pt`, `in`, and `lines`, equal edge values produce equal
+    physical distances regardless of figure aspect ratio. For `fig`,
+    top/bottom and left/right are fractions of different dimensions
+    by design.
     """
 
     t: float = 0
@@ -43,7 +67,8 @@ class margin:
 
     unit: Literal["pt", "in", "lines", "fig"] = "pt"
     """
-    The units (coordinate space) of the values
+    Coordinate space of the edge values. See the class docstring
+    for the meaning of each option.
     """
 
     # These are set by the themeable when it is applied
@@ -57,6 +82,10 @@ class margin:
     Size of the figure in inches
     """
 
+    _is_setup: bool = field(
+        init=False, default=False, repr=False, compare=False
+    )
+
     def setup(self, theme: theme, themeable_name: str):
         """
         Setup the margin to be used in the layout
@@ -65,9 +94,9 @@ class margin:
         convert them to different units as is required. Here we get
         all the parameters that we shall need to do the conversions.
         """
-        self.themeable_name = themeable_name
         self.fontsize = theme.getp((themeable_name, "size"), 11)
         self.figure_size = theme.getp("figure_size")
+        self._is_setup = True
 
     @property
     def pt(self) -> margin:
@@ -107,22 +136,23 @@ class margin:
         """
         Return margin in request unit
         """
+        if not self._is_setup:
+            raise PlotnineError(
+                "Cannot convert a margin that has not been set up. "
+                "Call margin.setup() (or attach the margin to a "
+                "themeable in a theme) first."
+            )
+
         m = copy(self)
         if self.unit == unit:
             return m
 
         conversion = f"{self.unit}-{unit}"
         W, H = self.figure_size
-
-        with suppress(ZeroDivisionError):
-            m.t = self._convert(conversion, H, self.t)
-        with suppress(ZeroDivisionError):
-            m.r = self._convert(conversion, W, self.r)
-        with suppress(ZeroDivisionError):
-            m.b = self._convert(conversion, H, self.b)
-        with suppress(ZeroDivisionError):
-            m.l = self._convert(conversion, W, self.l)
-
+        m.t = self._convert(conversion, H, self.t)
+        m.r = self._convert(conversion, W, self.r)
+        m.b = self._convert(conversion, H, self.b)
+        m.l = self._convert(conversion, W, self.l)
         m.unit = unit
         return m
 
