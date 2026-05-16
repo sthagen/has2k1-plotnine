@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from matplotlib.figure import Figure
     from typing_extensions import Self
 
+    from plotnine._mpl.figure import p9Figure
     from plotnine._mpl.gridspec import p9GridSpec
     from plotnine._mpl.layout_manager._composition_side_space import (
         CompositionSideSpaces,
@@ -102,7 +103,7 @@ class Compose:
     """
 
     # These are created in the ._create_figure
-    figure: Figure
+    figure: p9Figure
     _gridspec: p9GridSpec
     """
     Gridspec (1x1) that contains the annotations and the composition items
@@ -283,12 +284,15 @@ class Compose:
         """
         Add rhs to all plots in the composition
 
+        Recurses into ggplot insets too: a plot with insets receives
+        `item & rhs` (which broadcasts to its own host and insets).
+
         Parameters
         ----------
         rhs:
             What to add.
         """
-        from plotnine import theme
+        from plotnine import ggplot, theme
 
         self = deepcopy(self)
 
@@ -296,7 +300,9 @@ class Compose:
             self.annotation.theme = self.annotation.theme + rhs
 
         for i, item in enumerate(self):
-            if isinstance(item, Compose):
+            if isinstance(item, Compose) or (
+                isinstance(item, ggplot) and item._insets
+            ):
                 self[i] = item & rhs
             else:
                 item += copy(rhs)
@@ -461,21 +467,24 @@ class Compose:
         """
         Create figure & gridspecs for all sub compositions
         """
-        if hasattr(self, "figure"):
-            return
+        if not hasattr(self, "figure"):
+            import matplotlib.pyplot as plt
 
-        import matplotlib.pyplot as plt
+            from plotnine._mpl.figure import p9Figure
+            from plotnine._mpl.layout_manager import PlotnineLayoutEngine
 
-        from plotnine._mpl.gridspec import p9GridSpec
-        from plotnine._mpl.layout_manager import PlotnineLayoutEngine
+            self.figure = cast("p9Figure", plt.figure(FigureClass=p9Figure))
+            self.figure.set_layout_engine(PlotnineLayoutEngine(self))
 
-        figure = plt.figure()
-        self._generate_gridspecs(
-            figure, p9GridSpec(1, 1, figure, nest_into=None)
-        )
-        figure.set_layout_engine(PlotnineLayoutEngine(self))
+        if not hasattr(self, "_gridspec"):
+            from plotnine._mpl.gridspec import p9GridSpec
 
-    def _generate_gridspecs(self, figure: Figure, container_gs: p9GridSpec):
+            self._generate_gridspecs(
+                self.figure,
+                p9GridSpec(1, 1, self.figure, nest_into=None),
+            )
+
+    def _generate_gridspecs(self, figure: p9Figure, container_gs: p9GridSpec):
         from plotnine import ggplot
         from plotnine._mpl.gridspec import p9GridSpec
 
@@ -536,28 +545,25 @@ class Compose:
             Matplotlib figure
         """
 
-        def _draw(cmp):
-            figure = cmp._setup()
+        def _draw_items(cmp):
+            # Propagate figure-owner-only theme props (figure_size,
+            # dpi, ...) onto direct children so child layout uses
+            # the composition's values. Then walk plots and
+            # sub-compositions.
+            for item in cmp:
+                item.theme._inherit_figure_props(cmp.theme)
             cmp._draw_plots()
-
             for sub_cmp in cmp.iter_sub_compositions():
-                _draw(sub_cmp)
+                sub_cmp._setup()
+                _draw_items(sub_cmp)
 
-            return figure
-
-        # As the plot border and plot background apply to the entire
-        # composition and not the sub compositions, the theme of the
-        # whole composition is applied last (outside _draw).
+        # Drawing (order matters)
         with plot_composition_context(self, show):
-            figure = _draw(self)
-            self.theme._setup(
-                self.figure,
-                None,
-                self.annotation.title,
-                self.annotation.subtitle,
-            )
-            self._draw_annotation()
+            figure = self._setup()
+            self.theme._setup(self)
             self._draw_composition_background()
+            _draw_items(self)
+            self._draw_annotation()
             self.theme.apply()
 
         return figure
@@ -579,25 +585,17 @@ class Compose:
         from matplotlib.lines import Line2D
         from matplotlib.patches import Rectangle
 
-        # The composition background sits underneath the per-plot
-        # backgrounds (which are at zorder=-1000), so the per-plot
-        # backgrounds layer on top of it instead of being covered.
-        zorder = -2000
-        rect = Rectangle((0, 0), 0, 0, facecolor="none", zorder=zorder)
+        rect = Rectangle((0, 0), 0, 0, facecolor="none")
         self.figure.add_artist(rect)
         self._gridspec.patch = rect
         self.theme.targets.plot_background = rect
 
         if self.annotation.footer:
-            rect = Rectangle(
-                (0, 0), 0, 0, facecolor="none", linewidth=0, zorder=zorder + 1
-            )
+            rect = Rectangle((0, 0), 0, 0, facecolor="none", linewidth=0)
             self.figure.add_artist(rect)
             self.theme.targets.plot_footer_background = rect
 
-            line = Line2D(
-                [0, 0], [0, 0], color="none", linewidth=0, zorder=zorder + 2
-            )
+            line = Line2D([0, 0], [0, 0], color="none", linewidth=0)
             self.figure.add_artist(line)
             self.theme.targets.plot_footer_line = line
 
@@ -611,20 +609,21 @@ class Compose:
         if self.annotation.empty():
             return
 
-        figure = self.theme.figure
+        from matplotlib.text import Text
+
         targets = self.theme.targets
 
         if title := self.annotation.title:
-            targets.plot_title = figure.text(0, 0, title)
+            targets.plot_title = self.figure.add_artist(Text(text=title))
 
         if subtitle := self.annotation.subtitle:
-            targets.plot_subtitle = figure.text(0, 0, subtitle)
+            targets.plot_subtitle = self.figure.add_artist(Text(text=subtitle))
 
         if caption := self.annotation.caption:
-            targets.plot_caption = figure.text(0, 0, caption)
+            targets.plot_caption = self.figure.add_artist(Text(text=caption))
 
         if footer := self.annotation.footer:
-            targets.plot_footer = figure.text(0, 0, footer)
+            targets.plot_footer = self.figure.add_artist(Text(text=footer))
 
     def save(
         self,

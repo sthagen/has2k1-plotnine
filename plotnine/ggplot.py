@@ -53,6 +53,7 @@ if TYPE_CHECKING:
     from typing_extensions import Self
 
     from plotnine import watermark
+    from plotnine._mpl.figure import p9Figure
     from plotnine._mpl.gridspec import p9GridSpec
     from plotnine._mpl.layout_manager._plot_side_space import PlotSideSpaces
     from plotnine.composition import Compose
@@ -104,7 +105,7 @@ class ggplot:
     by pickled objects should not reference variables in the namespace.
     """
 
-    figure: Figure
+    figure: p9Figure
     axs: list[Axes]
     _gridspec: p9GridSpec
     """
@@ -140,6 +141,7 @@ class ggplot:
         data: Optional[DataLike] = None,
         mapping: Optional[aes] = None,
     ):
+        from .composition._inset_element import Insets
         from .mapping._env import Environment
 
         # Allow some sloppiness
@@ -156,6 +158,7 @@ class ggplot:
         self.environment = Environment.capture(1)
         self.layout = Layout()
         self.watermarks: list[watermark] = []
+        self._insets: Insets = Insets()
 
         # build artefacts
         self._build_objs = NS(meta={})
@@ -309,6 +312,35 @@ class ggplot:
 
         return Stack([self, rhs])
 
+    def __and__(self, rhs: PlotAddable) -> Self:
+        """
+        Broadcast rhs to this plot and every inset
+
+        Only defined when the plot has insets. On a plot with no insets
+        use `+` instead.
+        """
+        if not self._insets:
+            return NotImplemented
+
+        new = deepcopy(self)
+        new += rhs
+        new._insets = new._insets & rhs
+        return new
+
+    def __mul__(self, rhs: PlotAddable) -> Self:
+        """
+        Apply rhs to this plot only, leaving insets untouched
+
+        Only defined when the plot has insets. On a plot with no insets
+        use `+` instead.
+        """
+        if not self._insets:
+            return NotImplemented
+
+        new = deepcopy(self)
+        new += rhs
+        return new
+
     def __sub__(self, rhs: Self | Compose) -> Compose:
         """
         Compose 2 plots columnwise
@@ -351,26 +383,25 @@ class ggplot:
             self._build()
 
             # setup
-            self._sub_gridspec, self.axs = self.facet.setup(self)
             self.guides._setup(self)
-            self.theme._setup(
-                figure,
-                self.axs,
-                self.labels.title,
-                self.labels.subtitle,
-            )
+            self.theme._setup(self)
 
-            # Drawing
+            # Drawing (order matters)
+            self._draw_plot_background()
+            self._insets.draw(which="below")
+
+            self._sub_gridspec, self.axs = self.facet.setup(self)
             self._draw_layers()
             self._draw_panel_borders()
             self._draw_breaks_and_labels()
             self.guides.draw()
             self._draw_figure_texts()
             self._draw_watermarks()
-            self._draw_plot_background()
 
             # Artist object theming
             self.theme.apply()
+
+            self._insets.draw(which="above")
 
         return figure
 
@@ -379,6 +410,7 @@ class ggplot:
         Setup this instance for the building process
         """
         self._create_figure()
+        self._insets._setup(self)
         self.labels.add_defaults(self.mapping.labels)
         return self.figure
 
@@ -386,17 +418,19 @@ class ggplot:
         """
         Create gridspec for the panels
         """
-        if hasattr(self, "figure"):
-            return
+        if not hasattr(self, "figure"):
+            import matplotlib.pyplot as plt
 
-        import matplotlib.pyplot as plt
+            from ._mpl.figure import p9Figure
+            from ._mpl.layout_manager import PlotnineLayoutEngine
 
-        from ._mpl.gridspec import p9GridSpec
-        from ._mpl.layout_manager import PlotnineLayoutEngine
+            self.figure = cast("p9Figure", plt.figure(FigureClass=p9Figure))
+            self.figure.set_layout_engine(PlotnineLayoutEngine(self))
 
-        self.figure = plt.figure()
-        self._gridspec = p9GridSpec(1, 1, self.figure)
-        self.figure.set_layout_engine(PlotnineLayoutEngine(self))
+        if not hasattr(self, "_gridspec"):
+            from ._mpl.gridspec import p9GridSpec
+
+            self._gridspec = p9GridSpec(1, 1, self.figure)
 
     def _build(self):
         """
@@ -547,15 +581,25 @@ class ggplot:
         """
         Draw title, x label, y label and caption onto the figure
         """
-        figure = self.figure
-        theme = self.theme
-        targets = theme.targets
+        from matplotlib.text import Text
 
-        title = self.labels.get("title", "")
-        subtitle = self.labels.get("subtitle", "")
-        caption = self.labels.get("caption", "")
-        tag = self.labels.get("tag", "")
-        footer = self.labels.get("footer", "")
+        targets = self.theme.targets
+
+        # The locations are handled by the layout manager
+        if title := self.labels.get("title", ""):
+            targets.plot_title = self.figure.add_artist(Text(text=title))
+
+        if subtitle := self.labels.get("subtitle", ""):
+            targets.plot_subtitle = self.figure.add_artist(Text(text=subtitle))
+
+        if caption := self.labels.get("caption", ""):
+            targets.plot_caption = self.figure.add_artist(Text(text=caption))
+
+        if footer := self.labels.get("footer", ""):
+            targets.plot_footer = self.figure.add_artist(Text(text=footer))
+
+        if tag := self.labels.get("tag", ""):
+            targets.plot_tag = self.figure.add_artist(Text(text=tag))
 
         # Get the axis labels (default or specified by user)
         # and let the coordinate modify them e.g. flip
@@ -563,27 +607,11 @@ class ggplot:
             self.layout.set_xy_labels(self.labels)
         )
 
-        # The locations are handled by the layout manager
-        if title:
-            targets.plot_title = figure.text(0, 0, title)
-
-        if subtitle:
-            targets.plot_subtitle = figure.text(0, 0, subtitle)
-
-        if caption:
-            targets.plot_caption = figure.text(0, 0, caption)
-
-        if footer:
-            targets.plot_footer = figure.text(0, 0, footer)
-
-        if tag:
-            targets.plot_tag = figure.text(0, 0, tag)
-
         if labels.x:
-            targets.axis_title_x = figure.text(0, 0, labels.x)
+            targets.axis_title_x = self.figure.add_artist(Text(text=labels.x))
 
         if labels.y:
-            targets.axis_title_y = figure.text(0, 0, labels.y)
+            targets.axis_title_y = self.figure.add_artist(Text(text=labels.y))
 
     def _draw_watermarks(self):
         """
@@ -596,26 +624,21 @@ class ggplot:
         from matplotlib.lines import Line2D
         from matplotlib.patches import Rectangle
 
-        zorder = -1000
-        rect = Rectangle((0, 0), 0, 0, facecolor="none", zorder=zorder)
-        self.figure.add_artist(rect)
-        self._gridspec.patch = rect
-        self.theme.targets.plot_background = rect
+        targets = self.theme.targets
 
-        # Footer background and line only if there is a footer, and put
-        # it on top of the plot background
+        targets.plot_background = self.figure.add_artist(
+            Rectangle((0, 0), 0, 0, facecolor="none")
+        )
+        self._gridspec.patch = targets.plot_background
+
+        # Footer background and line only if there is a footer.
         if self.labels.get("footer", ""):
-            rect = Rectangle(
-                (0, 0), 0, 0, facecolor="none", linewidth=0, zorder=zorder + 1
+            targets.plot_footer_background = self.figure.add_artist(
+                Rectangle((0, 0), 0, 0, facecolor="none", linewidth=0)
             )
-            self.figure.add_artist(rect)
-            self.theme.targets.plot_footer_background = rect
-
-            line = Line2D(
-                [0, 0], [0, 0], color="none", linewidth=0, zorder=zorder + 2
+            targets.plot_footer_line = self.figure.add_artist(
+                Line2D([0, 0], [0, 0], color="none", linewidth=0)
             )
-            self.figure.add_artist(line)
-            self.theme.targets.plot_footer_line = line
 
     def _save_filename(self, ext: str) -> Path:
         """

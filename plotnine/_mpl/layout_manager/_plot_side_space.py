@@ -11,7 +11,7 @@ such cases as when left or right margin are affected by xlabel.
 
 from __future__ import annotations
 
-from copy import copy
+from dataclasses import replace
 from functools import cached_property
 from typing import TYPE_CHECKING
 
@@ -772,6 +772,59 @@ class PlotSideSpaces:
         """
         self.resize_gridspec()
         self.items._move_artists(self)
+        self._arrange_insets()
+
+    def _arrange_insets(self):
+        """
+        Position and arrange every inset attached to this plot
+
+        The host's panel/plot/full region is now finalised, so the
+        inset's fractional bounding box is scaled into figure
+        coordinates. For ggplot / Compose insets the bbox drives the
+        inset's gridspec and its side-space layout runs to position
+        its content. For image insets the adapter's `_arrange_in_box`
+        does the aspect-fit math directly — no gridspec or side-space
+        work needed.
+        """
+        from plotnine import ggplot
+        from plotnine.composition import Compose
+        from plotnine.composition._inset_image import _InsetImage
+
+        from ._composition_side_space import CompositionSideSpaces
+
+        for inset in self.plot._insets:
+            if inset.align_to == "panel":
+                (x1, y1), (x2, y2) = self.panel_area_coordinates
+            elif inset.align_to == "plot":
+                (x1, y1), (x2, y2) = self.plot_area_coordinates
+            else:  # "full"
+                # Note that this isn't necessarily the figure's coordinates,
+                # rather the entire ggplot area.
+                bbox = self.plot._gridspec.bbox_relative
+                (x1, y1), (x2, y2) = (bbox.x0, bbox.y0), (bbox.x1, bbox.y1)
+
+            left = x1 + inset.left * (x2 - x1)
+            bottom = y1 + inset.bottom * (y2 - y1)
+            right = x1 + inset.right * (x2 - x1)
+            top = y1 + inset.top * (y2 - y1)
+
+            if isinstance(inset.obj, (ggplot, Compose)):
+                params = GridSpecParams(
+                    left=left,
+                    bottom=bottom,
+                    right=right,
+                    top=top,
+                    wspace=0,
+                    hspace=0,
+                )
+                inset.obj._gridspec.update_params_and_artists(params)
+                if isinstance(inset.obj, ggplot):
+                    inset.obj._sidespaces = PlotSideSpaces(inset.obj)
+                else:
+                    inset.obj._sidespaces = CompositionSideSpaces(inset.obj)
+                inset.obj._sidespaces.arrange()
+            elif isinstance(inset.obj, _InsetImage):
+                inset.obj._arrange_in_box(left, bottom, right, top)
 
     def resize_gridspec(self):
         """
@@ -781,7 +834,6 @@ class PlotSideSpaces:
         sized to accomodate the artists around the panels.
         """
         gsparams = self.calculate_gridspec_params()
-        gsparams.validate()
         self.sub_gridspec.update_params_and_artists(gsparams)
 
     def calculate_gridspec_params(self) -> GridSpecParams:
@@ -1031,43 +1083,41 @@ class PlotSideSpaces:
         """
         Reduce the height of axes to get the aspect ratio
         """
-        gsparams = copy(gsparams)
-
         # New height w.r.t figure height
         h1 = ratio * self.w * (self.W / self.H)
 
         # Half of the total vertical reduction w.r.t figure height
         dh = (self.h - h1) * self.plot.facet.nrow / 2
 
-        # Reduce plot area height
-        gsparams.top -= dh
-        gsparams.bottom += dh
-        gsparams.hspace = self.sh / h1
-
         # Add more vertical plot margin
         self.increase_vertical_plot_margin(dh)
-        return gsparams
+
+        return replace(
+            gsparams,
+            top=gsparams.top - dh,
+            bottom=gsparams.bottom + dh,
+            hspace=self.sh / h1,
+        )
 
     def _reduce_width(self, gsparams: GridSpecParams, ratio: float):
         """
         Reduce the width of axes to get the aspect ratio
         """
-        gsparams = copy(gsparams)
-
         # New width w.r.t figure width
         w1 = (self.h * self.H) / (ratio * self.W)
 
         # Half of the total horizontal reduction w.r.t figure width
         dw = (self.w - w1) * self.plot.facet.ncol / 2
 
-        # Reduce width
-        gsparams.left += dw
-        gsparams.right -= dw
-        gsparams.wspace = self.sw / w1
-
         # Add more horizontal margin
         self.increase_horizontal_plot_margin(dw)
-        return gsparams
+
+        return replace(
+            gsparams,
+            left=gsparams.left + dw,
+            right=gsparams.right - dw,
+            wspace=self.sw / w1,
+        )
 
     @property
     def aspect_ratio(self) -> float:
