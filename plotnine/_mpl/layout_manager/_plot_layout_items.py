@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from matplotlib.text import Text
 
 from plotnine._mpl.patches import StripTextPatch
+from plotnine.composition._compose import Compose
 from plotnine.exceptions import PlotnineError
 
 from ..utils import (
@@ -574,13 +575,21 @@ def _position_plot_labels(
     return justify
 
 
-def set_legends_position(legends: legend_artists, spaces: PlotSideSpaces):
+def set_legends_position(
+    legends: legend_artists,
+    spaces: PlotSideSpaces | CompositionSideSpaces,
+):
     """
-    Place legend on the figure and justify is a required
+    Place legends on the figure, justifying each as required
+
+    Works for both plot-level and composition-level legends. Both
+    side-space hierarchies expose an `owner` property — a `ggplot`
+    or `Compose` — which provides the `_sub_gridspec` to anchor
+    against and the `figure` to transform onto.
     """
-    panels_gs = spaces.plot._sub_gridspec
+    panels_gs = spaces.owner._sub_gridspec
     params = panels_gs.get_subplot_params()
-    transFigure = spaces.plot.figure.transFigure
+    transFigure = spaces.owner.figure.transFigure
 
     def set_position(
         aob: FlexibleAnchoredOffsetbox,
@@ -645,8 +654,13 @@ def set_legends_position(legends: legend_artists, spaces: PlotSideSpaces):
         y = spaces.b.y1("legend")
         set_position(legends.bottom.box, (x, y), (0, 0))
 
-    # Inside legends are placed using the panels coordinate system
+    # Inside legends are placed using the panels coordinate system.
+    # For a `Compose` owner with a `guide_area` host, the guides are
+    # rendered in the guide_areas panel, so we need that gridspec
     if legends.inside:
+        if isinstance(spaces.owner, Compose) and spaces.owner._guide_area:
+            panels_gs = spaces.owner._guide_area._sub_gridspec
+
         transPanels = panels_gs.to_transform()
         for l in legends.inside:
             set_position(l.box, l.position, l.justification, transPanels)

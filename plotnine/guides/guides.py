@@ -22,14 +22,18 @@ from ..mapping.aes import rename_aesthetics
 from .guide import guide
 
 if TYPE_CHECKING:
-    from typing import Literal, Optional, Sequence, TypeAlias
+    from typing import Literal, Optional, Protocol, Sequence, TypeAlias
 
+    from matplotlib.figure import Figure
     from matplotlib.offsetbox import OffsetBox, PackerBase
 
     from plotnine import ggplot, guide_colorbar, guide_legend, theme
+    from plotnine._mpl.offsetbox import FlexibleAnchoredOffsetbox
+    from plotnine.composition import Compose
     from plotnine.iapi import labels_view
     from plotnine.scales.scale import scale
     from plotnine.scales.scales import Scales
+    from plotnine.themes.theme import theme as Theme
     from plotnine.typing import (
         Justification,
         LegendPosition,
@@ -43,6 +47,26 @@ if TYPE_CHECKING:
         guide_legend | guide_colorbar | Literal["legend", "colorbar"]
     )
     LegendOnly: TypeAlias = guide_legend | Literal["legend"]
+
+    class LegendOwner(Protocol):
+        """
+        Anything that can render and host legends
+
+        A `LegendOwner` is the rendering context for a set of guides:
+        it provides the theme that styles them and the figure they
+        are attached to. Both `ggplot` and `Compose` satisfy this
+        contract.
+
+        The properties are declared read-only so Protocol matching
+        stays covariant on the attribute types (e.g. `p9Figure`
+        satisfies `Figure`).
+        """
+
+        @property
+        def theme(self) -> Theme: ...
+
+        @property
+        def figure(self) -> Figure: ...
 
 
 # Terminology
@@ -97,6 +121,7 @@ class guides:
         self.plot_scales: Scales
         self.plot_labels: labels_view
         self.elements: GuidesElements
+        self._owner: LegendOwner | None = None
         self._lookup: dict[
             tuple[str, ScaledAestheticsName], tuple[scale, guide]
         ] = {}
@@ -134,14 +159,22 @@ class guides:
             The individual guides for which the geoms that draw them have
             have been created.
         """
-        return self._create_geoms(self._merge(self._train()))
+        return self._create_geoms(_merge_guides(self._train()))
 
-    def _setup(self, plot: ggplot):
+    def _bind_source(self, plot: ggplot):
         """
-        Setup all guides that will be active
+        Bind to the source plot
+
+        Resolves which guide applies to which aesthetic by inspecting
+        the plot's scales, then captures each resolved guide's
+        data-source state (layers, mapping).
+
+        Parameters
+        ----------
+        plot :
+            The plot whose scales decide which guides to draw.
         """
         self.plot = plot
-        self.elements = GuidesElements(self.plot.theme)
 
         guide_lookup = {
             f.name: g
@@ -173,8 +206,41 @@ class guides:
                 elif not isinstance(g, guide):
                     raise PlotnineError(f"Unknown guide: {g}")
 
-                g.setup(self)
+                g._bind_source(plot)
                 self._lookup[(scale.__class__.__name__, ae)] = (scale, g)
+
+    def _bind_owner(self, owner: LegendOwner):
+        """
+        Bind to the rendering owner
+
+        Captures the rendering context (theme, figure) and propagates
+        the owner-binding to every resolved guide.
+
+        Parameters
+        ----------
+        owner :
+            Whoever renders these guides — its theme and figure
+            drive layout and attachment.
+        """
+        self._owner = owner
+        self.elements = GuidesElements(owner.theme)
+        for _, g in self._lookup.values():
+            g.guides_elements = self.elements
+            g._bind_owner(owner)
+
+    def _setup(self, plot: ggplot):
+        """
+        Setup all guides that will be active
+
+        Always binds the source plot. Owner-binding is deferred only
+        when a `Compose` collector has claimed the leaf
+        """
+        from plotnine.composition import Compose
+
+        self._bind_source(plot)
+        if not isinstance(self._owner, Compose):
+            self._owner = plot
+            self._bind_owner(plot)
 
     def _train(self) -> Sequence[guide]:
         """
@@ -225,42 +291,6 @@ class guides:
 
         return gdefs
 
-    def _merge(self, gdefs: Sequence[guide]) -> Sequence[guide]:
-        """
-        Merge overlapped guides
-
-        For example:
-
-        ```python
-         from plotnine import *
-         p = (
-            ggplot(mtcars, aes(y="wt", x="mpg", colour="factor(cyl)"))
-            + stat_smooth(aes(fill="factor(cyl)"), method="lm")
-            + geom_point()
-         )
-        ```
-
-        would create two guides with the same hash
-        """
-        if not gdefs:
-            return []
-
-        # group guide definitions by hash, and
-        # reduce each group to a single guide
-        # using the guide.merge method
-        definitions = pd.DataFrame(
-            {"gdef": gdefs, "hash": [g.hash for g in gdefs]}
-        )
-        grouped = definitions.groupby("hash", sort=False)
-        gdefs = []
-        for name, group in grouped:
-            # merge
-            gdef = group["gdef"].iloc[0]
-            for g in group["gdef"].iloc[1:]:
-                gdef = gdef.merge(g)
-            gdefs.append(gdef)
-        return gdefs
-
     def _create_geoms(
         self,
         gdefs: Sequence[guide],
@@ -270,86 +300,19 @@ class guides:
         """
         return [_g for g in gdefs if (_g := g.create_geoms())]
 
-    def _apply_guide_themes(self, gdefs: list[guide]):
-        """
-        Apply the theme for each guide
-        """
-        for g in gdefs:
-            g.theme.apply()
-
-    def _assemble_guides(
-        self,
-        gdefs: list[guide],
-        boxes: list[PackerBase],
-    ) -> legend_artists:
-        """
-        Assemble guides into Anchored Offset boxes depending on location
-        """
-        from matplotlib.font_manager import FontProperties
-        from matplotlib.offsetbox import HPacker, VPacker
-
-        from .._mpl.offsetbox import FlexibleAnchoredOffsetbox
-
-        elements = self.elements
-
-        # Combine all the guides into a single box
-        # The direction matters only when there is more than legend
-        lookup: dict[Orientation, type[PackerBase]] = {
-            "horizontal": HPacker,
-            "vertical": VPacker,
-        }
-
-        def _anchored_offset_box(boxes: list[PackerBase]):
-            """
-            Put a group of guides into a single box for drawing
-            """
-            packer = lookup[elements.box]
-
-            box = packer(
-                children=boxes,  # type: ignore
-                align=elements.box_just,
-                pad=elements.box_margin,
-                sep=elements.spacing,
-            )
-
-            return FlexibleAnchoredOffsetbox(
-                xy_loc=(0.5, 0.5),
-                child=box,
-                pad=1,
-                frameon=False,
-                prop=FontProperties(size=1, stretch=0),
-                bbox_to_anchor=(0, 0),
-                bbox_transform=self.plot.figure.transFigure,
-                borderpad=0.0,
-            )
-
-        # Group together guides for each position
-        groups: dict[
-            tuple[Side, float]
-            | tuple[tuple[float, float], tuple[float, float]],
-            list[PackerBase],
-        ] = defaultdict(list)
-
-        for g, b in zip(gdefs, boxes):
-            groups[g._resolved_position_justification].append(b)
-
-        legends = legend_artists()
-
-        # Create an anchoredoffsetbox for each group/position
-        for (position, just), group in groups.items():
-            aob = _anchored_offset_box(group)
-            if isinstance(position, str) and isinstance(just, (float, int)):
-                setattr(legends, position, outside_legend(aob, just))
-            else:
-                position = cast("tuple[float, float]", position)
-                just = cast("tuple[float, float]", just)
-                legends.inside.append(inside_legend(aob, just, position))
-
-        return legends
-
     def draw(self) -> Optional[OffsetBox]:
         """
         Draw guides onto the figure
+
+        For a `ggplot` owner, renders the trained guides set up via
+        `_setup`. For a `Compose` owner whose
+        `layout.guides == "collect"`, gathers trained guides from
+        descendant leaves whose `_owner` points at this composition,
+        merges them by hash, and renders the result.
+
+        If this is a leaf's guides whose owner is a `Compose`, the
+        call is a no-op — that composition's own `.guides.draw()`
+        will collect and render these guides.
 
         Returns
         -------
@@ -357,31 +320,229 @@ class guides:
             A box that contains all the guides for the plot.
             If there are no guides, **None** is returned.
         """
-        if self.elements.position == "none":
+        from plotnine.composition import Compose
+
+        if self._owner is None:
             return
 
-        if not (gdefs := self._build()):
+        figure = self._owner.figure
+        targets = self._owner.theme.targets
+
+        if isinstance(self._owner, Compose):
+            # A collected leaf's guides reach this method via
+            # `ggplot.draw`; the Compose's own `.guides.draw()`
+            # handles the rendering, so we skip here to avoid
+            # double-collection.
+            if self._owner.guides is not self:
+                return
+            # Only "collect" compositions produce guides at this
+            # level. For "keep" or `None`, the composition holds no
+            # legend artists of its own.
+            if self._owner.layout.guides != "collect":
+                return
+            gdefs = self._collect_from_leaves()
+        else:
+            if self.elements.position == "none":
+                return
+            gdefs = list(self._build())
+
+        if not gdefs:
             return
 
-        # Order of guides
-        # 0 do not sort, any other sorts
-        # place the guides according to the guide.order
+        # Order of guides: 0 keeps original order, any other sorts
         default = max(g.order for g in gdefs) + 1
         orders = [default if g.order == 0 else g.order for g in gdefs]
         idx = cast("Sequence[int]", np.argsort(orders))
         gdefs = [gdefs[i] for i in idx]
 
-        # Draw each guide into a box
-        # Because we can have more than one guide, we keep record of
-        # the drawn artists using lists
         guide_boxes = [g.draw() for g in gdefs]
+        for g in gdefs:
+            g.theme.apply()
 
-        self._apply_guide_themes(gdefs)
-        legends = self._assemble_guides(gdefs, guide_boxes)
+        # Rendering in a guide_area is simpler because we render all guides
+        # together and at the center
+        use_guide_area = (
+            self._owner._guide_area
+            if isinstance(self._owner, Compose)
+            else None
+        ) is not None
+        if use_guide_area:
+            legends = assemble_guide_area_legend(
+                guide_boxes, self.elements, figure
+            )
+        else:
+            legends = assemble_legend_artists(
+                gdefs, guide_boxes, self.elements, figure
+            )
+
+        # Attach legend offsetboxes to the figure and register them
         for aob in legends.boxes:
-            self.plot.figure.add_artist(aob)
+            figure.add_artist(aob)
+        targets.legends = legends
 
-        self.plot.theme.targets.legends = legends
+    def _collect_from_leaves(self) -> list[guide]:
+        """
+        The guides this composition will render
+
+        Each entry is a unique-by-hash legend contributed by a
+        descendant plot in this composition's collection scope,
+        with its rendering context resolved against the
+        composition's theme and figure. Empty when no descendant
+        plot contributes.
+        """
+        cmp = cast("Compose", self._owner)
+        gdefs: list[guide] = []
+        for leaf in cmp.iter_plots_all():
+            if leaf.guides._owner is cmp:
+                leaf.guides._bind_owner(cmp)
+                built = leaf.guides._build()
+                if built:
+                    gdefs.extend(built)
+        return _merge_guides(gdefs) if gdefs else []
+
+
+def assemble_legend_artists(
+    gdefs: list[guide],
+    boxes: list[PackerBase],
+    elements: GuidesElements,
+    figure: Figure,
+) -> legend_artists:
+    """
+    Assemble guides into AnchoredOffsetboxes depending on location
+
+    Parameters
+    ----------
+    gdefs :
+        Trained guides whose `_resolved_position_justification`
+        decides which side group each lands in.
+    boxes :
+        The per-guide drawn boxes, one per `gdefs` entry.
+    elements :
+        Theme-resolved layout elements (direction, box justification,
+        margins, spacing).
+    figure :
+        The figure the offsetboxes will be anchored to.
+    """
+    # Group together guides for each position
+    groups: dict[
+        tuple[Side, float] | tuple[tuple[float, float], tuple[float, float]],
+        list[PackerBase],
+    ] = defaultdict(list)
+
+    for g, b in zip(gdefs, boxes):
+        groups[g._resolved_position_justification].append(b)
+
+    legends = legend_artists()
+
+    # Create an anchoredoffsetbox for each group/position
+    for (position, just), group in groups.items():
+        aob = _anchored_offset_box(group, elements, figure)
+        if isinstance(position, str) and isinstance(just, (float, int)):
+            setattr(legends, position, outside_legend(aob, just))
+        else:
+            position = cast("tuple[float, float]", position)
+            just = cast("tuple[float, float]", just)
+            legends.inside.append(inside_legend(aob, just, position))
+
+    return legends
+
+
+def assemble_guide_area_legend(
+    boxes: list[PackerBase],
+    elements: GuidesElements,
+    figure: Figure,
+) -> legend_artists:
+    """
+    Pack collected guides into one centered legend for a `guide_area`
+
+    All trained guides are combined into a single AnchoredOffsetbox
+    centered in panel coordinates, irrespective of their individual
+    `legend_position` settings. Used when the rendering owner is a
+    `Compose` whose `_guide_area` selects a host cell.
+
+    Parameters
+    ----------
+    boxes :
+        The per-guide drawn boxes that will be packed together.
+    elements :
+        Theme-resolved layout elements (direction, box justification,
+        margins, spacing).
+    figure :
+        The figure the offsetbox will be anchored to.
+
+    Returns
+    -------
+    out :
+        A `legend_artists` whose only entry is a single inside
+        legend at `(0.5, 0.5)`.
+    """
+    aob = _anchored_offset_box(boxes, elements, figure)
+    legends = legend_artists()
+    legends.inside.append(inside_legend(aob, (0.5, 0.5), (0.5, 0.5)))
+    return legends
+
+
+def _anchored_offset_box(
+    boxes: list[PackerBase],
+    elements: GuidesElements,
+    figure: Figure,
+) -> FlexibleAnchoredOffsetbox:
+    """
+    Pack a list of guide boxes into a single AnchoredOffsetbox
+    """
+    from matplotlib.font_manager import FontProperties
+    from matplotlib.offsetbox import HPacker, VPacker
+
+    from .._mpl.offsetbox import FlexibleAnchoredOffsetbox
+
+    lookup: dict[Orientation, type[PackerBase]] = {
+        "horizontal": HPacker,
+        "vertical": VPacker,
+    }
+    packer = lookup[elements.box]
+
+    box = packer(
+        children=boxes,  # type: ignore
+        align=elements.box_just,
+        pad=elements.box_margin,
+        sep=elements.spacing,
+    )
+
+    return FlexibleAnchoredOffsetbox(
+        xy_loc=(0.5, 0.5),
+        child=box,
+        pad=1,
+        frameon=False,
+        prop=FontProperties(size=1, stretch=0),
+        bbox_to_anchor=(0, 0),
+        bbox_transform=figure.transFigure,
+        borderpad=0.0,
+    )
+
+
+def _merge_guides(gdefs: Sequence[guide]) -> list[guide]:
+    """
+    Group guides by hash and fold each group
+
+    Used both within a single plot (intra-plot dedupe) and across
+    plots in a composition (cross-plot dedupe at a guide owner).
+    The function does not care about that distinction — the caller's
+    choice of input list does.
+    """
+    if not gdefs:
+        return []
+    definitions = pd.DataFrame(
+        {"gdef": list(gdefs), "hash": [g.hash for g in gdefs]}
+    )
+    grouped = definitions.groupby("hash", sort=False)
+    out: list[guide] = []
+    for _, group in grouped:
+        gs = list(group["gdef"])
+        survivor = gs[0]
+        for other in gs[1:]:
+            survivor = survivor.merge(other)
+        out.append(survivor)
+    return out
 
 
 VALID_JUSTIFICATION_WORDS = {"left", "right", "top", "bottom", "center"}
