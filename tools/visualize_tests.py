@@ -11,11 +11,34 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
 
+from _testcode import get_test_code
+
 IMAGE_DIR = Path("tests/result_images").resolve()
 EXPECTED_SUFFIX = "-expected"
 FAILED_SUFFIX = "-failed-diff"
 RESULT_PREFIX = "tests/result_images"
 BASELINE_PREFIX = "tests/baseline_images"
+TESTS_DIR = IMAGE_DIR.parent
+
+try:
+    from pygments import highlight
+    from pygments.formatters import HtmlFormatter
+    from pygments.lexers import PythonLexer
+
+    def highlight_python(source: str) -> str:
+        """
+        Python source as HTML spans with pygments token classes
+        """
+        return highlight(source, PythonLexer(), HtmlFormatter(nowrap=True))
+
+except ImportError:
+    from html import escape
+
+    def highlight_python(source: str) -> str:
+        """
+        Python source as plain escaped text (pygments unavailable)
+        """
+        return escape(source)
 
 
 @dataclass(frozen=True)
@@ -98,6 +121,12 @@ CSS = """
   --amber-soft: #fcf3d4;
   --link: #2c7be5;
   --img-bg: #ffffff;
+  --code-kw: #cf222e;
+  --code-str: #0a3069;
+  --code-num: #0550ae;
+  --code-com: #6e7781;
+  --code-fn: #8250df;
+  --code-builtin: #953800;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -119,6 +148,12 @@ CSS = """
     --amber-soft: #3a2c10;
     --link: #6cb6ff;
     --img-bg: #ffffff;
+    --code-kw: #f47067;
+    --code-str: #96d0ff;
+    --code-num: #6cb6ff;
+    --code-com: #768390;
+    --code-fn: #dcbdfb;
+    --code-builtin: #f69d50;
   }
 }
 
@@ -140,6 +175,12 @@ CSS = """
   --amber-soft: #3a2c10;
   --link: #6cb6ff;
   --img-bg: #ffffff;
+  --code-kw: #f47067;
+  --code-str: #96d0ff;
+  --code-num: #6cb6ff;
+  --code-com: #768390;
+  --code-fn: #dcbdfb;
+  --code-builtin: #f69d50;
 }
 
 * { box-sizing: border-box; }
@@ -505,10 +546,127 @@ main {
   border-radius: 4px;
 }
 
+.code-toggle.active {
+  background: var(--chip-active-bg);
+  color: var(--chip-active-fg);
+  border-color: var(--chip-active-bg);
+}
+
+.code-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.code-panel.hidden { display: none; }
+
+.code-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco,
+               Consolas, monospace;
+  font-size: 12px;
+  align-self: flex-start;
+}
+
+pre.code {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--chip-bg);
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco,
+               Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+pre.code .k, pre.code .kn, pre.code .ow, pre.code .o {
+  color: var(--code-kw);
+}
+pre.code .s, pre.code .s1, pre.code .s2, pre.code .sd,
+pre.code .sa, pre.code .si {
+  color: var(--code-str);
+}
+pre.code .mi, pre.code .mf { color: var(--code-num); }
+pre.code .c1, pre.code .cm {
+  color: var(--code-com);
+  font-style: italic;
+}
+pre.code .nf, pre.code .nc, pre.code .fm { color: var(--code-fn); }
+pre.code .nb, pre.code .bp { color: var(--code-builtin); }
+
 .empty {
   padding: 40px;
   text-align: center;
   color: var(--muted);
+}
+
+dialog#lightbox {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--fg);
+  max-width: 95vw;
+  max-height: 92vh;
+}
+
+dialog#lightbox::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.lb-header,
+.lb-footer {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.lb-header { border-bottom: 1px solid var(--border); }
+
+.lb-header .status-badge { align-self: baseline; }
+
+.lb-footer {
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  justify-content: center;
+}
+
+.lb-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco,
+               Consolas, monospace;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.lb-sibling {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.lb-approved {
+  color: var(--green);
+  visibility: hidden;
+}
+
+.lb-counter {
+  margin-left: auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+dialog#lightbox img {
+  display: block;
+  background: var(--img-bg);
+  max-width: calc(95vw - 2px);
+  /* 80px ~= header + footer; a long wrapped name scrolls instead */
+  max-height: calc(92vh - 80px);
+  width: auto;
+  height: auto;
+  margin: 0 auto;
 }
 """
 
@@ -643,7 +801,9 @@ JS = """
   for (const row of rows) {
     if (row.dataset.status !== 'failed') continue;
 
-    const buttons = row.querySelectorAll('.view-buttons button');
+    const buttons = row.querySelectorAll(
+      '.view-buttons button[data-view]'
+    );
     for (const btn of buttons) {
       btn.addEventListener('click', () => {
         const view = btn.dataset.view;
@@ -731,6 +891,137 @@ JS = """
   });
   applyTheme();
 
+  // Per-row test-code panel toggles.
+  for (const btn of document.querySelectorAll('button.code-toggle')) {
+    btn.addEventListener('click', () => {
+      const row = btn.closest('.test-row');
+      const panel = row && row.querySelector('.code-panel');
+      if (!panel) return;
+      const open = !panel.classList.toggle('hidden');
+      btn.classList.toggle('active', open);
+    });
+  }
+
+  // Lightbox: click an anchor-wrapped image to inspect it in-page.
+  const lightbox = document.getElementById('lightbox');
+  const lbImg = lightbox.querySelector('img');
+  const lbName = lightbox.querySelector('.lb-name');
+  const lbBadge = lightbox.querySelector('.lb-badge');
+  const lbSibling = lightbox.querySelector('.lb-sibling');
+  const lbApproved = lightbox.querySelector('.lb-approved');
+  const lbCounter = lightbox.querySelector('.lb-counter');
+
+  let lbRows = [];
+  let lbRowIdx = 0;
+  let lbSiblings = [];
+  let lbSibIdx = 0;
+
+  function lbRowSiblings(row) {
+    const sibs = [];
+    for (const fig of row.querySelectorAll('.images-side figure')) {
+      const img = fig.querySelector('img');
+      const cap = fig.querySelector('figcaption');
+      if (img && cap) {
+        sibs.push({
+          label: cap.textContent.trim(),
+          src: img.getAttribute('src'),
+        });
+      }
+    }
+    return sibs;
+  }
+
+  function lbShow() {
+    const row = lbRows[lbRowIdx];
+    const sib = lbSiblings[lbSibIdx];
+    lbImg.src = sib.src;
+    lbName.textContent = row.dataset.subdir + '/' + row.dataset.file;
+    lbBadge.textContent = row.dataset.status;
+    lbBadge.className = 'lb-badge status-badge ' + row.dataset.status;
+    lbSibling.textContent = sib.label;
+    lbCounter.textContent = (lbRowIdx + 1) + ' / ' + lbRows.length;
+    const cb = row.querySelector('input.approve-cb');
+    lbApproved.style.visibility =
+      cb && cb.checked ? 'visible' : 'hidden';
+  }
+
+  function lbOpen(row, src) {
+    const sibs = lbRowSiblings(row);
+    if (sibs.length === 0) return;
+    lbRows = rows.filter((r) => !r.classList.contains('hidden'));
+    lbRowIdx = Math.max(0, lbRows.indexOf(row));
+    lbSiblings = sibs;
+    lbSibIdx = Math.max(
+      0,
+      lbSiblings.findIndex((s) => s.src === src)
+    );
+    lbShow();
+    lightbox.showModal();
+  }
+
+  function lbCycle(d) {
+    const n = lbSiblings.length;
+    lbSibIdx = (lbSibIdx + d + n) % n;
+    lbShow();
+  }
+
+  function lbMove(d) {
+    const next = lbRowIdx + d;
+    if (next < 0 || next >= lbRows.length) return;
+    const want = lbSiblings[lbSibIdx].label;
+    const sibs = lbRowSiblings(lbRows[next]);
+    if (sibs.length === 0) return;
+    lbRowIdx = next;
+    lbSiblings = sibs;
+    const keep = lbSiblings.findIndex((s) => s.label === want);
+    lbSibIdx = keep >= 0 ? keep : 0;
+    lbShow();
+  }
+
+  function lbToggleApprove() {
+    const cb = lbRows[lbRowIdx].querySelector('input.approve-cb');
+    if (!cb) return;
+    cb.checked = !cb.checked;
+    cb.dispatchEvent(new Event('change'));
+    lbShow();
+  }
+
+  for (const link of document.querySelectorAll('.images figure a')) {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const row = link.closest('.test-row');
+      const img = link.querySelector('img');
+      if (row && img) lbOpen(row, img.getAttribute('src'));
+    });
+  }
+
+  // On document, not the dialog: clicking the (non-focusable) image
+  // can move focus off the dialog, which would kill its key events.
+  document.addEventListener('keydown', (e) => {
+    if (!lightbox.open) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      lbCycle(-1);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      lbCycle(1);
+    } else if (e.key === 'ArrowDown' || e.key === 'j') {
+      e.preventDefault();
+      lbMove(1);
+    } else if (e.key === 'ArrowUp' || e.key === 'k') {
+      e.preventDefault();
+      lbMove(-1);
+    } else if (e.key === 'a') {
+      e.preventDefault();
+      lbToggleApprove();
+    }
+  });
+
+  lightbox.addEventListener('click', (e) => {
+    if (e.target === lightbox) lightbox.close();
+  });
+
   // Set initial chip-zero highlight on load.
   function highlightZeroChips() {
     for (const chip of chips) {
@@ -790,6 +1081,22 @@ HTML_TEMPLATE = """\
 <main>
 {rows}
 </main>
+<dialog id="lightbox">
+  <div class="lb-header">
+    <span class="lb-name"></span>
+    <span class="lb-badge status-badge"></span>
+    <span class="lb-sibling"></span>
+    <span class="lb-approved">✓ approved</span>
+    <span class="lb-counter"></span>
+  </div>
+  <img alt="">
+  <div class="lb-footer">
+    <span>←/→ sibling</span>
+    <span>j/k test</span>
+    <span>a approve</span>
+    <span>esc close</span>
+  </div>
+</dialog>
 <script>{js}</script>
 </body>
 </html>
@@ -880,6 +1187,55 @@ def _passed_content(test: TestImage) -> str:
     )
 
 
+def _code_parts(test: TestImage) -> tuple[str, str]:
+    """
+    (toggle button, hidden panel) for a test's code, or empty strings
+    """
+    test_file = TESTS_DIR / f"{test.subdir}.py"
+    snippet = get_test_code(test_file, test.name)
+    if snippet is None:
+        return "", ""
+    button = '<button class="code-toggle" type="button">{ } Code</button>'
+    panel = (
+        '<div class="code-panel hidden">'
+        f'<a class="code-path" href="../{test.subdir}.py">'
+        f"tests/{test.subdir}.py:{snippet.lineno}</a>"
+        f'<pre class="code">{highlight_python(snippet.source)}</pre>'
+        "</div>"
+    )
+    return button, panel
+
+
+def _with_code(content: str, button: str, panel: str) -> str:
+    """
+    Content with the code button in its tab strip and the panel under it
+
+    The panel opens between the strip and the images. Rows without a
+    tab strip (passed/new, and failed without an expected image) get
+    one holding just the code button.
+    """
+    if not button:
+        return content
+    if '<div class="view-buttons">' in content:
+        # The strip's last button (Flip) closes the strip; the code
+        # button goes after it.
+        content = content.replace(
+            "</button></div>",
+            f"</button>{button}</div>",
+            1,
+        )
+    else:
+        content = content.replace(
+            '<div class="content">',
+            f'<div class="content"><div class="view-buttons">{button}</div>',
+            1,
+        )
+    # The strip holds only buttons, so its first </div> closes it.
+    strip_start = content.find('<div class="view-buttons">')
+    strip_end = content.find("</div>", strip_start) + len("</div>")
+    return content[:strip_end] + panel + content[strip_end:]
+
+
 def render_row(test: TestImage) -> str:
     """
     Build the HTML for a single test row
@@ -901,6 +1257,7 @@ def render_row(test: TestImage) -> str:
         content = _new_content(test)
     else:
         content = _passed_content(test)
+    content = _with_code(content, *_code_parts(test))
 
     classes = ["test-row"]
     if test.status == "failed":
