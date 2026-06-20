@@ -3,7 +3,9 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
+from warnings import warn
 
+from ..exceptions import PlotnineWarning
 from ._inset_image import _InsetImage
 
 if TYPE_CHECKING:
@@ -48,6 +50,12 @@ class inset_element:
         - `"plot"`  — the panel plus axes, labels, titles, captions
            and legends
         - `"full"`  — everything the host plot occupies plus plot margin
+        - `"footer"` — the footer band at the bottom of the plot. Only
+           non-degenerate when the host has footer text (set with
+           `labs(footer=...)`); without it the band has zero height, the
+           inset is skipped, and a warning is issued. The band does not
+           grow to fit a taller inset — the inset overflows beyond it
+           instead.
     on_top :
         When `True` (default) the inset paints above the host plot.
         When `False`, the inset paints between the host's
@@ -98,7 +106,7 @@ class inset_element:
     bottom: float
     right: float
     top: float
-    align_to: Literal["panel", "plot", "full"] = "panel"
+    align_to: Literal["panel", "plot", "full", "footer"] = "panel"
     on_top: bool = True
     anchor: Anchor = "center"
 
@@ -249,10 +257,14 @@ class Insets(list[inset_element]):
     List of insets attached to a ggplot
     """
 
+    # The host plot these insets are drawn into.
+    _host: ggplot
+
     def _setup(self, parent: ggplot):
         """
         Inherit the host figure and figure-owner-only theme props
         """
+        self._host = parent
         for inset in self:
             inset._setup(parent)
 
@@ -273,6 +285,16 @@ class Insets(list[inset_element]):
             insets = [inset for inset in self if not inset.on_top][::-1]
 
         for inset in insets:
+            if inset.align_to == "footer" and not self._host.labels.get(
+                "footer", ""
+            ):
+                warn(
+                    "An inset with align_to='footer' was placed, but the "
+                    "plot has no footer text. The inset will not be shown. "
+                    "Set a footer with labs(footer=...).",
+                    PlotnineWarning,
+                )
+                continue
             inset._draw_in_host()
 
     def __and__(self, rhs) -> Insets:

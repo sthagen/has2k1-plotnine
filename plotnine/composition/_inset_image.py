@@ -4,12 +4,14 @@ from copy import deepcopy
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
+from PIL import Image
 from PIL.Image import Image as PILImage
 
 from ..themes.theme import theme
 
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
+    from matplotlib.image import BboxImage
     from matplotlib.patches import Rectangle
     from matplotlib.transforms import Bbox
 
@@ -62,6 +64,10 @@ class _InsetImage:
     # ratio doesn't match.
     _anchor: tuple[float, float]
 
+    # BboxImage artist created in draw(); its data is updated by
+    # _arrange_in_box once the layout engine computes the final bbox.
+    _image_artist: BboxImage
+
     def __init__(
         self,
         image: PILImage | np.ndarray,
@@ -70,8 +76,8 @@ class _InsetImage:
     ):
         from matplotlib.transforms import Bbox
 
-        self._image = image
-        self._image_size = _image_size(image)  # (W, H) px
+        self._image = _to_pil_image(image)
+        self._image_size = self._image.size  # (W, H) px
         self._frac_bbox = Bbox.unit()
         self._anchor = _resolve_anchor(anchor)
         self.theme = theme()
@@ -106,6 +112,8 @@ class _InsetImage:
             Fractional figure-coordinates of the box assigned to this
             inset by `inset_element.align_to`.
         """
+        from matplotlib.transforms import TransformedBbox
+
         l, b, r, t = _fit_aspect(
             left,
             bottom,
@@ -118,6 +126,26 @@ class _InsetImage:
         self._frac_bbox.bounds = (l, b, r - l, t - b)  # pyright: ignore[reportAttributeAccessIssue]
         self.patch.set_bounds(left, bottom, right - left, top - bottom)
 
+        # The layout engine has finalised the bbox, so its device-pixel
+        # size is now known. _fit_aspect preserves the source aspect, so
+        # both axes scale by the same factor.
+        source_w, source_h = self._image_size
+        tbox = TransformedBbox(self._frac_bbox, self.figure.transFigure)
+        tw = max(1, round(tbox.width))
+        th = max(1, round(tbox.height))
+        downscaling = tw < source_w and th < source_h
+
+        # LANCZOS to shrink: it antialiases the downscale.
+        # Not LANCZOS to enlarge: it looks hazy and rings badly on
+        # hard edges, so NEAREST.
+        if downscaling:
+            resampling = Image.Resampling.LANCZOS
+        else:
+            resampling = Image.Resampling.NEAREST
+
+        resized = self._image.resize((tw, th), resampling)
+        self._image_artist.set_data(np.asarray(resized))
+
     def draw(self):
         from matplotlib.image import BboxImage
         from matplotlib.transforms import TransformedBbox
@@ -127,11 +155,13 @@ class _InsetImage:
         self.theme._setup(self)  # pyright: ignore[reportArgumentType]
         self._draw_plot_background()
 
-        image_artist = BboxImage(
-            TransformedBbox(self._frac_bbox, self.figure.transFigure)
+        tbox = TransformedBbox(self._frac_bbox, self.figure.transFigure)
+        # The image data is set later by _arrange_in_box, once the layout
+        # engine has computed the final device-pixel dimensions.
+        self._image_artist = BboxImage(
+            tbox, interpolation="none", resample=False
         )
-        image_artist.set_data(np.asarray(self._image))
-        self.figure.add_artist(image_artist)
+        self.figure.add_artist(self._image_artist)
 
         self.theme.apply()
 
@@ -150,16 +180,22 @@ class _InsetImage:
         self.theme.targets.plot_background = self.patch
 
 
-def _image_size(obj: PILImage | np.ndarray) -> tuple[int, int]:
+def _to_pil_image(obj: PILImage | np.ndarray) -> PILImage:
     """
-    Return the (width, height) of a PIL image or ndarray in pixels
+    Normalise an image input to a PIL Image for resampling
+
+    A `PIL.Image` is returned unchanged. A uint8 ndarray (L / RGB /
+    RGBA) is wrapped directly. A float ndarray follows matplotlib's
+    `[0, 1]` convention and is clipped then scaled to uint8; the final
+    inset output is an 8-bit raster regardless, so nothing visible is
+    lost.
     """
     if isinstance(obj, PILImage):
-        return obj.size  # PIL exposes (W, H)
-
+        return obj
     arr = np.asarray(obj)
-    h, w = arr.shape[:2]  # ndarray is HWC or HW
-    return w, h
+    if arr.dtype != np.uint8:
+        arr = (np.clip(arr, 0, 1) * 255).round().astype(np.uint8)
+    return Image.fromarray(arr)
 
 
 # Named anchors → (h, v) fractions in [0, 1]², where `h = 0`
