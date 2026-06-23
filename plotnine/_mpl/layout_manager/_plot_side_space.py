@@ -15,6 +15,7 @@ from dataclasses import replace
 from functools import cached_property
 from typing import TYPE_CHECKING
 
+from plotnine._utils import MARGIN_SIDE
 from plotnine.exceptions import PlotnineError
 from plotnine.facets import facet_grid, facet_null, facet_wrap
 
@@ -196,7 +197,6 @@ class left_space(_plot_side_space):
     """
     legend: float = 0
     legend_box_spacing: float = 0
-    axis_title_y_margin_left: float = 0
     axis_title_y: float = 0
     axis_title_y_margin_right: float = 0
     axis_title_alignment: float = 0
@@ -207,7 +207,6 @@ class left_space(_plot_side_space):
     the difference between the largest and smallest axis_title_clearance
     among the items in the composition.
     """
-    axis_text_y_margin_left: float = 0
     axis_text_y: float = 0
     axis_text_y_margin_right: float = 0
     axis_ticks_y: float = 0
@@ -229,20 +228,23 @@ class left_space(_plot_side_space):
             self.legend = self.legend_width
             self.legend_box_spacing = theme.getp("legend_box_spacing")
 
-        if items.axis_title_y:
-            m = theme.get_margin("axis_title_y").fig
-            self.axis_title_y_margin_left = m.l
-            self.axis_title_y = geometry.width(items.axis_title_y)
-            self.axis_title_y_margin_right = m.r
+        # The text<->panel gap is the right margin of the y text/title; it
+        # sits on the panel-facing (right) side of the left axis.
+        if items.axis_title_y_left:
+            self.axis_title_y = geometry.width(items.axis_title_y_left)
+            self.axis_title_y_margin_right = getattr(
+                theme.get_margin("axis_title_y_left").fig,
+                MARGIN_SIDE["left"],
+            )
 
-        # Account for the space consumed by the axis
-        self.axis_text_y = items.axis_text_y_max_width_at("first_col")
+        self.axis_text_y = items.axis_text_y_left
         if self.axis_text_y:
-            m = theme.get_margin("axis_text_y").fig
-            self.axis_text_y_margin_left = m.l
-            self.axis_text_y_margin_right = m.r
+            self.axis_text_y_margin_right = getattr(
+                theme.get_margin("axis_text_y_left").fig,
+                MARGIN_SIDE["left"],
+            )
 
-        self.axis_ticks_y = items.axis_ticks_y_max_width_at("first_col")
+        self.axis_ticks_y = items.axis_ticks_y_left
 
         # Adjust plot_margin to make room for ylabels that protude well
         # beyond the axes
@@ -329,6 +331,12 @@ class right_space(_plot_side_space):
     legend: float = 0
     legend_box_spacing: float = 0
     strip_text_y_extra_width: float = 0
+    axis_title_y: float = 0
+    axis_title_y_margin_left: float = 0
+    axis_title_alignment: float = 0
+    axis_text_y: float = 0
+    axis_text_y_margin_left: float = 0
+    axis_ticks_y: float = 0
 
     def _calculate(self):
         items = self.items
@@ -348,6 +356,24 @@ class right_space(_plot_side_space):
             self.legend_box_spacing = theme.getp("legend_box_spacing")
 
         self.strip_text_y_extra_width = items.strip_text_y_extra_width("right")
+
+        # Space consumed by a y-axis on the right. The text<->panel gap is the
+        # left margin of the y text/title (the edge facing the panel to the
+        # left).
+        if items.axis_title_y_right:
+            self.axis_title_y = geometry.width(items.axis_title_y_right)
+            self.axis_title_y_margin_left = getattr(
+                theme.get_margin("axis_title_y_right").fig,
+                MARGIN_SIDE["right"],
+            )
+
+        self.axis_text_y = items.axis_text_y_right
+        if self.axis_text_y:
+            self.axis_text_y_margin_left = getattr(
+                theme.get_margin("axis_text_y_right").fig,
+                MARGIN_SIDE["right"],
+            )
+        self.axis_ticks_y = items.axis_ticks_y_right
 
         # Adjust plot_margin to make room for ylabels that protude well
         # beyond the axes
@@ -440,6 +466,12 @@ class top_space(_plot_side_space):
     legend: float = 0
     legend_box_spacing: float = 0
     strip_text_x_extra_height: float = 0
+    axis_title_x: float = 0
+    axis_title_x_margin_bottom: float = 0
+    axis_title_alignment: float = 0
+    axis_text_x: float = 0
+    axis_text_x_margin_bottom: float = 0
+    axis_ticks_x: float = 0
 
     def _calculate(self):
         items = self.items
@@ -473,6 +505,23 @@ class top_space(_plot_side_space):
             self.legend_box_spacing = theme.getp("legend_box_spacing") * F
 
         self.strip_text_x_extra_height = items.strip_text_x_extra_height("top")
+
+        # Space consumed by an x-axis on the top. The text<->panel gap is the
+        # bottom margin of the x text/title (the edge facing the panel below).
+        if items.axis_title_x_top:
+            self.axis_title_x = geometry.height(items.axis_title_x_top)
+            self.axis_title_x_margin_bottom = getattr(
+                theme.get_margin("axis_title_x_top").fig,
+                MARGIN_SIDE["top"],
+            )
+
+        self.axis_text_x = items.axis_text_x_top
+        if self.axis_text_x:
+            self.axis_text_x_margin_bottom = getattr(
+                theme.get_margin("axis_text_x_top").fig,
+                MARGIN_SIDE["top"],
+            )
+        self.axis_ticks_x = items.axis_ticks_x_top
 
         # Adjust plot_margin to make room for ylabels that protude well
         # beyond the axes
@@ -567,7 +616,6 @@ class bottom_space(_plot_side_space):
     plot_caption_margin_top: float = 0
     legend: float = 0
     legend_box_spacing: float = 0
-    axis_title_x_margin_bottom: float = 0
     axis_title_x: float = 0
     axis_title_x_margin_top: float = 0
     axis_title_alignment: float = 0
@@ -579,7 +627,6 @@ class bottom_space(_plot_side_space):
     composition. It's amount is the difference in height between this axis
     text (and it's margins) and the tallest axis text (and it's margin).
     """
-    axis_text_x_margin_bottom: float = 0
     axis_text_x: float = 0
     axis_text_x_margin_top: float = 0
     axis_ticks_x: float = 0
@@ -615,19 +662,22 @@ class bottom_space(_plot_side_space):
             self.legend = self.legend_height
             self.legend_box_spacing = theme.getp("legend_box_spacing") * F
 
-        if items.axis_title_x:
-            m = theme.get_margin("axis_title_x").fig
-            self.axis_title_x_margin_bottom = m.b
-            self.axis_title_x = geometry.height(items.axis_title_x)
-            self.axis_title_x_margin_top = m.t
+        # The text<->panel gap is the top margin of the x text/title; it
+        # sits on the panel-facing (top) side of the bottom axis.
+        if items.axis_title_x_bottom:
+            self.axis_title_x = geometry.height(items.axis_title_x_bottom)
+            self.axis_title_x_margin_top = getattr(
+                theme.get_margin("axis_title_x_bottom").fig,
+                MARGIN_SIDE["bottom"],
+            )
 
-        # Account for the space consumed by the axis
-        self.axis_text_x = items.axis_text_x_max_height_at("last_row")
+        self.axis_text_x = items.axis_text_x_bottom
         if self.axis_text_x:
-            m = theme.get_margin("axis_text_x").fig
-            self.axis_text_x_margin_bottom = m.b
-            self.axis_text_x_margin_top = m.t
-        self.axis_ticks_x = items.axis_ticks_x_max_height_at("last_row")
+            self.axis_text_x_margin_top = getattr(
+                theme.get_margin("axis_text_x_bottom").fig,
+                MARGIN_SIDE["bottom"],
+            )
+        self.axis_ticks_x = items.axis_ticks_x_bottom
 
         # Adjust plot_margin to make room for ylabels that protude well
         # beyond the axes
@@ -1082,13 +1132,15 @@ class PlotSideSpaces:
             self.sh += self.t.strip_text_x_extra_height * (1 + strip_align_x)
 
         if facet.free["x"]:
-            self.sh += self.items.axis_text_x_max_height_at(
-                "all"
-            ) + self.items.axis_ticks_x_max_height_at("all")
+            for side in ("bottom", "top"):
+                self.sh += self.items.axis_text_x_max_height_at(
+                    "all", side
+                ) + self.items.axis_ticks_x_max_height_at("all", side)
         if facet.free["y"]:
-            self.sw += self.items.axis_text_y_max_width_at(
-                "all"
-            ) + self.items.axis_ticks_y_max_width_at("all")
+            for side in ("left", "right"):
+                self.sw += self.items.axis_text_y_max_width_at(
+                    "all", side
+                ) + self.items.axis_ticks_y_max_width_at("all", side)
 
         # width and height of axes as fraction of figure width & height
         self.w = (self.panel_width - self.sw * (ncol - 1)) / ncol

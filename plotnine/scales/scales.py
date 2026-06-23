@@ -3,7 +3,7 @@ from __future__ import annotations
 import itertools
 import typing
 from contextlib import suppress
-from typing import List
+from typing import List, cast
 from warnings import warn
 
 import numpy as np
@@ -18,6 +18,7 @@ from .scale import scale
 if typing.TYPE_CHECKING:
     import pandas as pd
 
+    from plotnine.scales.scale_xy import ScaleX, ScaleY
     from plotnine.typing import ScaledAestheticsName
 
 
@@ -85,18 +86,29 @@ class Scales(List[scale]):
             return None
 
     @property
-    def x(self) -> scale | None:
+    def x(self) -> ScaleX | None:
         """
         Return x scale
         """
-        return self.get_scales("x")
+        return cast("ScaleX | None", self.get_scales("x"))
 
     @property
-    def y(self) -> scale | None:
+    def y(self) -> ScaleY | None:
         """
         Return y scale
         """
-        return self.get_scales("y")
+        return cast("ScaleY| None", self.get_scales("y"))
+
+    @property
+    def axis_positions(self) -> tuple[str, str]:
+        """
+        The sides the x and y axes occupy, as `(x_side, y_side)`
+        """
+        # scales.x / scales.y can be None here if "missing" scales
+        # have not yet been added.
+        x_side = "bottom" if self.x is None else self.x.position
+        y_side = "left" if self.y is None else self.y.position
+        return x_side, y_side
 
     def non_position_scales(self) -> Scales:
         """

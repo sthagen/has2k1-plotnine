@@ -74,7 +74,7 @@ class Layout:
 
         # Generate panel layout
         data = self.facet.setup_data(data)
-        self.layout = self.facet.compute_layout(data)
+        self.layout = self.facet.compute_layout(data, plot.scales)
         self.layout = self.coord.setup_layout(self.layout)
         self.check_layout()
 

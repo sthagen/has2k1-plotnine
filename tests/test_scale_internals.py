@@ -56,7 +56,7 @@ from plotnine.scales.scale_xy import (
     scale_y_continuous,
     scale_y_log10,
 )
-from plotnine.scales.scales import make_scale
+from plotnine.scales.scales import Scales, make_scale
 
 PANDAS_LT_3 = Version(pd.__version__) < Version("3.0")
 
@@ -915,3 +915,26 @@ def test_transform_datetime_aes_param():
         + geom_point(y=yparam, color="red")
     )
     assert p == "transform_datetime_aes_param"
+
+
+def test_position_invalid_for_aesthetic():
+    with pytest.raises(PlotnineError):
+        scale_x_continuous(position="left")  # pyright: ignore[reportArgumentType]
+    with pytest.raises(PlotnineError):
+        scale_y_continuous(position="bottom")  # pyright: ignore[reportArgumentType]
+    with pytest.raises(PlotnineError):
+        scale_x_continuous(position="middle")  # pyright: ignore[reportArgumentType]
+
+
+def test_scales_axis_positions():
+    # No position scales -> defaults
+    assert Scales().axis_positions == ("bottom", "left")
+
+    # Explicit sides are read from the scales
+    s = Scales(
+        [
+            scale_x_continuous(position="top"),
+            scale_y_continuous(position="right"),
+        ]
+    )
+    assert s.axis_positions == ("top", "right")

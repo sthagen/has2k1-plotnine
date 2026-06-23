@@ -24,6 +24,8 @@ if typing.TYPE_CHECKING:
     from plotnine.iapi import layout_details
     from plotnine.typing import FacetSpaceRatios
 
+    from ..scales.scales import Scales
+
 
 class facet_grid(facet):
     """
@@ -165,7 +167,11 @@ class facet_grid(facet):
             **ratios,
         )
 
-    def compute_layout(self, data: list[pd.DataFrame]) -> pd.DataFrame:
+    def compute_layout(
+        self,
+        data: list[pd.DataFrame],
+        scales: Scales,
+    ) -> pd.DataFrame:
         if not self.rows and not self.cols:
             self.nrow, self.ncol = 1, 1
             return layout_null()
@@ -215,8 +221,15 @@ class facet_grid(facet):
         # Relax constraints, if necessary
         layout["SCALE_X"] = layout["COL"] if self.free["x"] else 1
         layout["SCALE_Y"] = layout["ROW"] if self.free["y"] else 1
-        layout["AXIS_X"] = layout["ROW"] == layout["ROW"].max()
-        layout["AXIS_Y"] = layout["COL"] == layout["COL"].min()
+        x_side, y_side = scales.axis_positions
+        if x_side == "top":
+            layout["AXIS_X"] = layout["ROW"] == layout["ROW"].min()
+        else:
+            layout["AXIS_X"] = layout["ROW"] == layout["ROW"].max()
+        if y_side == "right":
+            layout["AXIS_Y"] = layout["COL"] == layout["COL"].max()
+        else:
+            layout["AXIS_Y"] = layout["COL"] == layout["COL"].min()
 
         self.nrow = layout["ROW"].max()
         self.ncol = layout["COL"].max()
