@@ -43,12 +43,14 @@ if TYPE_CHECKING:
     from plotnine.themes.elements import margin as Margin
     from plotnine.themes.theme import theme
     from plotnine.typing import (
+        HorizontalJustification,
         StripPosition,
+        VerticalJustification,
     )
 
     from ._composition_layout_items import CompositionLayoutItems
     from ._composition_side_space import CompositionSideSpaces
-    from ._plot_side_space import PlotSideSpaces, _plot_side_space
+    from ._plot_side_space import PlotSideSpaces
 
     AxesLocation: TypeAlias = Literal[
         "all", "first_row", "last_row", "first_col", "last_col"
@@ -70,10 +72,24 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class StripSizing:
+class StripSpec:
     """
-    Theme inputs that fix a strip background's size and offset
+    Resolved orientation and theme inputs for laying out a strip
+
+    Built from a `StripText` and the plot theme. `axis` selects the
+    breadth axis and theme keys; `sign` is the outward direction (`+1` grows
+    in the positive axis direction, `-1` in the negative).
     """
+
+    axis: Literal["x", "y"]
+    """`x` for top/bottom strips, `y` for left/right"""
+
+    sign: Literal[1, -1]
+    """Direction the strip extends from the panel edge: `+1` (top/right)
+    toward larger axes coordinates, `-1` (bottom/left) toward smaller"""
+
+    breadth: Literal["height", "width"]
+    """Figure dimension that grows with the strip text"""
 
     margin: Margin
     """Strip text margin with the units in lines"""
@@ -81,17 +97,43 @@ class StripSizing:
     strip_align: float
     """How far the background is offset from the panel edge"""
 
-    bg_x: float
-    """Left of the strip background in transAxes"""
+    bg_along: float
+    """Position of the background along the panel edge (transAxes)"""
 
-    bg_y: float
-    """Bottom of the strip background in transAxes"""
+    bg_fraction: float
+    """Fraction of the panel edge the background spans"""
 
-    bg_width: float
-    """Width of the strip background in transAxes (top strips)"""
+    ha: HorizontalJustification | float
+    """Horizontal justification of the text within the background"""
 
-    bg_height: float
-    """Height of the strip background in transAxes (right strips)"""
+    va: VerticalJustification | float
+    """Vertical justification of the text within the background"""
+
+    @classmethod
+    def make(cls, strip_text: StripText, theme: theme) -> StripSpec:
+        """
+        The layout spec for one strip, given the plot theme
+        """
+        position = strip_text.position
+        g: Literal["x", "y"] = "y" if position in ("left", "right") else "x"
+        sign: Literal[1, -1] = 1 if position in ("top", "right") else -1
+        breadth: Literal["height", "width"] = "height" if g == "x" else "width"
+        # bg_fraction is the background's extent *along* the panel edge —
+        # the dimension opposite to breadth.
+        span_key = "width" if g == "x" else "height"
+        text_key = f"strip_text_{g}_{position}"
+        along_key = "x" if g == "x" else "y"
+        return cls(
+            axis=g,
+            sign=sign,
+            breadth=breadth,
+            margin=theme.getp((text_key, "margin")).to("lines"),
+            strip_align=theme.getp(f"strip_align_{g}"),
+            bg_along=theme.getp((text_key, along_key), 0),
+            bg_fraction=theme.getp((f"strip_background_{g}", span_key), 1),
+            ha=theme.getp((text_key, "ha"), "center"),
+            va=theme.getp((text_key, "va"), "center"),
+        )
 
 
 class PlotLayoutItems:
@@ -115,8 +157,6 @@ class PlotLayoutItems:
         self.plot = plot
         self.geometry = ArtistGeometry(self.plot.figure)
 
-        self.axis_title_x: Text | None = get("axis_title_x")
-        self.axis_title_y: Text | None = get("axis_title_y")
         self.axis_title_x_bottom: Text | None = get("axis_title_x_bottom")
         self.axis_title_x_top: Text | None = get("axis_title_x_top")
         self.axis_title_y_left: Text | None = get("axis_title_y_left")
@@ -130,8 +170,16 @@ class PlotLayoutItems:
         self.plot_subtitle: Text | None = get("plot_subtitle")
         self.plot_title: Text | None = get("plot_title")
         self.plot_tag: Text | None = get("plot_tag")
-        self.strip_text_x: list[StripText] | None = get("strip_text_x")
-        self.strip_text_y: list[StripText] | None = get("strip_text_y")
+        self.strip_text_x_top: list[StripText] | None = get("strip_text_x_top")
+        self.strip_text_x_bottom: list[StripText] | None = get(
+            "strip_text_x_bottom"
+        )
+        self.strip_text_y_left: list[StripText] | None = get(
+            "strip_text_y_left"
+        )
+        self.strip_text_y_right: list[StripText] | None = get(
+            "strip_text_y_right"
+        )
 
         self.plot_footer_background: Rectangle | None = get(
             "plot_footer_background"
@@ -220,78 +268,55 @@ class PlotLayoutItems:
 
         return chain(major, minor)
 
-    def _strip_sizing(self, position: StripPosition) -> StripSizing:
-        """
-        Theme inputs that fix one strip's background size and offset
-
-        The keys read depend on the side the strip sits on.
-        """
-        theme = self.plot.theme
-        if position == "top":
-            return StripSizing(
-                margin=theme.getp(("strip_text_x", "margin")).to("lines"),
-                strip_align=theme.getp("strip_align_x"),
-                bg_x=theme.getp(("strip_text_x", "x"), 0),
-                bg_y=1,
-                bg_width=theme.getp(("strip_background_x", "width"), 1),
-                bg_height=0,
-            )
-        else:
-            return StripSizing(
-                margin=theme.getp(("strip_text_y", "margin")).to("lines"),
-                strip_align=theme.getp("strip_align_y"),
-                bg_x=1,
-                bg_y=theme.getp(("strip_text_y", "y"), 0),
-                bg_width=0,
-                bg_height=theme.getp(("strip_background_y", "height"), 1),
-            )
-
     def strip_patch_bbox(
         self, strip_text: StripText, scale: float = 1
     ) -> Bbox:
         """
         Figure-space bounding box of one strip's background patch
 
-        The breadth (height for top strips, width for right strips) is
-        scaled by `scale` so the layout manager can equalise strips in
-        the same group.
+        The breadth (height for x-axis strips, width for y-axis strips) is
+        scaled by `scale` so the layout manager can equalise strips in the
+        same group.
         """
         from matplotlib.transforms import Bbox
 
-        sizing = self._strip_sizing(strip_text.position)
-        m = sizing.margin
+        spec = StripSpec.make(strip_text, self.plot.theme)
+        m = spec.margin
         text_bbox = self.geometry.bbox(strip_text)
         ax_bbox = self.geometry.bbox(strip_text.ax)
         W, H = self.plot.figure.bbox.width, self.plot.figure.bbox.height
         line_height = strip_text._line_height(self.geometry.renderer)
 
-        x0 = rel_position(sizing.bg_x, 0, ax_bbox.x0, ax_bbox.x1)
-        y0 = rel_position(sizing.bg_y, 0, ax_bbox.y0, ax_bbox.y1)
-
-        if strip_text.position == "top":
+        if spec.axis == "x":
             margins = (m.b + m.t) * line_height / H
-            width = ax_bbox.width * sizing.bg_width
-            height = (text_bbox.height + margins) * scale
-            y0 += height * sizing.strip_align
+            breadth = (text_bbox.height + margins) * scale
+            along = ax_bbox.width * spec.bg_fraction
+            x0 = rel_position(spec.bg_along, 0, ax_bbox.x0, ax_bbox.x1)
+            edge = ax_bbox.y1 if spec.sign == 1 else ax_bbox.y0
+            y0 = edge if spec.sign == 1 else edge - breadth
+            y0 += spec.sign * breadth * spec.strip_align
+            return Bbox.from_bounds(x0, y0, along, breadth)
         else:
             margins = (m.l + m.r) * line_height / W
-            height = ax_bbox.height * sizing.bg_height
-            width = (text_bbox.width + margins) * scale
-            x0 += width * sizing.strip_align
-        return Bbox.from_bounds(x0, y0, width, height)
+            breadth = (text_bbox.width + margins) * scale
+            along = ax_bbox.height * spec.bg_fraction
+            y0 = rel_position(spec.bg_along, 0, ax_bbox.y0, ax_bbox.y1)
+            edge = ax_bbox.x1 if spec.sign == 1 else ax_bbox.x0
+            x0 = edge if spec.sign == 1 else edge - breadth
+            x0 += spec.sign * breadth * spec.strip_align
+            return Bbox.from_bounds(x0, y0, breadth, along)
 
-    def strip_text_x_extra_height(self, position: StripPosition) -> float:
+    def strip_text_x(self, position: StripPosition) -> float:
         """
-        Height taken up by the top strips that is outside the panels
+        Outward height of the x-axis strips on one side, in figure space
         """
-        if not self.strip_text_x:
+        strips = getattr(self, f"strip_text_x_{position}")
+        if not strips:
             return 0
 
         heights = []
-        for st in self.strip_text_x:
-            if st.position != position:
-                continue
-            strip_align = self._strip_sizing(st.position).strip_align
+        for st in strips:
+            strip_align = StripSpec.make(st, self.plot.theme).strip_align
             if st.patch.get_visible():
                 # The patch bounds are not yet set, so derive its natural
                 # height from the sizing inputs.
@@ -302,18 +327,17 @@ class PlotLayoutItems:
 
         return max(heights) if heights else 0
 
-    def strip_text_y_extra_width(self, position: StripPosition) -> float:
+    def strip_text_y(self, position: StripPosition) -> float:
         """
-        Width taken up by the right strips that is outside the panels
+        Outward width of the y-axis strips on one side, in figure space
         """
-        if not self.strip_text_y:
+        strips = getattr(self, f"strip_text_y_{position}")
+        if not strips:
             return 0
 
         widths = []
-        for st in self.strip_text_y:
-            if st.position != position:
-                continue
-            strip_align = self._strip_sizing(st.position).strip_align
+        for st in strips:
+            strip_align = StripSpec.make(st, self.plot.theme).strip_align
             if st.patch.get_visible():
                 # The patch bounds are not yet set, so derive its natural
                 # width from the sizing inputs.
@@ -500,37 +524,35 @@ class PlotLayoutItems:
         )
 
         if self.plot_tag:
-            set_plot_tag_position(self.plot_tag, spaces)
+            _position_plot_tag(self.plot_tag, spaces)
 
         if self.axis_title_x_bottom:
             ha = theme.getp(("axis_title_x_bottom", "ha"), "center")
-            self.axis_title_x_bottom.set_y(spaces.b.y1("axis_title_x"))
+            self.axis_title_x_bottom.set_y(spaces.b.y1("axis_title"))
             justify.horizontally_about(self.axis_title_x_bottom, ha, "panel")
 
         if self.axis_title_x_top:
             ha = theme.getp(("axis_title_x_top", "ha"), "center")
-            offset = spaces.t.strip_band_offset("title")
-            self.axis_title_x_top.set_y(spaces.t.y1("axis_title_x") + offset)
+            self.axis_title_x_top.set_y(spaces.t.y1("axis_title"))
             justify.horizontally_about(self.axis_title_x_top, ha, "panel")
 
         if self.axis_title_y_left:
             va = theme.getp(("axis_title_y_left", "va"), "center")
-            self.axis_title_y_left.set_x(spaces.l.x1("axis_title_y"))
+            self.axis_title_y_left.set_x(spaces.l.x1("axis_title"))
             justify.vertically_about(self.axis_title_y_left, va, "panel")
 
         if self.axis_title_y_right:
             va = theme.getp(("axis_title_y_right", "va"), "center")
-            offset = spaces.r.strip_band_offset("title")
-            self.axis_title_y_right.set_x(spaces.r.x1("axis_title_y") + offset)
+            self.axis_title_y_right.set_x(spaces.r.x1("axis_title"))
             justify.vertically_about(self.axis_title_y_right, va, "panel")
 
         if self.legends:
-            set_legends_position(self.legends, spaces)
+            _position_legends(self.legends, spaces)
 
         self._adjust_axis_text_x(justify, spaces)
         self._adjust_axis_text_y(justify, spaces)
-        self._place_moved_axes(spaces)
-        self._place_strip_backgrounds(spaces)
+        self._position_moved_axes(spaces)
+        self._position_strip_backgrounds(spaces)
 
     def _adjust_axis_text_x(
         self, justify: TextJustifier, spaces: PlotSideSpaces
@@ -648,7 +670,7 @@ class PlotLayoutItems:
                     )
                     justify.horizontally(text, ha, low, high, width=width)
 
-    def _place_moved_axes(self, spaces: PlotSideSpaces):
+    def _position_moved_axes(self, spaces: PlotSideSpaces):
         """
         Push a moved axis past the strip for strip_placement="inside"
 
@@ -676,116 +698,137 @@ class PlotLayoutItems:
         Per-strip factor that equalises the breadth across a group
 
         Each strip's natural breadth is grown to match the largest in
-        the group, so the backgrounds share a common height (top strips)
-        or width (right strips).
+        the group, so the backgrounds share a common height (x-axis strips)
+        or width (y-axis strips).
         """
         natural = [getattr(self.strip_patch_bbox(st), breadth) for st in group]
         largest = max(natural)
         return [largest / b for b in natural]
 
-    def _place_strip_backgrounds(self, spaces: PlotSideSpaces):
+    def _position_strip_backgrounds(self, spaces: PlotSideSpaces):
         """
         Fix each strip background at its final bounds and place its text
 
         When `strip_placement="outside"` and a moved axis shares the
         strip's side, the strip is shifted outward to clear the axis.
         """
-        groups: tuple[
-            tuple[
-                list[StripText],
-                Literal["height", "width"],
-                _plot_side_space,
-            ],
-            ...,
-        ] = (
-            (self.strip_text_x or [], "height", spaces.t),
-            (self.strip_text_y or [], "width", spaces.r),
+        theme = self.plot.theme
+        groups = (
+            (self.strip_text_x_top or [], spaces.t),
+            (self.strip_text_x_bottom or [], spaces.b),
+            (self.strip_text_y_right or [], spaces.r),
+            (self.strip_text_y_left or [], spaces.l),
         )
-        for group, breadth, space in groups:
+        for group, space in groups:
             if not group:
                 continue
             offset = space.strip_band_offset("strip")
+            breadth = StripSpec.make(group[0], theme).breadth
             scales = self._strip_breadth_scales(group, breadth)
             for st, scale in zip(group, scales):
+                spec = StripSpec.make(st, theme)
                 x0, y0, w, h = self.strip_patch_bbox(st, scale).bounds
-                if st.position == "top":
-                    y0 += offset
+                if spec.axis == "x":
+                    y0 += spec.sign * offset
                 else:
-                    x0 += offset
+                    x0 += spec.sign * offset
                 st.patch.set_bounds((x0, y0, w, h))
-                st.patch.set_transform(self.plot.figure.transFigure)
-                self._place_strip_text(st)
+                self._position_strip_text(st)
 
-    def _place_strip_text(self, st: StripText):
+    @staticmethod
+    def _justify_within(
+        rel: float,
+        text_extent: float,
+        lo: float,
+        hi: float,
+        lo_margin: float,
+        hi_margin: float,
+        line_height: float,
+        expand: bool,
+    ) -> float:
+        """
+        Axes-space centre of strip text justified within one patch axis
+
+        `expand` true means the patch was sized independently of the text
+        (the along axis), so the margins widen the justified content; false
+        means the patch was pre-sized to the text plus margins (the breadth
+        axis), so the margins inset the bounds.
+        """
+        if expand:
+            content = text_extent + (lo_margin + hi_margin) * line_height
+            return (
+                rel_position(rel, content, lo, hi)
+                + lo_margin * line_height
+                + text_extent / 2
+            )
+        return (
+            rel_position(
+                rel,
+                text_extent,
+                lo + lo_margin * line_height,
+                hi - hi_margin * line_height,
+            )
+            + text_extent / 2
+        )
+
+    def _position_strip_text(self, st: StripText):
         """
         Justify the strip text within its final background bounds
         """
-        theme = self.plot.theme
-        position = st.position
+        spec = StripSpec.make(st, self.plot.theme)
+        m = spec.margin
         ax = st.ax
         renderer = self.geometry.renderer
-        sizing = self._strip_sizing(position)
-        m = sizing.margin
+        rel_x, rel_y = ha_as_float(spec.ha), va_as_float(spec.va)
 
         patch_bbox = bbox_in_axes_space(st.patch, ax, renderer)
         text_bbox = bbox_in_axes_space(st, ax, renderer)
 
-        if position == "top":
-            ha = theme.getp(("strip_text_x", "ha"), "center")
-            va = theme.getp(("strip_text_x", "va"), "center")
-            rel_x, rel_y = ha_as_float(ha), va_as_float(va)
-
-            # line_height and margins in axes space
+        if spec.axis == "x":
+            # breadth = y (inset), along = x (expanded)
             line_height = st._line_height(renderer) / ax.bbox.height
-
-            x = (
-                # Justify horizontally within the strip_background
-                rel_position(
-                    rel_x,
-                    text_bbox.width + (line_height * (m.l + m.r)),
-                    patch_bbox.x0,
-                    patch_bbox.x1,
-                )
-                + (m.l * line_height)
-                + text_bbox.width / 2
+            x = self._justify_within(
+                rel_x,
+                text_bbox.width,
+                patch_bbox.x0,
+                patch_bbox.x1,
+                m.l,
+                m.r,
+                line_height,
+                expand=True,
             )
-            # Setting the y position based on the bounding box is wrong
-            y = (
-                rel_position(
-                    rel_y,
-                    text_bbox.height,
-                    patch_bbox.y0 + m.b * line_height,
-                    patch_bbox.y1 - m.t * line_height,
-                )
-                + text_bbox.height / 2
+            y = self._justify_within(
+                rel_y,
+                text_bbox.height,
+                patch_bbox.y0,
+                patch_bbox.y1,
+                m.b,
+                m.t,
+                line_height,
+                expand=False,
             )
-        else:  # "right"
-            ha = theme.getp(("strip_text_y", "ha"), "center")
-            va = theme.getp(("strip_text_y", "va"), "center")
-            rel_x, rel_y = ha_as_float(ha), va_as_float(va)
-
-            # line_height in axes space
+        else:
+            # breadth = x (inset), along = y (expanded)
             line_height = st._line_height(renderer) / ax.bbox.width
-
-            x = (
-                rel_position(
-                    rel_x,
-                    text_bbox.width,
-                    patch_bbox.x0 + m.l * line_height,
-                    patch_bbox.x1 - m.r * line_height,
-                )
-                + text_bbox.width / 2
+            x = self._justify_within(
+                rel_x,
+                text_bbox.width,
+                patch_bbox.x0,
+                patch_bbox.x1,
+                m.l,
+                m.r,
+                line_height,
+                expand=False,
             )
-            y = (
-                # Justify vertically within the strip_background
-                rel_position(
-                    rel_y,
-                    text_bbox.height + ((m.b + m.t) * line_height),
-                    patch_bbox.y0,
-                    patch_bbox.y1,
-                )
-                + (m.b * line_height)
-                + text_bbox.height / 2
+            y = self._justify_within(
+                rel_y,
+                text_bbox.height,
+                patch_bbox.y0,
+                patch_bbox.y1,
+                m.b,
+                m.t,
+                line_height,
+                expand=True,
             )
 
         st.set_position((x, y))
@@ -887,7 +930,7 @@ def _position_plot_labels(
     return justify
 
 
-def set_legends_position(
+def _position_legends(
     legends: legend_artists,
     spaces: PlotSideSpaces | CompositionSideSpaces,
 ):
@@ -978,7 +1021,7 @@ def set_legends_position(
             set_position(l.box, l.position, l.justification, transPanels)
 
 
-def set_plot_tag_position(tag: Text, spaces: PlotSideSpaces):
+def _position_plot_tag(tag: Text, spaces: PlotSideSpaces):
     """
     Set the postion of the plot_tag
     """
@@ -989,7 +1032,7 @@ def set_plot_tag_position(tag: Text, spaces: PlotSideSpaces):
     margin = theme.get_margin("plot_tag")
 
     if location == "margin":
-        return set_plot_tag_position_in_margin(tag, spaces)
+        return _position_plot_tag_in_margin(tag, spaces)
 
     lookup: dict[str, tuple[float, float]] = {
         "topleft": (0, 1),
@@ -1039,7 +1082,7 @@ def set_plot_tag_position(tag: Text, spaces: PlotSideSpaces):
     tag.set_position(position)
 
 
-def set_plot_tag_position_in_margin(tag: Text, spaces: PlotSideSpaces):
+def _position_plot_tag_in_margin(tag: Text, spaces: PlotSideSpaces):
     """
     Place the tag in an inner margin around the plot
 

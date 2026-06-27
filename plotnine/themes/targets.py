@@ -25,8 +25,6 @@ class ThemeTargets:
     the figure or the axes.
     """
 
-    axis_title_x: Optional[Text] = None
-    axis_title_y: Optional[Text] = None
     axis_title_x_top: Optional[Text] = None
     axis_title_x_bottom: Optional[Text] = None
     axis_title_y_left: Optional[Text] = None
@@ -49,5 +47,7 @@ class ThemeTargets:
     plot_footer_line: Optional[Line2D] = None
     strip_background_x: list[FancyBboxPatch] = field(default_factory=list)
     strip_background_y: list[FancyBboxPatch] = field(default_factory=list)
-    strip_text_x: list[StripText] = field(default_factory=list)
-    strip_text_y: list[StripText] = field(default_factory=list)
+    strip_text_x_top: list[StripText] = field(default_factory=list)
+    strip_text_x_bottom: list[StripText] = field(default_factory=list)
+    strip_text_y_left: list[StripText] = field(default_factory=list)
+    strip_text_y_right: list[StripText] = field(default_factory=list)
