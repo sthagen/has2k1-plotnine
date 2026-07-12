@@ -17,6 +17,7 @@ from warnings import warn
 
 import numpy as np
 
+from .._mpl.axes import axis_at
 from .._utils import MARGIN_SIDE, has_alpha_channel, side_artists, to_rgba
 from .._utils.registry import RegistryHierarchyMeta
 from ..exceptions import PlotnineError, deprecated_themeable_name
@@ -529,15 +530,17 @@ def blend_alpha(
     return properties
 
 
-def _set_axis_text_margin(themeable, ax, axis: str, side: Side):
+def _set_axis_text_margin(themeable, ax, side: Side):
     """
     Set the gap between axis tick and axis text
     """
     margin = themeable.properties.get("margin")
     if margin is None:
         return
+    if (axis := axis_at(ax, side)) is None:
+        return
     pad = getattr(margin.pt, MARGIN_SIDE[side])
-    ax.tick_params(axis=axis, which="major", pad=pad)
+    axis.set_tick_params(which="major", pad=pad)
 
 
 # element_text themeables
@@ -550,11 +553,6 @@ class axis_title_x_bottom(themeable):
     Parameters
     ----------
     theme_element : element_text
-
-    Notes
-    -----
-    The gap to the panel is set by the top margin (`t`), as for any
-    x-axis title; the other margins are ignored.
     """
 
     def apply_figure(self, figure: Figure, targets: ThemeTargets):
@@ -576,11 +574,6 @@ class axis_title_x_top(themeable):
     Parameters
     ----------
     theme_element : element_text
-
-    Notes
-    -----
-    The gap to the panel is set by the bottom margin (`b`) — the edge
-    that faces the panel below; the other margins are ignored.
     """
 
     def apply_figure(self, figure: Figure, targets: ThemeTargets):
@@ -601,13 +594,6 @@ class axis_title_x(axis_title_x_top, axis_title_x_bottom):
     Parameters
     ----------
     theme_element : element_text
-
-    Notes
-    -----
-    Only the margin on the side that faces the panel has an effect:
-    the top margin (`t`) when the axis is on the bottom, the bottom
-    margin (`b`) when it is on the top. Set both to cover either
-    position.
     """
 
 
@@ -618,11 +604,6 @@ class axis_title_y_left(themeable):
     Parameters
     ----------
     theme_element : element_text
-
-    Notes
-    -----
-    The gap to the panel is set by the right margin (`r`), as for any
-    y-axis title; the other margins are ignored.
     """
 
     def apply_figure(self, figure: Figure, targets: ThemeTargets):
@@ -644,11 +625,6 @@ class axis_title_y_right(themeable):
     Parameters
     ----------
     theme_element : element_text
-
-    Notes
-    -----
-    The gap to the panel is set by the left margin (`l`) — the edge
-    that faces the panel to the left; the other margins are ignored.
     """
 
     def apply_figure(self, figure: Figure, targets: ThemeTargets):
@@ -669,13 +645,6 @@ class axis_title_y(axis_title_y_left, axis_title_y_right):
     Parameters
     ----------
     theme_element : element_text
-
-    Notes
-    -----
-    Only the margin on the side that faces the panel has an effect:
-    the right margin (`r`) when the axis is on the left, the left
-    margin (`l`) when it is on the right. Set both to cover either
-    position.
     """
 
 
@@ -686,14 +655,6 @@ class axis_title(axis_title_x, axis_title_y):
     Parameters
     ----------
     theme_element : element_text
-
-    Notes
-    -----
-    Only the margin on the side that faces the panel has an effect.
-    For the x-axis that is the top margin (`t`) on the bottom or the
-    bottom margin (`b`) on the top; for the y-axis the right margin
-    (`r`) on the left or the left margin (`l`) on the right. Set both
-    margins of each axis to cover either position.
     """
 
 
@@ -1132,26 +1093,21 @@ class axis_text_x_bottom(MixinSequenceOfValues):
     Parameters
     ----------
     theme_element : element_text
-
-    Notes
-    -----
-    The gap to the panel is set by the top margin (`t`), as for any
-    x-axis text; the other margins are ignored.
     """
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
-        if not ax.xaxis.get_tick_params(which="major").get(
-            "labelbottom", False
-        ):
+        if (axis := axis_at(ax, "bottom")) is None:
             return
-        labels = [t.label1 for t in ax.xaxis.get_major_ticks()]
+        labels = [t.label1 for t in axis.get_major_ticks()]
         self.set(labels, self._get_properties(omit=("margin", "va")))
-        _set_axis_text_margin(self, ax, "x", "bottom")
+        _set_axis_text_margin(self, ax, "bottom")
 
     def blank_ax(self, ax: Axes):
         super().blank_ax(ax)
-        for t in ax.xaxis.get_major_ticks():
+        if (axis := axis_at(ax, "bottom")) is None:
+            return
+        for t in axis.get_major_ticks():
             t.label1.set_visible(False)
 
 
@@ -1162,24 +1118,21 @@ class axis_text_x_top(MixinSequenceOfValues):
     Parameters
     ----------
     theme_element : element_text
-
-    Notes
-    -----
-    The gap to the panel is set by the bottom margin (`b`) — the edge
-    that faces the panel below; the other margins are ignored.
     """
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
-        if not ax.xaxis.get_tick_params(which="major").get("labeltop", False):
+        if (axis := axis_at(ax, "top")) is None:
             return
-        labels = [t.label2 for t in ax.xaxis.get_major_ticks()]
+        labels = [t.label2 for t in axis.get_major_ticks()]
         self.set(labels, self._get_properties(omit=("margin", "va")))
-        _set_axis_text_margin(self, ax, "x", "top")
+        _set_axis_text_margin(self, ax, "top")
 
     def blank_ax(self, ax: Axes):
         super().blank_ax(ax)
-        for t in ax.xaxis.get_major_ticks():
+        if (axis := axis_at(ax, "top")) is None:
+            return
+        for t in axis.get_major_ticks():
             t.label2.set_visible(False)
 
 
@@ -1190,19 +1143,6 @@ class axis_text_x(axis_text_x_top, axis_text_x_bottom):
     Parameters
     ----------
     theme_element : element_text
-
-    Notes
-    -----
-    Only the margin on the side that faces the panel has an effect:
-    the top margin (`t`) when the axis is on the bottom, the bottom
-    margin (`b`) when it is on the top. Set both to cover either
-    position. e.g.
-
-    ```python
-    theme(axis_text_x=element_text(margin={"t": 5, "b": 5, "units": "pt"}))
-    ```
-
-    puts a 5 point gap between the labels and the panel on either side.
     """
 
 
@@ -1213,24 +1153,21 @@ class axis_text_y_left(MixinSequenceOfValues):
     Parameters
     ----------
     theme_element : element_text
-
-    Notes
-    -----
-    The gap to the panel is set by the right margin (`r`), as for any
-    y-axis text; the other margins are ignored.
     """
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
-        if not ax.yaxis.get_tick_params(which="major").get("labelleft", False):
+        if (axis := axis_at(ax, "left")) is None:
             return
-        labels = [t.label1 for t in ax.yaxis.get_major_ticks()]
+        labels = [t.label1 for t in axis.get_major_ticks()]
         self.set(labels, self._get_properties(omit=("margin", "ha")))
-        _set_axis_text_margin(self, ax, "y", "left")
+        _set_axis_text_margin(self, ax, "left")
 
     def blank_ax(self, ax: Axes):
         super().blank_ax(ax)
-        for t in ax.yaxis.get_major_ticks():
+        if (axis := axis_at(ax, "left")) is None:
+            return
+        for t in axis.get_major_ticks():
             t.label1.set_visible(False)
 
 
@@ -1241,26 +1178,21 @@ class axis_text_y_right(MixinSequenceOfValues):
     Parameters
     ----------
     theme_element : element_text
-
-    Notes
-    -----
-    The gap to the panel is set by the left margin (`l`) — the edge
-    that faces the panel to the left; the other margins are ignored.
     """
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
-        if not ax.yaxis.get_tick_params(which="major").get(
-            "labelright", False
-        ):
+        if (axis := axis_at(ax, "right")) is None:
             return
-        labels = [t.label2 for t in ax.yaxis.get_major_ticks()]
+        labels = [t.label2 for t in axis.get_major_ticks()]
         self.set(labels, self._get_properties(omit=("margin", "ha")))
-        _set_axis_text_margin(self, ax, "y", "right")
+        _set_axis_text_margin(self, ax, "right")
 
     def blank_ax(self, ax: Axes):
         super().blank_ax(ax)
-        for t in ax.yaxis.get_major_ticks():
+        if (axis := axis_at(ax, "right")) is None:
+            return
+        for t in axis.get_major_ticks():
             t.label2.set_visible(False)
 
 
@@ -1271,19 +1203,6 @@ class axis_text_y(axis_text_y_left, axis_text_y_right):
     Parameters
     ----------
     theme_element : element_text
-
-    Notes
-    -----
-    Only the margin on the side that faces the panel has an effect:
-    the right margin (`r`) when the axis is on the left, the left
-    margin (`l`) when it is on the right. Set both to cover either
-    position. e.g.
-
-    ```python
-    theme(axis_text_y=element_text(margin={"r": 5, "l": 5, "units": "pt"}))
-    ```
-
-    puts a 5 point gap between the labels and the panel on either side.
     """
 
 
@@ -1294,22 +1213,6 @@ class axis_text(axis_text_x, axis_text_y):
     Parameters
     ----------
     theme_element : element_text
-
-    Notes
-    -----
-    Only the margin on the side that faces the panel has an effect.
-    For the x-axis that is the top margin (`t`) on the bottom or the
-    bottom margin (`b`) on the top; for the y-axis the right margin
-    (`r`) on the left or the left margin (`l`) on the right. Set both
-    margins of each axis to cover either position. e.g.
-
-    ```python
-    theme(axis_text=element_text(
-        margin={"t": 5, "b": 5, "r": 5, "l": 5, "units": "pt"}
-    ))
-    ```
-
-    puts a 5 point gap between the labels and the panel on every side.
     """
 
 
@@ -1355,19 +1258,22 @@ class text(axis_text, legend_text, strip_text, title):
 
 def _style_axis_line(themeable, ax, side):
     """
-    Style the spine on one side, when that side carries the axis
+    Style the spine on one side, when that side carries an axis
 
-    `coord.setup_ax` makes only the active side's spine visible, so a hidden
-    spine here is one this axis does not sit on. The spine name equals the
-    side (`bottom`/`top`/`left`/`right`).
+    A side that carries no axis is never styled. Styling also shows
+    the spine: a blank ancestor themeable (applied general-to-specific
+    before this one) may have hidden it, and the explicitly set
+    themeable wins. The spine name equals the side
+    (`bottom`/`top`/`left`/`right`).
     """
-    if not ax.spines[side].get_visible():
+    if side not in getattr(ax, "sides_with_an_axis", ()):
         return
     properties = themeable._get_properties(omit=("solid_capstyle",))
     # MPL has a default zorder of 2.5 for spines, so layers 3+ would be
     # drawn on top of the spines
     if "zorder" not in properties:
         properties["zorder"] = 10000
+    properties.setdefault("visible", True)
     ax.spines[side].set(**properties)
 
 
@@ -1457,15 +1363,15 @@ class axis_line(axis_line_x, axis_line_y):
     """
 
 
-def _style_axis_ticks(themeable, ax, axis_name, which, side):
+def _style_axis_ticks(themeable, ax, which, side):
     """
     Style the tick lines on one side of an axis
+
+    The side implies the axis — primary or secondary, whichever
+    occupies it. A side with no active ticks is not styled; theming
+    should not make hidden ticks visible again.
     """
-    axis = getattr(ax, axis_name)
-    # coord.setup_ax uses set_tick_params to turn off the ticks that will
-    # not show, setting the side key (e.g. params["bottom"]) to False and
-    # the artist invisible. Theming should not make them visible again.
-    if not axis.get_tick_params(which=which).get(side, False):
+    if (axis := axis_at(ax, side)) is None:
         return
 
     # We have to use both Axis.set_tick_params() and Tick.tickline.set().
@@ -1489,11 +1395,12 @@ def _style_axis_ticks(themeable, ax, axis_name, which, side):
     themeable.set([getattr(t, attr) for t in ticks], properties)
 
 
-def _blank_axis_ticks(ax, axis_name, which, side):
+def _blank_axis_ticks(ax, which, side):
     """
     Hide the tick lines on one side of an axis
     """
-    axis = getattr(ax, axis_name)
+    if (axis := axis_at(ax, side)) is None:
+        return
     attr = side_artists(side)[0]
     ticks = (
         axis.get_minor_ticks() if which == "minor" else axis.get_major_ticks()
@@ -1509,11 +1416,11 @@ class axis_ticks_minor_x_bottom(MixinSequenceOfValues):
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
-        _style_axis_ticks(self, ax, "xaxis", "minor", "bottom")
+        _style_axis_ticks(self, ax, "minor", "bottom")
 
     def blank_ax(self, ax: Axes):
         super().blank_ax(ax)
-        _blank_axis_ticks(ax, "xaxis", "minor", "bottom")
+        _blank_axis_ticks(ax, "minor", "bottom")
 
 
 class axis_ticks_minor_x_top(MixinSequenceOfValues):
@@ -1523,11 +1430,11 @@ class axis_ticks_minor_x_top(MixinSequenceOfValues):
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
-        _style_axis_ticks(self, ax, "xaxis", "minor", "top")
+        _style_axis_ticks(self, ax, "minor", "top")
 
     def blank_ax(self, ax: Axes):
         super().blank_ax(ax)
-        _blank_axis_ticks(ax, "xaxis", "minor", "top")
+        _blank_axis_ticks(ax, "minor", "top")
 
 
 class axis_ticks_minor_x(axis_ticks_minor_x_top, axis_ticks_minor_x_bottom):
@@ -1547,11 +1454,11 @@ class axis_ticks_minor_y_left(MixinSequenceOfValues):
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
-        _style_axis_ticks(self, ax, "yaxis", "minor", "left")
+        _style_axis_ticks(self, ax, "minor", "left")
 
     def blank_ax(self, ax: Axes):
         super().blank_ax(ax)
-        _blank_axis_ticks(ax, "yaxis", "minor", "left")
+        _blank_axis_ticks(ax, "minor", "left")
 
 
 class axis_ticks_minor_y_right(MixinSequenceOfValues):
@@ -1561,11 +1468,11 @@ class axis_ticks_minor_y_right(MixinSequenceOfValues):
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
-        _style_axis_ticks(self, ax, "yaxis", "minor", "right")
+        _style_axis_ticks(self, ax, "minor", "right")
 
     def blank_ax(self, ax: Axes):
         super().blank_ax(ax)
-        _blank_axis_ticks(ax, "yaxis", "minor", "right")
+        _blank_axis_ticks(ax, "minor", "right")
 
 
 class axis_ticks_minor_y(axis_ticks_minor_y_left, axis_ticks_minor_y_right):
@@ -1585,11 +1492,11 @@ class axis_ticks_major_x_bottom(MixinSequenceOfValues):
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
-        _style_axis_ticks(self, ax, "xaxis", "major", "bottom")
+        _style_axis_ticks(self, ax, "major", "bottom")
 
     def blank_ax(self, ax: Axes):
         super().blank_ax(ax)
-        _blank_axis_ticks(ax, "xaxis", "major", "bottom")
+        _blank_axis_ticks(ax, "major", "bottom")
 
 
 class axis_ticks_major_x_top(MixinSequenceOfValues):
@@ -1599,11 +1506,11 @@ class axis_ticks_major_x_top(MixinSequenceOfValues):
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
-        _style_axis_ticks(self, ax, "xaxis", "major", "top")
+        _style_axis_ticks(self, ax, "major", "top")
 
     def blank_ax(self, ax: Axes):
         super().blank_ax(ax)
-        _blank_axis_ticks(ax, "xaxis", "major", "top")
+        _blank_axis_ticks(ax, "major", "top")
 
 
 class axis_ticks_major_x(axis_ticks_major_x_top, axis_ticks_major_x_bottom):
@@ -1623,11 +1530,11 @@ class axis_ticks_major_y_left(MixinSequenceOfValues):
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
-        _style_axis_ticks(self, ax, "yaxis", "major", "left")
+        _style_axis_ticks(self, ax, "major", "left")
 
     def blank_ax(self, ax: Axes):
         super().blank_ax(ax)
-        _blank_axis_ticks(ax, "yaxis", "major", "left")
+        _blank_axis_ticks(ax, "major", "left")
 
 
 class axis_ticks_major_y_right(MixinSequenceOfValues):
@@ -1637,11 +1544,11 @@ class axis_ticks_major_y_right(MixinSequenceOfValues):
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
-        _style_axis_ticks(self, ax, "yaxis", "major", "right")
+        _style_axis_ticks(self, ax, "major", "right")
 
     def blank_ax(self, ax: Axes):
         super().blank_ax(ax)
-        _blank_axis_ticks(ax, "yaxis", "major", "right")
+        _blank_axis_ticks(ax, "major", "right")
 
 
 class axis_ticks_major_y(axis_ticks_major_y_left, axis_ticks_major_y_right):
@@ -2169,27 +2076,31 @@ class axis_ticks_length_major_x(themeable):
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
-        value: float | complex = self.properties["value"]
+        for axis in (ax.xaxis, getattr(ax, "sec_xaxis", None)):
+            if axis is None:
+                continue
+            value: float | complex = self.properties["value"]
 
-        try:
-            tick = ax.xaxis.get_major_ticks()[0]
-            visible = (
-                tick.tick1line.get_visible() or tick.tick2line.get_visible()
-            )
-        except IndexError:
-            value = 0
-        else:
-            if not visible:
+            try:
+                tick = axis.get_major_ticks()[0]
+                visible = (
+                    tick.tick1line.get_visible()
+                    or tick.tick2line.get_visible()
+                )
+            except IndexError:
                 value = 0
+            else:
+                if not visible:
+                    value = 0
 
-        if isinstance(value, (float, int)):
-            tickdir = "in" if value < 0 else "out"
-        else:
-            tickdir = "inout"
+            if isinstance(value, (float, int)):
+                tickdir = "in" if value < 0 else "out"
+            else:
+                tickdir = "inout"
 
-        ax.xaxis.set_tick_params(
-            which="major", length=abs(value), tickdir=tickdir
-        )
+            axis.set_tick_params(
+                which="major", length=abs(value), tickdir=tickdir
+            )
 
 
 class axis_ticks_length_major_y(themeable):
@@ -2206,27 +2117,31 @@ class axis_ticks_length_major_y(themeable):
 
     def apply_ax(self, ax: Axes):
         super().apply_ax(ax)
-        value: float | complex = self.properties["value"]
+        for axis in (ax.yaxis, getattr(ax, "sec_yaxis", None)):
+            if axis is None:
+                continue
+            value: float | complex = self.properties["value"]
 
-        try:
-            tick = ax.yaxis.get_major_ticks()[0]
-            visible = (
-                tick.tick1line.get_visible() or tick.tick2line.get_visible()
-            )
-        except IndexError:
-            value = 0
-        else:
-            if not visible:
+            try:
+                tick = axis.get_major_ticks()[0]
+                visible = (
+                    tick.tick1line.get_visible()
+                    or tick.tick2line.get_visible()
+                )
+            except IndexError:
                 value = 0
+            else:
+                if not visible:
+                    value = 0
 
-        if isinstance(value, (float, int)):
-            tickdir = "in" if value < 0 else "out"
-        else:
-            tickdir = "inout"
+            if isinstance(value, (float, int)):
+                tickdir = "in" if value < 0 else "out"
+            else:
+                tickdir = "inout"
 
-        ax.yaxis.set_tick_params(
-            which="major", length=abs(value), tickdir=tickdir
-        )
+            axis.set_tick_params(
+                which="major", length=abs(value), tickdir=tickdir
+            )
 
 
 class axis_ticks_length_major(
@@ -2265,9 +2180,12 @@ class axis_ticks_length_minor_x(themeable):
         else:
             tickdir = "inout"
 
-        ax.xaxis.set_tick_params(
-            which="minor", length=abs(value), tickdir=tickdir
-        )
+        for axis in (ax.xaxis, getattr(ax, "sec_xaxis", None)):
+            if axis is None:
+                continue
+            axis.set_tick_params(
+                which="minor", length=abs(value), tickdir=tickdir
+            )
 
 
 class axis_ticks_length_minor_y(themeable):
@@ -2291,9 +2209,12 @@ class axis_ticks_length_minor_y(themeable):
         else:
             tickdir = "inout"
 
-        ax.yaxis.set_tick_params(
-            which="minor", length=abs(value), tickdir=tickdir
-        )
+        for axis in (ax.yaxis, getattr(ax, "sec_yaxis", None)):
+            if axis is None:
+                continue
+            axis.set_tick_params(
+                which="minor", length=abs(value), tickdir=tickdir
+            )
 
 
 class axis_ticks_length_minor(
@@ -2865,6 +2786,45 @@ class strip_align(strip_align_x, strip_align_y):
     """
 
 
+class strip_switch_pad_x(themeable):
+    """
+    Space between an x-axis and a strip placed beyond it on the same side
+
+    Parameters
+    ----------
+    theme_element : float
+        Size in points. Only has an effect when
+        `strip_placement="outside"` and an axis shares the strip's
+        side (top or bottom).
+    """
+
+
+class strip_switch_pad_y(themeable):
+    """
+    Space between a y-axis and a strip placed beyond it on the same side
+
+    Parameters
+    ----------
+    theme_element : float
+        Size in points. Only has an effect when
+        `strip_placement="outside"` and an axis shares the strip's
+        side (left or right).
+    """
+
+
+class strip_switch_pad(strip_switch_pad_x, strip_switch_pad_y):
+    """
+    Space between an axis and a strip placed beyond it on the same side
+
+    Parameters
+    ----------
+    theme_element : float
+        Size in points. Only has an effect when
+        `strip_placement="outside"` and an axis shares the strip's
+        side.
+    """
+
+
 class strip_placement(themeable):
     """
     Where a facet strip sits relative to an axis on the same side
@@ -3027,10 +2987,15 @@ class axis_ticks_pad_major_x(themeable):
         super().apply_ax(ax)
         val = self.properties["value"]
 
-        for t in ax.xaxis.get_major_ticks():
-            visible = t.tick1line.get_visible() or t.tick2line.get_visible()
-            _val = val if visible else 0
-            t.set_pad(_val)
+        for axis in (ax.xaxis, getattr(ax, "sec_xaxis", None)):
+            if axis is None:
+                continue
+            for t in axis.get_major_ticks():
+                visible = (
+                    t.tick1line.get_visible() or t.tick2line.get_visible()
+                )
+                _val = val if visible else 0
+                t.set_pad(_val)
 
 
 class axis_ticks_pad_major_y(themeable):
@@ -3055,10 +3020,15 @@ class axis_ticks_pad_major_y(themeable):
         super().apply_ax(ax)
         val = self.properties["value"]
 
-        for t in ax.yaxis.get_major_ticks():
-            visible = t.tick1line.get_visible() or t.tick2line.get_visible()
-            _val = val if visible else 0
-            t.set_pad(_val)
+        for axis in (ax.yaxis, getattr(ax, "sec_yaxis", None)):
+            if axis is None:
+                continue
+            for t in axis.get_major_ticks():
+                visible = (
+                    t.tick1line.get_visible() or t.tick2line.get_visible()
+                )
+                _val = val if visible else 0
+                t.set_pad(_val)
 
 
 class axis_ticks_pad_major(axis_ticks_pad_major_x, axis_ticks_pad_major_y):
@@ -3099,10 +3069,15 @@ class axis_ticks_pad_minor_x(themeable):
         super().apply_ax(ax)
         val = self.properties["value"]
 
-        for t in ax.xaxis.get_minor_ticks():
-            visible = t.tick1line.get_visible() or t.tick2line.get_visible()
-            _val = val if visible else 0
-            t.set_pad(_val)
+        for axis in (ax.xaxis, getattr(ax, "sec_xaxis", None)):
+            if axis is None:
+                continue
+            for t in axis.get_minor_ticks():
+                visible = (
+                    t.tick1line.get_visible() or t.tick2line.get_visible()
+                )
+                _val = val if visible else 0
+                t.set_pad(_val)
 
 
 class axis_ticks_pad_minor_y(themeable):
@@ -3126,10 +3101,15 @@ class axis_ticks_pad_minor_y(themeable):
         super().apply_ax(ax)
         val = self.properties["value"]
 
-        for t in ax.yaxis.get_minor_ticks():
-            visible = t.tick1line.get_visible() or t.tick2line.get_visible()
-            _val = val if visible else 0
-            t.set_pad(_val)
+        for axis in (ax.yaxis, getattr(ax, "sec_yaxis", None)):
+            if axis is None:
+                continue
+            for t in axis.get_minor_ticks():
+                visible = (
+                    t.tick1line.get_visible() or t.tick2line.get_visible()
+                )
+                _val = val if visible else 0
+                t.set_pad(_val)
 
 
 class axis_ticks_pad_minor(axis_ticks_pad_minor_x, axis_ticks_pad_minor_y):

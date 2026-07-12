@@ -7,6 +7,10 @@ title: Changelog
 
 ### New
 
+- You can now add a secondary axis to a plot, either as a one-to-one
+  transformation of the primary axis with [](:class:`~plotnine.sec_axis`), or as a
+  mirror of the primary axis with [](:func:`~plotnine.dup_axis`).
+
 - Added [](:class:`~plotnine.composition.plot_layout`) with which you can customise the
   layout of plots in composition.
 
@@ -73,6 +77,10 @@ title: Changelog
   + theme(strip_placement="outside")
   ```
 
+- [](:class:`~plotnine.facet_wrap`) gained a `strip_position` parameter with
+  which you can place the strip on any side of the panel; `"top"` (default),
+  `"bottom"`, `"left"` or `"right"`.
+
 ### API Changes
 
 - Removed `geom.to_layer()`, `stat.to_layer()`, `annotate.to_layer()`,
@@ -103,6 +111,14 @@ title: Changelog
   stats include them automatically.
 
 ### Bug Fixes
+
+- The space between facet panels now accounts for the margins of the axis
+  text, so with free scales large margins no longer push the tick labels
+  into the neighbouring panel.
+
+- Plot titles in a composition now sit at the same height even when the
+  plots differ in what lies between the title and the panel — facet
+  strips, top legends or a top-positioned x axis.
 
 - Subclass geoms now inherit their parent geom's default parameters, so
   parameters that a parent geom supports are no longer rejected.

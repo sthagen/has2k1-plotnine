@@ -291,6 +291,8 @@ quartodoc:
         - scale_y_sqrt
         - scale_y_symlog
         - scale_y_timedelta
+        - sec_axis
+        - dup_axis
 
     - subtitle: Shape Scales
       options: *no-members
@@ -520,6 +522,9 @@ quartodoc:
         - strip_background_x
         - strip_background_y
         - strip_placement
+        - strip_switch_pad
+        - strip_switch_pad_x
+        - strip_switch_pad_y
         - strip_text
         - strip_text_x
         - strip_text_x_bottom

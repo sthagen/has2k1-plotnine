@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import decimal
 import typing
 from copy import copy, deepcopy
 from typing import Iterable, List, cast, overload
@@ -256,6 +257,8 @@ class layer:
                 self.data = self._data.copy()
             else:
                 raise TypeError(f"Data has a bad type: {type(self.data)}")
+
+        self.data = _decimal_columns_to_float(self.data)
 
     def _make_layer_mapping(self, plot_mapping: aes):
         """
@@ -778,3 +781,27 @@ def _resolve_position(
         raise PlotnineError(f"Unknown position of type {type(position_spec)}")
 
     return klass()
+
+
+def _decimal_columns_to_float(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Cast columns of decimal.Decimal values to float
+
+    polars' `to_pandas()` maps a Decimal column onto a pandas object column
+    holding `decimal.Decimal` values. plotnine treats object columns as
+    discrete, so such a column cannot be used with a continuous scale. Casting
+    it to float lets it behave like any other numeric column.
+
+    This runs for every dataframe, so we avoid the expense of `.dropna()`
+    (which builds a filtered copy) and use a mask to peek at the first
+    non-null value instead.
+    """
+    for col in data.columns:
+        series = data[col]
+        if series.dtype == object:
+            mask = series.notna()
+            if mask.any() and isinstance(
+                series[mask.idxmax()], decimal.Decimal
+            ):
+                data[col] = series.astype("float64")
+    return data

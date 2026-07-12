@@ -13,9 +13,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 from functools import cached_property
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
-from plotnine._utils import MARGIN_SIDE
 from plotnine.exceptions import PlotnineError
 from plotnine.facets import facet_grid, facet_null, facet_wrap
 
@@ -143,48 +142,59 @@ class _plot_side_space(_side_space):
             raise PlotnineError("Side has no axis title") from err
 
     @property
-    def _axis_primary_extent(self) -> float:
+    def _axis_ticks_and_text(self) -> float:
         """
-        Outward extent of a moved axis's ticks and tick labels, figure space
+        Outward extent of this side's axis ticks and tick labels, figure space
 
-        This is the part of a moved axis that sits next to the panel; the
-        axis title is excluded. Zero on sides whose axis is in its default
-        position.
+        The axis title is excluded. Computed from the items present on the
+        side, identically for all four sides; zero on a side with no axis.
         """
-        return 0
+        return self.sum_incl("axis_ticks") - self.sum_upto("axis_text")
 
-    # Typed default so strip_band_offset type-checks; concrete sides redeclare.
-    strip_text: float = 0
-
-    def strip_band_offset(self, member: Literal["strip", "axis"]) -> float:
+    def _strip_switch_pad(self, axis: Literal["x", "y"]) -> float:
         """
-        Outward offset for one member of a shared strip/axis band
+        Reserved gap between a shared axis and a strip placed beyond it
 
-        When a moved axis and a facet strip occupy the same side, the band is
+        The gap is non-zero only for `strip_placement="outside"` on a
+        side that carries both a strip and an axis; otherwise zero. The
+        themeable value is in points and is returned as a fraction of
+        the relevant figure dimension (height for x strips, width for y).
+        """
+        theme = self.items.plot.theme
+        if theme.getp("strip_placement") != "outside":
+            return 0
+        strip_breadth: float = self.strip_text  # pyright: ignore[reportAttributeAccessIssue]
+        if not (strip_breadth and self._axis_ticks_and_text):
+            return 0
+        pad_pt = theme.getp(f"strip_switch_pad_{axis}") or 0
+        W, H = theme.getp("figure_size")
+        dim = H if axis == "x" else W
+        return (pad_pt / 72) / dim
+
+    def strip_band_offset(self) -> float:
+        """
+        Outward offset of the axis within a shared strip/axis band
+
+        When a facet strip and an axis occupy the same side, the band is
         ordered from the panel outward. `strip_placement` chooses the order:
 
             "inside":   panel | strip | ticks+labels | title
             "outside":  panel | ticks+labels | strip | title
 
-        `member` is `"strip"` (the strip background + text) or `"axis"` (the
-        ticks and tick labels). The offset is produced here in figure space and
-        consumed per artist in its own coordinate system: the title in figure
-        space, the tick labels in axes fractions, the spine in points.
+        For `"inside"` the axis (ticks and tick labels) clears the strip,
+        so the offset is the strip breadth; for `"outside"` the axis stays
+        at the panel and each strip clears its own panel's axis instead
+        (`PlotLayoutItems.strip_shift`). The offset is produced here in
+        figure space and consumed per artist in its own coordinate system:
+        the tick labels in axes fractions, the spine in points.
 
-        The offset is zero unless the side has both a strip and a moved axis.
-        Bottom/left sides leave `_axis_primary_extent` at zero (a strip there
-        would share the side with the *default* axis, which the facet API does
-        not yet expose), so this returns zero for them.
+        The offset is zero unless the side carries both a strip and an axis.
         """
-        strip = self.strip_text
-        primary = self._axis_primary_extent
-        if not (strip and primary):
+        strip_breadth: float = self.strip_text  # pyright: ignore[reportAttributeAccessIssue]
+        if not (strip_breadth and self._axis_ticks_and_text):
             return 0
         placement = self.items.plot.theme.getp("strip_placement")
-        if placement == "inside":
-            return 0 if member == "strip" else strip
-        # "outside"
-        return primary if member == "strip" else 0
+        return strip_breadth if placement == "inside" else 0
 
 
 class left_space(_plot_side_space):
@@ -241,9 +251,11 @@ class left_space(_plot_side_space):
     """
     legend: float = 0
     legend_box_spacing: float = 0
+    axis_title_margin_left: float = 0
+    """Outer (edge-facing) margin of the y-axis title"""
     axis_title: float = 0
-    axis_title_margin: float = 0
-    """Margin to the right of the y-axis title (panel-facing side)"""
+    axis_title_margin_right: float = 0
+    """Panel-facing margin of the y-axis title"""
     axis_title_alignment: float = 0
     """
     Space added to align the axis title with others in a composition
@@ -252,10 +264,14 @@ class left_space(_plot_side_space):
     the difference between the largest and smallest axis_title_clearance
     among the items in the composition.
     """
+    axis_text_margin_left: float = 0
+    """Outer (edge-facing) margin of the y-axis text"""
     axis_text: float = 0
-    axis_text_margin: float = 0
-    """Margin to the right of the y-axis text (panel-facing side)"""
+    axis_text_margin_right: float = 0
+    """Panel-facing margin of the y-axis text"""
     axis_ticks: float = 0
+    strip_switch_pad: float = 0
+    """Gap between a shared axis and a strip beyond it (outside placement)"""
     strip_text: float = 0
     """Outward extent of a left facet strip"""
 
@@ -276,24 +292,23 @@ class left_space(_plot_side_space):
             self.legend = self.legend_width
             self.legend_box_spacing = theme.getp("legend_box_spacing")
 
-        # The text<->panel gap is the right margin of the y text/title; it
-        # sits on the panel-facing (right) side of the left axis.
+        # A left y-axis reads its left (outer) and right (panel-facing)
+        # margins directly.
         if items.axis_title_y_left:
             self.axis_title = geometry.width(items.axis_title_y_left)
-            self.axis_title_margin = getattr(
-                theme.get_margin("axis_title_y_left").fig,
-                MARGIN_SIDE["left"],
-            )
+            m = theme.get_margin("axis_title_y_left").fig
+            self.axis_title_margin_left = m.l
+            self.axis_title_margin_right = m.r
 
         self.axis_text = items.axis_text_y_left
         if self.axis_text:
-            self.axis_text_margin = getattr(
-                theme.get_margin("axis_text_y_left").fig,
-                MARGIN_SIDE["left"],
-            )
+            m = theme.get_margin("axis_text_y_left").fig
+            self.axis_text_margin_left = m.l
+            self.axis_text_margin_right = m.r
 
         self.axis_ticks = items.axis_ticks_y_left
         self.strip_text = items.strip_text_y("left")
+        self.strip_switch_pad = self._strip_switch_pad("y")
 
         # Adjust plot_margin to make room for ylabels that protude well
         # beyond the axes
@@ -379,14 +394,20 @@ class right_space(_plot_side_space):
     margin_alignment: float = 0
     legend: float = 0
     legend_box_spacing: float = 0
+    axis_title_margin_right: float = 0
+    """Outer (edge-facing) margin of the y-axis title"""
     axis_title: float = 0
-    axis_title_margin: float = 0
-    """Margin to the left of the y-axis title (panel-facing side)"""
+    axis_title_margin_left: float = 0
+    """Panel-facing margin of the y-axis title"""
     axis_title_alignment: float = 0
+    axis_text_margin_right: float = 0
+    """Outer (edge-facing) margin of the y-axis text"""
     axis_text: float = 0
-    axis_text_margin: float = 0
-    """Margin to the left of the y-axis text (panel-facing side)"""
+    axis_text_margin_left: float = 0
+    """Panel-facing margin of the y-axis text"""
     axis_ticks: float = 0
+    strip_switch_pad: float = 0
+    """Gap between a shared axis and a strip beyond it (outside placement)"""
     strip_text: float = 0
     """Outward extent of a right facet strip (next to the panel by default)"""
 
@@ -409,23 +430,21 @@ class right_space(_plot_side_space):
 
         self.strip_text = items.strip_text_y("right")
 
-        # Space consumed by a y-axis on the right. The text<->panel gap is the
-        # left margin of the y text/title (the edge facing the panel to the
-        # left).
+        # A right y-axis reads its right (outer) and left (panel-facing)
+        # margins directly.
         if items.axis_title_y_right:
             self.axis_title = geometry.width(items.axis_title_y_right)
-            self.axis_title_margin = getattr(
-                theme.get_margin("axis_title_y_right").fig,
-                MARGIN_SIDE["right"],
-            )
+            m = theme.get_margin("axis_title_y_right").fig
+            self.axis_title_margin_right = m.r
+            self.axis_title_margin_left = m.l
 
         self.axis_text = items.axis_text_y_right
         if self.axis_text:
-            self.axis_text_margin = getattr(
-                theme.get_margin("axis_text_y_right").fig,
-                MARGIN_SIDE["right"],
-            )
+            m = theme.get_margin("axis_text_y_right").fig
+            self.axis_text_margin_right = m.r
+            self.axis_text_margin_left = m.l
         self.axis_ticks = items.axis_ticks_y_right
+        self.strip_switch_pad = self._strip_switch_pad("y")
 
         # Adjust plot_margin to make room for ylabels that protude well
         # beyond the axes
@@ -434,20 +453,6 @@ class right_space(_plot_side_space):
         adjustment = protrusion - (self.total - self.plot_margin)
         if adjustment > 0:
             self.plot_margin += adjustment
-
-    @property
-    def _axis_primary_extent(self) -> float:
-        return self.sum_incl("axis_ticks") - self.sum_upto("axis_text")
-
-    @property
-    def axis_title_clearance(self) -> float:
-        """
-        Axis-title-to-panel clearance, excluding any facet strip
-        """
-        # The strip sits outside the axis title's alignment band, so it
-        # does not count toward the title-to-panel clearance used to
-        # align axis titles across a composition.
-        return super().axis_title_clearance - self.strip_text
 
     @property
     def offset(self):
@@ -529,16 +534,30 @@ class top_space(_plot_side_space):
     plot_subtitle_margin_top: float = 0
     plot_subtitle: float = 0
     plot_subtitle_margin_bottom: float = 0
+    plot_title_alignment: float = 0
+    """
+    Space added to align the plot title with others in a composition
+
+    This value is calculated during the layout process. The amount is
+    the difference between the largest and smallest plot_title_clearance
+    among the items in the composition.
+    """
     legend: float = 0
     legend_box_spacing: float = 0
+    axis_title_margin_top: float = 0
+    """Outer (edge-facing) margin of the x-axis title"""
     axis_title: float = 0
-    axis_title_margin: float = 0
-    """Margin below the x-axis title (panel-facing side)"""
+    axis_title_margin_bottom: float = 0
+    """Panel-facing margin of the x-axis title"""
     axis_title_alignment: float = 0
+    axis_text_margin_top: float = 0
+    """Outer (edge-facing) margin of the x-axis text"""
     axis_text: float = 0
-    axis_text_margin: float = 0
-    """Margin below the x-axis text (panel-facing side)"""
+    axis_text_margin_bottom: float = 0
+    """Panel-facing margin of the x-axis text"""
     axis_ticks: float = 0
+    strip_switch_pad: float = 0
+    """Gap between a shared axis and a strip beyond it (outside placement)"""
     strip_text: float = 0
     """Outward extent of a top facet strip (next to the panel by default)"""
 
@@ -575,22 +594,21 @@ class top_space(_plot_side_space):
 
         self.strip_text = items.strip_text_x("top")
 
-        # Space consumed by an x-axis on the top. The text<->panel gap is the
-        # bottom margin of the x text/title (the edge facing the panel below).
+        # A top x-axis reads its top (outer) and bottom (panel-facing)
+        # margins directly.
         if items.axis_title_x_top:
             self.axis_title = geometry.height(items.axis_title_x_top)
-            self.axis_title_margin = getattr(
-                theme.get_margin("axis_title_x_top").fig,
-                MARGIN_SIDE["top"],
-            )
+            m = theme.get_margin("axis_title_x_top").fig
+            self.axis_title_margin_top = m.t
+            self.axis_title_margin_bottom = m.b
 
         self.axis_text = items.axis_text_x_top
         if self.axis_text:
-            self.axis_text_margin = getattr(
-                theme.get_margin("axis_text_x_top").fig,
-                MARGIN_SIDE["top"],
-            )
+            m = theme.get_margin("axis_text_x_top").fig
+            self.axis_text_margin_top = m.t
+            self.axis_text_margin_bottom = m.b
         self.axis_ticks = items.axis_ticks_x_top
+        self.strip_switch_pad = self._strip_switch_pad("x")
 
         # Adjust plot_margin to make room for ylabels that protude well
         # beyond the axes
@@ -601,18 +619,16 @@ class top_space(_plot_side_space):
             self.plot_margin += adjustment
 
     @property
-    def _axis_primary_extent(self) -> float:
-        return self.sum_incl("axis_ticks") - self.sum_upto("axis_text")
+    def plot_title_clearance(self) -> float:
+        """
+        The distance between the plot title block and the panel
 
-    @property
-    def axis_title_clearance(self) -> float:
+        Everything between the title & subtitle and the panel — legend,
+        axis title, axis text, ticks and facet strip — counts toward
+        this distance. When it is equal across the plots in a row of a
+        composition, their titles sit at the same height.
         """
-        Axis-title-to-panel clearance, excluding any facet strip
-        """
-        # The strip sits outside the axis title's alignment band, so it
-        # does not count toward the title-to-panel clearance used to
-        # align axis titles across a composition.
-        return super().axis_title_clearance - self.strip_text
+        return self.total - self.sum_upto("plot_title_alignment")
 
     @property
     def offset(self) -> float:
@@ -699,9 +715,11 @@ class bottom_space(_plot_side_space):
     plot_caption_margin_top: float = 0
     legend: float = 0
     legend_box_spacing: float = 0
+    axis_title_margin_bottom: float = 0
+    """Outer (edge-facing) margin of the x-axis title"""
     axis_title: float = 0
-    axis_title_margin: float = 0
-    """Margin above the x-axis title (panel-facing side)"""
+    axis_title_margin_top: float = 0
+    """Panel-facing margin of the x-axis title"""
     axis_title_alignment: float = 0
     """
     Space added to align the axis title with others in a composition
@@ -711,10 +729,14 @@ class bottom_space(_plot_side_space):
     composition. It's amount is the difference in height between this axis
     text (and it's margins) and the tallest axis text (and it's margin).
     """
+    axis_text_margin_bottom: float = 0
+    """Outer (edge-facing) margin of the x-axis text"""
     axis_text: float = 0
-    axis_text_margin: float = 0
-    """Margin above the x-axis text (panel-facing side)"""
+    axis_text_margin_top: float = 0
+    """Panel-facing margin of the x-axis text"""
     axis_ticks: float = 0
+    strip_switch_pad: float = 0
+    """Gap between a shared axis and a strip beyond it (outside placement)"""
     strip_text: float = 0
     """Outward extent of a bottom facet strip"""
 
@@ -749,23 +771,22 @@ class bottom_space(_plot_side_space):
             self.legend = self.legend_height
             self.legend_box_spacing = theme.getp("legend_box_spacing") * F
 
-        # The text<->panel gap is the top margin of the x text/title; it
-        # sits on the panel-facing (top) side of the bottom axis.
+        # A bottom x-axis reads its bottom (outer) and top (panel-facing)
+        # margins directly.
         if items.axis_title_x_bottom:
             self.axis_title = geometry.height(items.axis_title_x_bottom)
-            self.axis_title_margin = getattr(
-                theme.get_margin("axis_title_x_bottom").fig,
-                MARGIN_SIDE["bottom"],
-            )
+            m = theme.get_margin("axis_title_x_bottom").fig
+            self.axis_title_margin_bottom = m.b
+            self.axis_title_margin_top = m.t
 
         self.axis_text = items.axis_text_x_bottom
         if self.axis_text:
-            self.axis_text_margin = getattr(
-                theme.get_margin("axis_text_x_bottom").fig,
-                MARGIN_SIDE["bottom"],
-            )
+            m = theme.get_margin("axis_text_x_bottom").fig
+            self.axis_text_margin_bottom = m.b
+            self.axis_text_margin_top = m.t
         self.axis_ticks = items.axis_ticks_x_bottom
         self.strip_text = items.strip_text_x("bottom")
+        self.strip_switch_pad = self._strip_switch_pad("x")
 
         # Adjust plot_margin to make room for ylabels that protude well
         # beyond the axes
@@ -1195,7 +1216,7 @@ class PlotSideSpaces:
         """
         Calculate spacing parts for facet_wrap
         """
-        facet = self.plot.facet
+        facet = cast("facet_wrap", self.plot.facet)
         theme = self.plot.theme
 
         ncol = facet.ncol
@@ -1205,30 +1226,41 @@ class PlotSideSpaces:
         self.sw = theme.getp("panel_spacing_x")
         self.sh = theme.getp("panel_spacing_y") * self.W / self.H
 
-        # A fraction of the strip height
-        # Effectively slides the strip
-        #   +ve: Away from the panel
-        #    0:  Top of the panel
-        #   -ve: Into the panel
-        # Where values <= -1, put the strip completely into
-        # the panel. We do not worry about larger -ves.
-        strip_align_x = theme.getp("strip_align_x")
+        # The strip (plus any switch pad) claims space in the gullies on
+        # the side it is placed. The side space's strip_text folds in
+        # strip_align_{x,y} and is zero when the strip is fully inside
+        # the panel.
+        space = {
+            "top": self.t,
+            "bottom": self.b,
+            "left": self.l,
+            "right": self.r,
+        }[facet.strip_position]
+        if facet.strip_position in ("top", "bottom"):
+            self.sh += space.strip_text + space.strip_switch_pad
+        else:
+            self.sw += space.strip_text + space.strip_switch_pad
 
-        # Only interested in the proportion of the strip that
-        # does not overlap with the panel
-        if strip_align_x > -1:
-            self.sh += self.t.strip_text * (1 + strip_align_x)
-
+        # Per-panel axes claim their ticks, labels and label margins in
+        # the gullies.
         if facet.free["x"]:
             for side in ("bottom", "top"):
-                self.sh += self.items.axis_text_x_max_height_at(
+                text = self.items.axis_text_x_max_height_at("all", side)
+                if text:
+                    m = theme.get_margin(f"axis_text_x_{side}").fig
+                    text += m.t + m.b
+                self.sh += text + self.items.axis_ticks_x_max_height_at(
                     "all", side
-                ) + self.items.axis_ticks_x_max_height_at("all", side)
+                )
         if facet.free["y"]:
             for side in ("left", "right"):
-                self.sw += self.items.axis_text_y_max_width_at(
+                text = self.items.axis_text_y_max_width_at("all", side)
+                if text:
+                    m = theme.get_margin(f"axis_text_y_{side}").fig
+                    text += m.l + m.r
+                self.sw += text + self.items.axis_ticks_y_max_width_at(
                     "all", side
-                ) + self.items.axis_ticks_y_max_width_at("all", side)
+                )
 
         # width and height of axes as fraction of figure width & height
         self.w = (self.panel_width - self.sw * (ncol - 1)) / ncol
