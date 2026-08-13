@@ -112,6 +112,13 @@ title: Changelog
 
 ### Bug Fixes
 
+- [](:class:`~plotnine.scale_size_datetime`) now honours its `range`
+  argument. Previously it was ignored and mapping data raised an error.
+
+- [](:class:`~plotnine.scale_size_datetime`) now honours its `date_breaks`,
+  `date_labels` and `date_minor_breaks` arguments, which it previously
+  ignored.
+
 - In a non-linear coordinate system (e.g. [](:class:`~plotnine.coord_trans`)),
   the closing edge of a polygon is now curved along with the rest of its
   boundary instead of being drawn as a straight chord.
@@ -120,6 +127,12 @@ title: Changelog
   [](:class:`~plotnine.coord_trans`)) no longer show triangular spikes; each
   rectangle is now drawn as its own polygon instead of merging a bar's
   segments into a single path.
+
+- In a non-linear coordinate system (e.g. [](:class:`~plotnine.coord_trans`)),
+  both edges of a [](:class:`~plotnine.geom_ribbon`) or
+  [](:class:`~plotnine.geom_area`) now curve. Previously each edge held the
+  value of the point its segment started from, so the band was drawn as a
+  staircase.
 
 - The space between facet panels now accounts for the margins of the axis
   text, so with free scales large margins no longer push the tick labels
