@@ -4,7 +4,7 @@ import abc
 from copy import copy, deepcopy
 from functools import cached_property
 from io import BytesIO
-from typing import TYPE_CHECKING, cast, overload
+from typing import TYPE_CHECKING, TypeVar, cast, overload
 
 from plotnine.themes.theme import theme, theme_get
 
@@ -23,7 +23,7 @@ from ..options import get_option
 
 if TYPE_CHECKING:
     from pathlib import Path
-    from typing import Iterator
+    from typing import Iterator, Sequence
 
     from matplotlib.figure import Figure
     from typing_extensions import Self
@@ -33,10 +33,13 @@ if TYPE_CHECKING:
     from plotnine._mpl.layout_manager._composition_side_space import (
         CompositionSideSpaces,
     )
+    from plotnine._mpl.layout_manager._grid import Grid
     from plotnine.composition._design import DesignSpec
     from plotnine.composition._guide_area import guide_area
     from plotnine.ggplot import PlotAddable, ggplot
-    from plotnine.typing import FigureFormat, MimeBundle
+    from plotnine.typing import FigureFormat, MimeBundle, Side
+
+T = TypeVar("T")
 
 
 class Compose:
@@ -163,6 +166,15 @@ class Compose:
         # Composition-level guides populated if "collect"ing
         self.guides = guides()
         self.guides._owner = self
+
+        self._collected_spans: dict[int, dict[Side, tuple[int, ...]]] = {}
+        """
+        Item indexes for each collected axis title
+
+        Outer keys identify the plot that retains a title. Inner keys identify
+        the title side. Each value identifies every plot labelled by that
+        title.
+        """
 
     def __repr__(self):
         """
@@ -410,6 +422,15 @@ class Compose:
         for cmp in self.iter_sub_compositions():
             yield from cmp.iter_plots_all()
 
+    def iter_compositions_all(self):
+        """
+        Yield this composition and every nested composition
+        """
+        yield self
+
+        for cmp in self.iter_sub_compositions():
+            yield from cmp.iter_compositions_all()
+
     def _resolve_guide_owners(self, owner: Compose | None = None):
         """
         Decide which `Compose` (if any) owns each leaf's guides
@@ -450,6 +471,46 @@ class Compose:
                     item.guides._owner = item
             else:
                 item._resolve_guide_owners(owner=new_owner)
+
+    def _resolve_collected_axes(self):
+        """
+        Apply this composition's axis and title collection
+
+        Only direct plots participate. A nested composition occupies one
+        grid item and applies its own `plot_layout`.
+
+        On each selected axis side, retain axes only where no grid item
+        lies beyond the plot. On each selected title side, remove titles
+        with relinquished axes and collapse matching retained titles.
+        """
+        from plotnine import ggplot
+
+        from ._axis_collection import AxisRemover, collect_title
+        from ._plot_layout import collected_sides
+
+        axes_sides = collected_sides(self.layout.axes)
+        title_sides = collected_sides(
+            self.layout.axes
+            if self.layout.axis_title is None
+            else self.layout.axis_title
+        )
+        if not (axes_sides or title_sides):
+            return
+
+        # Include nested compositions because they occupy grid cells and can
+        # block a direct plot from an outer edge.
+        grid = self._make_grid(self.items)
+        removers = [
+            AxisRemover.make(i, item, grid, axes_sides)
+            for i, item in enumerate(self.items)
+            if isinstance(item, ggplot)
+        ]
+
+        for side in title_sides:
+            collect_title(side, removers, grid, self)
+
+        for remover in removers:
+            remover.apply()
 
     def _walk_guide_owners(self):
         """
@@ -610,6 +671,34 @@ class Compose:
             else:
                 item._generate_gridspecs(figure, _container_gs)
 
+    def _make_grid(self, payload: Sequence[T]) -> Grid[T]:
+        """
+        Build a grid that maps payload values to composition items
+
+        Parameters
+        ----------
+        payload :
+            One value for each composition item, in item order.
+
+        Returns
+        -------
+        :
+            Grid with the composition's dimensions and placement order.
+            A design layout can place one value across several cells.
+        """
+        from plotnine._mpl.layout_manager._grid import Grid
+
+        if (spec := self._design_spec) is not None:
+            return spec.make_grid(payload)
+
+        order = "row_major" if self.layout.byrow else "col_major"
+        return Grid(
+            cast("int", self.layout.nrow),
+            cast("int", self.layout.ncol),
+            payload,
+            order=order,
+        )
+
     def show(self):
         """
         Display plot in the cells output
@@ -651,6 +740,7 @@ class Compose:
             # sub-compositions.
             for item in cmp:
                 item.theme._inherit_figure_props(cmp.theme)
+            cmp._resolve_collected_axes()
             cmp._draw_plots()
             for sub_cmp in cmp.iter_sub_compositions():
                 sub_cmp._setup()
@@ -752,19 +842,26 @@ class Compose:
             Image format to use, automatically extract from
             file name extension.
         dpi :
-            DPI to use for raster graphics. If None, defaults to using
-            the `dpi` of theme to the first plot.
+            DPI for raster graphics. If `None`, use the composition theme's
+            `dpi`.
         **kwargs :
             These are ignored. Here to "softly" match the API of
             `ggplot.save()`.
         """
         from plotnine import theme
 
-        # To set the dpi, we only need to change the dpi of
-        # the last plot and theme gets added to the last plot
-        plot = (self + theme(dpi=dpi)) if dpi else self
-        figure = plot.draw()
-        figure.savefig(filename, format=format)
+        # Set the composition theme's DPI because the composition owns the
+        # figure. Inner plots inherit this value.
+        cmp = self
+        if dpi:
+            cmp = deepcopy(self)
+            cmp.theme = cmp.theme + theme(dpi=dpi)
+
+        figure = cmp.draw()
+
+        # Pass the DPI explicitly so `savefig.dpi` cannot override the
+        # requested resolution.
+        figure.savefig(filename, format=format, dpi=figure.get_dpi())
 
 
 def _renders_legend_inside(t: theme) -> bool:

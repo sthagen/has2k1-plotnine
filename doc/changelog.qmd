@@ -11,11 +11,19 @@ title: Changelog
   transformation of the primary axis with [](:class:`~plotnine.sec_axis`), or as a
   mirror of the primary axis with [](:func:`~plotnine.dup_axis`).
 
+- [](:class:`~plotnine.coord_radial`) can now draw an angular scale's secondary
+  axis around the inner rim. Add a [](:class:`~plotnine.sec_axis`) to the scale
+  and set `inner_radius > 0`.
+
 - Added [](:class:`~plotnine.composition.plot_layout`) with which you can customise the
   layout of plots in composition.
 
 - [](:class:`~plotnine.composition.plot_layout`) gained a `design` parameter for
   patchwork-style text-grid layouts.
+
+- [](:class:`~plotnine.composition.plot_layout`) gained `axes` and `axis_title`
+  parameters. Use them to show an axis, or an axis title, once for plots in a
+  composition that share it.
 
 - You can now pass a sequence of horizontal and vertical alignment (ha & va) values in
   element_text for colorbars.
@@ -110,6 +118,14 @@ title: Changelog
   `geom="blank"`, `position="identity"` and `na_rm=False`, so all geoms and
   stats include them automatically.
 
+- plotnine now supports Matplotlib 3.10. This allows installation under
+  Pyodide. Matplotlib 3.10 and 3.11 use different text metrics, so text
+  extents, line spacing, and plot margins may differ. Use Matplotlib 3.11 or
+  later to reproduce the documentation output.
+
+- `statsmodels>=0.14.6` is now required on every platform. This replaces the
+  separate `statsmodels<=0.14.4` requirement for Pyodide.
+
 ### Bug Fixes
 
 - [](:class:`~plotnine.scale_size_datetime`) now honours its `range`
@@ -134,6 +150,17 @@ title: Changelog
   value of the point its segment started from, so the band was drawn as a
   staircase.
 
+- [](:class:`~plotnine.geom_ribbon`) and [](:class:`~plotnine.geom_area`) now
+  draw every outline type correctly in non-linear coordinate systems. The
+  `upper`, `lower` and `both` outlines follow the transformed band edges, and
+  `full` outlines no longer raise an error.
+
+- [](:class:`~plotnine.annotation_logticks`) and
+  [](:class:`~plotnine.annotation_stripes`) now render correctly in non-linear
+  coordinate systems such as [](:class:`~plotnine.coord_trans`). Previously,
+  log tick positions were transformed twice, which misplaced or removed ticks,
+  and stripes raised an error.
+
 - The space between facet panels now accounts for the margins of the axis
   text, so with free scales large margins no longer push the tick labels
   into the neighbouring panel.
@@ -155,6 +182,17 @@ title: Changelog
 - Fixed [](:class:`~plotnine.geom_legend`) to show an empty key for
   [](:class:`~plotnine.geom_point`) when the shape is mapped to variable with missing
   values.
+
+- Specific theme elements now override blank general elements. For example,
+  adding `theme(axis_text_x_bottom=element_text(size=14))` to
+  [](:class:`~plotnine.theme_void`) displays the bottom x-axis tick labels and
+  reserves space for them. Previously, the blank `axis_text_x` element
+  prevented layout from reserving their space, so the labels could render
+  outside the figure.
+
+- Saving a composition now honours the `dpi` argument. For example,
+  `(p1 | p2).save("composition.png", dpi=200)` saves the image at 200 DPI
+  instead of the default resolution.
 
 ### Enhancements
 

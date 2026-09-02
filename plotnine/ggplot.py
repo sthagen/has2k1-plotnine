@@ -384,6 +384,7 @@ class ggplot:
             self._build()
 
             # setup
+            self.coordinates._setup(self)
             self.guides._setup(self)
             self.theme._setup(self)
 
@@ -451,7 +452,7 @@ class ggplot:
         layout = self._build_objs.layout = self.layout
 
         # Update the label information for the plot
-        layers.update_labels(self)
+        layers.update_labels(self.labels)
 
         # Give each layer a copy of the data, the mappings and
         # the execution environment
@@ -546,6 +547,7 @@ class ggplot:
         """
         # Draw the geoms
         self.layers.draw(self.layout, self.coordinates)
+        self.coordinates.draw(self.axs)
 
     def _draw_breaks_and_labels(self):
         """

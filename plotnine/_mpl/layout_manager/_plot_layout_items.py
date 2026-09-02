@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import chain
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from matplotlib.text import Text
 
 from plotnine._utils import ha_as_float, side_artists, va_as_float
+from plotnine.composition._axis_collection import PanelSpan
 from plotnine.composition._compose import Compose
 from plotnine.exceptions import PlotnineError
 
@@ -31,6 +32,7 @@ if TYPE_CHECKING:
 
     from matplotlib.axes import Axes
     from matplotlib.axis import Axis, Tick
+    from matplotlib.backend_bases import RendererBase
     from matplotlib.figure import Figure
     from matplotlib.lines import Line2D
     from matplotlib.patches import Rectangle
@@ -38,6 +40,7 @@ if TYPE_CHECKING:
     from matplotlib.transforms import Bbox, Transform
 
     from plotnine import ggplot
+    from plotnine._mpl._radial_axes import p9RadialAxes
     from plotnine._mpl.offsetbox import FlexibleAnchoredOffsetbox
     from plotnine._mpl.text import StripText
     from plotnine.iapi import legend_artists
@@ -45,6 +48,7 @@ if TYPE_CHECKING:
     from plotnine.themes.theme import theme
     from plotnine.typing import (
         HorizontalJustification,
+        PolarSide,
         Side,
         StripPosition,
         VerticalJustification,
@@ -71,6 +75,98 @@ if TYPE_CHECKING:
         ]
         | tuple[float, float]
     )
+
+
+# Polar boundaries that may carry a theta or r axis.
+POLAR_SIDES: tuple[PolarSide, ...] = (
+    "theta_outside",
+    "theta_inside",
+    "r_start",
+    "r_end",
+)
+
+
+@dataclass
+class PolarLabel:
+    """
+    A tick label of a polar panel, and where it attaches to the panel
+
+    Sizes are in display space. `anchor` is in panel fractions, which hold
+    whatever size the panel settles at.
+    """
+
+    anchor: tuple[float, float]
+    """Point on the panel the label is placed against"""
+
+    unit: tuple[float, float]
+    """Outward unit vector at the label's anchor"""
+
+    width: float
+    """Width of the label"""
+
+    height: float
+    """Height of the label"""
+
+    gap: float
+    """Distance the label is held off its anchor"""
+
+    @classmethod
+    def make(
+        cls,
+        ax: p9RadialAxes,
+        side: PolarSide,
+        loc: float,
+        tick: Tick,
+        label: Text,
+        renderer: RendererBase,
+    ) -> PolarLabel:
+        """
+        The label at one tick of a polar axis
+
+        A theta tick anchors on its own boundary at the angle of its break;
+        an r tick anchors along its spoke at the radius of its break. The
+        gap covers the tick mark the label clears and the pad beyond it. The
+        unit vector points from the panel towards the label.
+        """
+        r_inner, r_outer = ax.get_ylim()
+        if side == "theta_outside":
+            point = (loc, r_outer)
+        elif side == "theta_inside":
+            point = (loc, r_inner)
+        else:
+            point = (ax.spoke_angle(side), loc)
+
+        box = label.get_window_extent(renderer)
+        anchor = ax.transAxes.inverted().transform(
+            ax.transData.transform(point)
+        )
+        unit = ax.outward_unit(side, loc)
+        gap_pt = (tick.get_pad() or 0) + tick.get_tick_padding()
+        return cls(
+            anchor=(anchor[0], anchor[1]),
+            unit=(unit[0], unit[1]),
+            width=box.width,
+            height=box.height,
+            gap=gap_pt * ax.figure.dpi / 72,
+        )
+
+    def reach_past(self, side: Side, panel: Bbox) -> float:
+        """
+        How far the label reaches past one edge of the panel, display space
+
+        The direction component towards the edge determines how much of the
+        label and gap extend past it. A label parallel to the edge contributes
+        half its extent and none of its gap. A negative result means the label
+        stops inside the edge.
+        """
+        if side in ("left", "right"):
+            along, extent, span = self.anchor[0], self.width, panel.width
+            facing = self.unit[0] if side == "right" else -self.unit[0]
+        else:
+            along, extent, span = self.anchor[1], self.height, panel.height
+            facing = self.unit[1] if side == "top" else -self.unit[1]
+        inset = along if side in ("left", "bottom") else 1 - along
+        return extent * (1 + facing) / 2 + self.gap * facing - inset * span
 
 
 @dataclass
@@ -363,9 +459,19 @@ class PlotLayoutItems:
         panel, so within one facet the strips of axis-bearing panels
         shift while the others do not.
         """
-        theme = self.plot.theme
-        if theme.getp("strip_placement") != "outside":
+        if self.plot.theme.getp("strip_placement") != "outside":
             return 0
+        return self._strip_axis_clearance(st)
+
+    def _strip_axis_clearance(self, st: StripText) -> float:
+        """
+        Extent of the axis a strip must clear to sit beyond it, figure space
+
+        The ticks, tick labels and panel-facing text margin its own panel
+        draws on the strip's side, plus the strip_switch_pad. Zero when the
+        panel draws no axis there.
+        """
+        theme = self.plot.theme
         side, ax = st.position, st.ax
         W, H = theme.getp("figure_size")
         if side in ("top", "bottom"):
@@ -586,22 +692,30 @@ class PlotLayoutItems:
         if self.axis_title_x_bottom:
             ha = theme.getp(("axis_title_x_bottom", "ha"), "center")
             self.axis_title_x_bottom.set_y(spaces.b.y1("axis_title"))
-            justify.horizontally_about(self.axis_title_x_bottom, ha, "panel")
+            _justify_axis_title(
+                justify, spaces, self.axis_title_x_bottom, ha, "bottom"
+            )
 
         if self.axis_title_x_top:
             ha = theme.getp(("axis_title_x_top", "ha"), "center")
             self.axis_title_x_top.set_y(spaces.t.y1("axis_title"))
-            justify.horizontally_about(self.axis_title_x_top, ha, "panel")
+            _justify_axis_title(
+                justify, spaces, self.axis_title_x_top, ha, "top"
+            )
 
         if self.axis_title_y_left:
             va = theme.getp(("axis_title_y_left", "va"), "center")
             self.axis_title_y_left.set_x(spaces.l.x1("axis_title"))
-            justify.vertically_about(self.axis_title_y_left, va, "panel")
+            _justify_axis_title(
+                justify, spaces, self.axis_title_y_left, va, "left"
+            )
 
         if self.axis_title_y_right:
             va = theme.getp(("axis_title_y_right", "va"), "center")
             self.axis_title_y_right.set_x(spaces.r.x1("axis_title"))
-            justify.vertically_about(self.axis_title_y_right, va, "panel")
+            _justify_axis_title(
+                justify, spaces, self.axis_title_y_right, va, "right"
+            )
 
         if self.legends:
             _position_legends(self.legends, spaces)
@@ -903,6 +1017,100 @@ class PlotLayoutItems:
         st.set_position((x, y))
 
 
+class PolarPlotLayoutItems(PlotLayoutItems):
+    """
+    Space around a polar panel for its axis decorations
+
+    A theta axis follows an arc and an r axis follows a spoke, so a tick
+    label attaches to the panel wherever its break falls rather than along
+    one Cartesian side. Each side reserves the labels that reach past it:
+    a label's size and the gap that holds it off its boundary, less however
+    much of that reach falls inside the panel.
+
+    The size and the gap are physical, so they hold wherever the panel ends
+    up. The inset is a fraction of the panel, and the panel is what the
+    layout is solving for, so it comes from the previous render. A first
+    render therefore over-reserves, which costs a little space and clips
+    nothing.
+
+    The band is reported as text clearance, so tick clearance stays zero
+    rather than counting the marks twice. Per-side label protrusions stay
+    zero too: a label reaching past a second edge is counted on that edge.
+    """
+
+    def _axis_clearance(self, ax: Axes, side: Side) -> float:
+        """
+        Space the panel's axes need past one edge, figure space
+        """
+        panel = ax.get_window_extent(self.geometry.renderer)
+        reaches = [
+            label.reach_past(side, panel) for label in self._outward_labels(ax)
+        ]
+        figure = self.plot.figure.bbox
+        span = figure.width if side in ("left", "right") else figure.height
+        return max([*reaches, 0]) / span
+
+    def _outward_labels(self, ax: Axes) -> Iterator[PolarLabel]:
+        """
+        Every tick label the panel will show, with where it attaches
+
+        Each boundary contributes only the label pair assigned to that side.
+        """
+        renderer = self.geometry.renderer
+        panel = cast("p9RadialAxes", ax)
+        for polar_side in POLAR_SIDES:
+            axis = axis_at(ax, polar_side)
+            if axis is None:
+                continue
+            _, label_attr = side_artists(polar_side)
+            for locs, ticks in (
+                (axis.get_majorticklocs(), axis.get_major_ticks()),
+                (axis.get_minorticklocs(), axis.get_minor_ticks()),
+            ):
+                for loc, tick in zip(locs, ticks):
+                    label = getattr(tick, label_attr)
+                    if _text_is_visible(label):
+                        yield PolarLabel.make(
+                            panel, polar_side, loc, tick, label, renderer
+                        )
+
+    def axis_ticks_x_max_height(self, ax: Axes, side: Side) -> float:
+        return 0
+
+    def axis_text_x_max_height(self, ax: Axes, side: Side) -> float:
+        return self._axis_clearance(ax, side)
+
+    def axis_ticks_y_max_width(self, ax: Axes, side: Side) -> float:
+        return 0
+
+    def axis_text_y_max_width(self, ax: Axes, side: Side) -> float:
+        return self._axis_clearance(ax, side)
+
+    def axis_text_y_top_protrusion(self, location: AxesLocation) -> float:
+        return 0.0
+
+    def axis_text_y_bottom_protrusion(self, location: AxesLocation) -> float:
+        return 0.0
+
+    def axis_text_x_left_protrusion(self, location: AxesLocation) -> float:
+        return 0.0
+
+    def axis_text_x_right_protrusion(self, location: AxesLocation) -> float:
+        return 0.0
+
+    def strip_shift(self, st: StripText) -> float:
+        """
+        Outward shift of a strip past the polar decorations, figure space
+
+        A polar panel draws its theta and r axes on the arc perimeter,
+        so there is no room between the panel and its axis for a strip to
+        sit "inside". The strip therefore always clears the decorations,
+        as it does for `strip_placement="outside"` on a Cartesian panel,
+        regardless of the theme's `strip_placement`.
+        """
+        return self._strip_axis_clearance(st)
+
+
 def _spine_set_position_outward(spine: Spine, axis: Axis, distance: float):
     """
     Move a spine and its tick marks outward, keeping the theme's tick styling
@@ -932,6 +1140,40 @@ def _text_is_visible(text: Text) -> bool:
     Return True if text is visible and is not empty
     """
     return text.get_visible() and text._text  # type: ignore
+
+
+def _justify_axis_title(
+    justify: TextJustifier,
+    spaces: PlotSideSpaces,
+    text: Text,
+    ratio: float,
+    side: Side,
+):
+    """
+    Position an axis title across the panels it labels
+
+    A collected title spans every panel it labels. An uncollected title uses
+    the plot's own panel bounds, so its span contains only that plot's
+    panels.
+
+    Parameters
+    ----------
+    justify :
+        Text positioner for figure-space bounds.
+    spaces :
+        Side spaces for the plot that draws the title.
+    text :
+        Axis title to position.
+    ratio :
+        Horizontal or vertical alignment within the span.
+    side :
+        Side containing the title.
+    """
+    span = spaces.axis_title_span.get(side) or PanelSpan((spaces,))
+    if side in ("bottom", "top"):
+        justify.horizontally(text, ratio, span.left, span.right)
+    else:
+        justify.vertically(text, ratio, span.bottom, span.top)
 
 
 def _position_plot_labels(

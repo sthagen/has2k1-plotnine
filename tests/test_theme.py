@@ -34,6 +34,7 @@ from plotnine import (
     theme_xkcd,
 )
 from plotnine.data import mtcars
+from plotnine.themes.themeable import themeable
 
 LT_MPL310 = version.parse(mpl.__version__) < version.parse("3.10")
 IS_CI = bool(os.environ.get("CI"))
@@ -109,6 +110,56 @@ def test_add_element_blank():
     assert theme3 != theme1
     assert theme3 != theme2
     assert theme3 == theme4  # blanking cleans the slate
+
+
+def test_specific_element_overrides_blank_parent():
+    # `theme_void` blanks `axis_text_x`. Setting its bottom side must replace
+    # that general blank while preserving the blank top side.
+    theme1 = theme_void() + theme(axis_text_x_bottom=element_text(size=14))
+
+    assert "axis_text_x" not in theme1.themeables
+    assert not theme1.themeables.is_blank("axis_text_x_bottom")
+    assert theme1.themeables.is_blank("axis_text_x_top")
+    assert not theme1.themeables.is_blank("axis_text_x")
+
+
+def test_specific_element_overrides_blank_grandparent():
+    # Replacing a blank grandparent must preserve blanks on every branch
+    # outside the path to the specific element.
+    theme1 = theme_gray() + theme(text=blank)
+    theme2 = theme1 + theme(axis_text_x_bottom=element_text(size=14))
+
+    assert "text" not in theme2.themeables
+    assert not theme2.themeables.is_blank("axis_text_x_bottom")
+    assert theme2.themeables.is_blank("axis_text_x_top")
+    assert theme2.themeables.is_blank("axis_text_y_left")
+    assert theme2.themeables.is_blank("plot_title")
+
+
+def test_later_blank_parent_overrides_specific_element():
+    # A later blank parent must remove its previously set descendant.
+    theme1 = theme_gray() + theme(axis_text_x_bottom=element_text(size=14))
+    theme2 = theme1 + theme(axis_text_x=blank)
+
+    assert "axis_text_x_bottom" not in theme2.themeables
+    assert theme2.themeables.is_blank("axis_text_x_bottom")
+
+
+def test_extension_themeable_applies_from_theme_kwargs():
+    # A themeable defined outside plotnine is reachable by its own name as a
+    # theme() keyword, and its apply_ax runs during the draw. The red panel
+    # is the evidence that it ran.
+    class test_extension_panel_facecolor(themeable):
+        def apply_ax(self, ax):
+            super().apply_ax(ax)
+            ax.set_facecolor(self.properties["value"])
+
+    p = (
+        ggplot(mtcars, aes(x="wt", y="mpg"))
+        + geom_point()
+        + theme(test_extension_panel_facecolor="red")
+    )
+    assert p == "extension_themeable_applies_from_theme_kwargs"
 
 
 def test_element_line_dashed_capstyle():
@@ -339,9 +390,37 @@ def test_override_axis_text():
     assert p == "override_axis_text"
 
 
+def test_specific_axis_text_side_overrides_blank_parent():
+    # `theme_void` blanks both x-axis text sides. Setting the bottom side must
+    # draw its labels and reserve their space while the top side remains blank.
+    p = (
+        ggplot()
+        + lims(x=(0, 100), y=(0, 100))
+        + theme_void()
+        + theme(axis_text_x_bottom=element_text(color="purple", size=14))
+    )
+
+    assert p == "specific_axis_text_side_overrides_blank_parent"
+
+
 def test_blank_all_text_draws():
     # Blanking the base `text` element removes every specific text
     # themeable, so axis_text_x/_y margins resolve to None. Drawing must
     # not crash when computing the tick-label padding. (Regression)
     p = ggplot() + lims(x=(0, 100), y=(0, 100)) + theme(text=element_blank())
     p.draw_test()  # pyright: ignore  # must not raise
+
+
+def test_element_text_linespacing_normal():
+    # Matplotlib 3.10 uses `1.2` for the `normal` line spacing that
+    # Matplotlib 3.11 accepts by name.
+    from plotnine._mpl import MPL_LT_311
+
+    expected = 1.2 if MPL_LT_311 else "normal"
+    assert (
+        element_text(linespacing="normal").properties["linespacing"]
+        == expected
+    )
+    assert (
+        element_text(lineheight="normal").properties["linespacing"] == expected
+    )

@@ -6,9 +6,10 @@ from matplotlib import cbook
 from matplotlib.axes import Axes
 from matplotlib.axis import XAxis, YAxis
 from matplotlib.projections import register_projection
+from matplotlib.projections.polar import PolarAxes
 
 if TYPE_CHECKING:
-    from plotnine.typing import Side
+    from plotnine.typing import PolarSide, Side
 
 AxisT = TypeVar("AxisT", XAxis, YAxis)
 
@@ -32,8 +33,8 @@ class p9Axes(Axes):
 
     name = "plotnine"
 
-    # mpl resolves every Axis operation through the per-name axis
-    # registries; the secondary axes register under their own names.
+    # Matplotlib looks up shared axes in the registry for each axis name.
+    # Secondary axes use distinct names.
     _shared_axes = {
         **Axes._shared_axes,  # pyright: ignore[reportAttributeAccessIssue]
         "sec_x": cbook.Grouper(),
@@ -59,6 +60,27 @@ class p9Axes(Axes):
         # the spine of the side it occupies.
         self.spines[:].set_visible(False)
 
+    @property
+    def _axis_map(self) -> dict[str, XAxis | YAxis]:
+        """
+        Mapping from Matplotlib axis names to panel axes
+
+        Matplotlib uses this mapping to resolve tick and limit operations.
+        """
+        m: dict[str, XAxis | YAxis] = {"x": self.xaxis, "y": self.yaxis}
+        if self.sec_xaxis is not None:
+            m["sec_x"] = self.sec_xaxis
+        if self.sec_yaxis is not None:
+            m["sec_y"] = self.sec_yaxis
+        return m
+
+    @_axis_map.setter
+    def _axis_map(self, value: dict[str, XAxis | YAxis]):  # pyright: ignore[reportIncompatibleVariableOverride]
+        # Matplotlib 3.11 and later assign the primary axes here during panel
+        # initialisation. The getter derives that mapping from the panel, so
+        # ignore the assigned value.
+        ...
+
     def add_sec_axis(self, side: Side) -> XAxis | YAxis:
         """
         Return the secondary axis for `side`, creating it if needed
@@ -78,53 +100,93 @@ class p9Axes(Axes):
         """
         if side in ("top", "bottom"):
             if self.sec_xaxis is None:
-                self.sec_xaxis = self._make_sec_axis(XAxis, "sec_x")
+                self.sec_xaxis = self._make_sec_axis(XAxis)
             return self.sec_xaxis
         else:
             if self.sec_yaxis is None:
-                self.sec_yaxis = self._make_sec_axis(YAxis, "sec_y")
+                self.sec_yaxis = self._make_sec_axis(YAxis)
             return self.sec_yaxis
 
-    def _make_sec_axis(self, cls: type[AxisT], name: str) -> AxisT:
+    def _make_sec_axis(self, cls: type[AxisT]) -> AxisT:
         axis = cls(self)
-        # Register the axis so mpl can resolve its name, and add it to
-        # the draw tree. Panels are never cleared after this point;
-        # Axes.clear() would detach the artist.
-        self._axis_map[name] = axis
+        register_lim_changed_signal(self, f"sec_{axis.axis_name}")
+        # Add the axis to the draw tree. Plotnine does not clear the panel
+        # after this point because clearing it would detach the secondary axis.
         self.add_artist(axis)
         axis.set_clip_on(False)
         axis.grid(False)
         return axis
 
 
-def axis_at(ax: Axes, side: Side) -> XAxis | YAxis | None:
+def register_lim_changed_signal(ax: Axes, axis_name: str) -> None:
     """
-    Return the axis of `ax` whose ticks occupy `side`, if any
+    Register the `<axis_name>lim_changed` callback signal on a panel
 
-    Considers the primary axis of the side's dimension and, on a
-    `p9Axes`, the secondary one.
+    Setting fixed ticks on an axis makes matplotlib expand its view
+    interval, and when that interval actually changes it fires a
+    `f"{axis._get_axis_name()}lim_changed"` callback. A panel's
+    `CallbackRegistry` only knows the built-in `x`/`y`/`z` signals, so a
+    secondary axis registered under a name like `sec_x` or `sec_r` would
+    raise `ValueError` on that lookup. Adding the matching signal lets the
+    callback resolve to a no-op (nothing is connected to it).
+
+    Parameters
+    ----------
+    ax :
+        Panel axes owning the callback registry.
+    axis_name :
+        Name the axis is registered under in `ax._axis_map`.
+    """
+    signal = f"{axis_name}lim_changed"
+    signals = ax.callbacks._signals  # pyright: ignore[reportAttributeAccessIssue]
+    if signals is not None and signal not in signals:
+        signals.append(signal)
+
+
+def axis_at(ax: Axes, side: Side | PolarSide) -> XAxis | YAxis | None:
+    """
+    Return the axis whose ticks occupy `side`, if any
+
+    For a cartesian `side`, considers the primary axis of the side's
+    dimension and, on a `p9Axes`, the secondary one, via mpl's own
+    tick-flag state — reliable for `XAxis`/`YAxis`. For a polar `side`
+    (a theta/r side), reads `p9RadialAxes.axis_at_side` instead:
+    `ThetaAxis`/`RadialAxis` can't self-report which side they
+    occupy through `get_tick_params()`, so plotnine tracks it
+    explicitly there.
+
+    Cartesian sides never resolve on polar axes. Polar tick flags describe
+    theta and r placement rather than box edges. For example, a full-circle
+    r axis reports `left=True` even though it does not occupy the left edge
+    of a Cartesian panel.
 
     Parameters
     ----------
     ax :
         Panel axes.
     side :
-        Side of the panel.
+        Side of a cartesian panel, or side of a polar one.
 
     Returns
     -------
     :
         The axis with active ticks on `side`, or `None` when that side
-        shows no ticks (e.g. an interior facet panel).
+        shows no ticks (e.g. an interior facet panel, or a polar
+        side nothing occupies).
     """
-    if side in ("top", "bottom"):
-        candidates = (ax.xaxis, getattr(ax, "sec_xaxis", None))
-    else:
-        candidates = (ax.yaxis, getattr(ax, "sec_yaxis", None))
-    for axis in candidates:
-        if axis and axis.get_tick_params(which="major").get(side):
-            return axis
-    return None
+    if side in ("top", "bottom", "left", "right"):
+        if isinstance(ax, PolarAxes):
+            return None
+        candidates = (
+            (ax.xaxis, getattr(ax, "sec_xaxis", None))
+            if side in ("top", "bottom")
+            else (ax.yaxis, getattr(ax, "sec_yaxis", None))
+        )
+        for axis in candidates:
+            if axis and axis.get_tick_params(which="major").get(side):
+                return axis
+        return None
+    return getattr(ax, "axis_at_side", {}).get(side)
 
 
 register_projection(p9Axes)

@@ -3,11 +3,10 @@ from __future__ import annotations
 import typing
 
 from .._utils import SIZE_FACTOR, to_rgba
-from ..coords import coord_flip
 from ..doctools import document
 from ..exceptions import PlotnineError
 from .geom import geom
-from .geom_path import geom_path
+from .geom_path import stroke_paths
 from .geom_polygon import geom_polygon
 
 if typing.TYPE_CHECKING:
@@ -75,12 +74,11 @@ class geom_ribbon(geom):
         return data
 
     def setup_data(self, data: pd.DataFrame) -> pd.DataFrame:
-        # The outlines need x and y coordinates
-        if self.params["outline_type"] in ("upper", "lower", "both"):
-            if "xmax" in data and "x" not in data:
-                data["x"] = data["xmax"]
-            if "ymax" in data and "y" not in data:
-                data["y"] = data["ymax"]
+        # Coordinate munching requires `x` and `y` for every outline type.
+        if "xmax" in data and "x" not in data:
+            data["x"] = data["xmax"]
+        if "ymax" in data and "y" not in data:
+            data["y"] = data["ymax"]
         return data
 
     @staticmethod
@@ -91,7 +89,7 @@ class geom_ribbon(geom):
         ax: Axes,
         params: dict[str, Any],
     ):
-        _x = "y" if isinstance(coord, coord_flip) else "x"
+        _x = "x" if coord.preserves_dimensions else "y"
         data = coord.transform(data, panel_params, munch=True)
         data = data.sort_values(by=["group", _x], kind="mergesort")
         units = ["alpha", "color", "fill", "linetype", "size"]
@@ -123,12 +121,12 @@ class geom_ribbon(geom):
         if fill is None:
             fill = "none"
 
-        if isinstance(coord, coord_flip):
-            fill_between = ax.fill_betweenx
-            _x, _min, _max = data["y"], data["xmin"], data["xmax"]
-        else:
+        if coord.preserves_dimensions:
             fill_between = ax.fill_between
             _x, _min, _max = data["x"], data["ymin"], data["ymax"]
+        else:
+            fill_between = ax.fill_betweenx
+            _x, _min, _max = data["y"], data["xmin"], data["xmax"]
 
         # We only change this defaults for fill_between when necessary
         where = data.get("where", None)
@@ -154,12 +152,11 @@ class geom_ribbon(geom):
 
         # Alpha does not affect the outlines
         data["alpha"] = 1
-        geom_ribbon._draw_outline(data, panel_params, coord, ax, params)
+        geom_ribbon._draw_outline(data, coord, ax, params)
 
     @staticmethod
     def _draw_outline(
         data: pd.DataFrame,
-        panel_params: panel_view,
         coord: coord,
         ax: Axes,
         params: dict[str, Any],
@@ -169,25 +166,16 @@ class geom_ribbon(geom):
         if outline_type == "full":
             return
 
-        x, y = "x", "y"
-        if isinstance(coord, coord_flip):
-            x, y = y, x
-            data[x], data[y] = data[y], data[x]
+        # The data is already in panel coordinates. Where the coord swaps
+        # the dimensions, the ribbon bounds are `xmin` and `xmax`.
+        bounds = "y" if coord.preserves_dimensions else "x"
 
+        # Each call receives one ribbon group, so an outline forms one path
+        # with constant aesthetics.
         if outline_type in ("lower", "both"):
-            geom_path.draw_group(
-                data.assign(y=data[f"{y}min"]),
-                panel_params,
-                coord,
-                ax,
-                params,
-            )
+            lower = data.assign(**{bounds: data[f"{bounds}min"]})
+            stroke_paths(lower, ax, params, constant=True)
 
         if outline_type in ("upper", "both"):
-            geom_path.draw_group(
-                data.assign(y=data[f"{y}max"]),
-                panel_params,
-                coord,
-                ax,
-                params,
-            )
+            upper = data.assign(**{bounds: data[f"{bounds}max"]})
+            stroke_paths(upper, ax, params, constant=True)
