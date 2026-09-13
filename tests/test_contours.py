@@ -1,0 +1,337 @@
+import numpy as np
+import pandas as pd
+import pytest
+
+from plotnine.data import faithfuld
+from plotnine.exceptions import PlotnineError, PlotnineWarning
+from plotnine.stats.contours import (
+    band_labels,
+    contour_bands,
+    contour_breaks,
+    contour_lines,
+    drop_duplicate_xy,
+    estimate_grid_angle,
+    rotate_xy,
+    xyz_to_grid,
+)
+
+
+@pytest.mark.parametrize(
+    "z_range", [(0, 0.037), (0, 1.9), (0, 103), (-1.05, 1.05)]
+)
+def test_default_breaks_span_surface_range(z_range):
+    # Every surface value must lie between the outermost breaks. Values
+    # beyond either break fall outside all contour bands.
+    breaks = contour_breaks(z_range)
+    assert len(breaks) > 2
+    assert breaks.min() <= z_range[0]
+    assert breaks.max() >= z_range[1]
+
+
+def test_explicit_breaks_are_preserved():
+    breaks = contour_breaks((0, 10), breaks=[1, 2, 3])
+    assert list(breaks) == [1, 2, 3]
+
+
+def test_break_function_receives_range_and_width():
+    breaks = contour_breaks((0, 10), binwidth=2, breaks=lambda r, w: [r[0], w])
+    assert list(breaks) == [0, 2]
+
+
+def test_break_function_receives_default_width():
+    # A break function always receives a distance. Without a requested
+    # count or width, use one tenth of the range.
+    breaks = contour_breaks((0, 10), breaks=lambda r, w: [r[0], w])
+    assert list(breaks) == [0, 1]
+
+
+def test_break_function_uses_bin_count_for_width():
+    widths = []
+
+    def breaks_fun(z_range, binwidth):
+        widths.append(binwidth)
+        return [z_range[0], z_range[1]]
+
+    contour_breaks((0, 10), bins=5, breaks=breaks_fun)
+    # The first spacing treats `bins` as the number of breaks. If that
+    # produces too few bands, retry with `bins` intervals.
+    assert widths == [2.5, 2.0]
+
+
+def test_contour_breaks_sorted_and_deduplicated():
+    breaks = contour_breaks((0, 1), breaks=[0.02, 0.005, 0.01, 0.01])
+    assert list(breaks) == [0.005, 0.01, 0.02]
+
+
+def test_contour_breaks_flat_surface():
+    # A flat surface has one possible contour value and no band to fill.
+    breaks = contour_breaks((1.0, 1.0), bins=5)
+    assert list(breaks) == [1.0]
+
+
+def test_binwidth_generates_even_breaks():
+    breaks = contour_breaks((0.5, 9.5), binwidth=2)
+    assert list(breaks) == [0, 2, 4, 6, 8, 10]
+
+
+def test_bin_count_spans_surface_range():
+    # Each band needs a lower and upper break.
+    breaks = contour_breaks((0, 10), bins=5)
+    assert len(breaks) >= 6
+    assert breaks.min() <= 0
+    assert breaks.max() >= 10
+
+
+def test_one_bin_has_two_boundary_breaks():
+    breaks = contour_breaks((0.5, 9.5), bins=1)
+    assert len(breaks) == 2
+    assert breaks[0] <= 0.5 and breaks[1] >= 9.5
+
+
+def test_non_positive_bin_count_raises():
+    with pytest.raises(PlotnineError):
+        contour_breaks((0, 10), bins=0)
+
+
+def test_non_positive_binwidth_raises():
+    with pytest.raises(PlotnineError):
+        contour_breaks((0, 10), binwidth=0)
+
+    with pytest.raises(PlotnineError):
+        contour_breaks((0, 10), binwidth=-1)
+
+
+def test_xyz_values_are_arranged_on_a_grid():
+    data = pd.DataFrame(
+        {
+            "x": [1, 2, 1, 2],
+            "y": [10, 10, 20, 20],
+            "z": [1.0, 2.0, 3.0, 4.0],
+        }
+    )
+    x, y, Z = xyz_to_grid(data)
+    assert list(x) == [1, 2]
+    assert list(y) == [10, 20]
+    assert Z.tolist() == [[1.0, 2.0], [3.0, 4.0]]
+
+
+def test_missing_grid_cell_becomes_nan():
+    data = pd.DataFrame(
+        {
+            "x": [1, 2, 1],
+            "y": [10, 10, 20],
+            "z": [1.0, 2.0, 3.0],
+        }
+    )
+    _, _, Z = xyz_to_grid(data)
+    assert np.isnan(Z[1, 1])
+
+
+def peak_grid():
+    x = np.linspace(-3, 3, 40)
+    y = np.linspace(-3, 3, 40)
+    X, Y = np.meshgrid(x, y)
+    return x, y, np.exp(-(X**2 + Y**2))
+
+
+def test_band_labels_use_right_closed_intervals():
+    assert band_labels(np.array([0.0, 0.5, 1.0])) == ["(0, 0.5]", "(0.5, 1]"]
+
+
+def test_band_labels_increase_precision_until_distinct():
+    labels = band_labels(np.array([1.0001, 1.0002, 1.0003]))
+    assert labels[0] != labels[1]
+
+
+def test_equal_breaks_cannot_have_distinct_labels():
+    with pytest.raises(PlotnineError):
+        band_labels(np.array([1.0, 1.0, 2.0]))
+
+
+def test_contour_lines_record_levels_and_groups():
+    x, y, Z = peak_grid()
+    df = contour_lines(x, y, Z, np.array([0.2, 0.6]), 1)
+    assert set(df["level"]) == {0.2, 0.6}
+    assert df["nlevel"].max() == 1
+    # Draw each closed contour as a separate group.
+    assert df.groupby("group").ngroups == 2
+
+
+def two_peak_grid():
+    """
+    Create a surface with equal peaks on opposite sides of `x = 0`
+
+    A contour below both peaks forms two disconnected pieces.
+    """
+    x = np.linspace(-4, 4, 60)
+    y = np.linspace(-2, 2, 30)
+    X, Y = np.meshgrid(x, y)
+    left = np.exp(-((X + 2) ** 2 + Y**2))
+    right = np.exp(-((X - 2) ** 2 + Y**2))
+    return x, y, left + right
+
+
+def test_contour_lines_disjoint_pieces():
+    x, y, Z = two_peak_grid()
+    df = contour_lines(x, y, Z, np.array([0.5]), 3)
+    # Give each peak its own piece and group so the paths remain separate.
+    assert sorted(df["piece"].unique()) == [1, 2]
+    assert sorted(df["group"].unique()) == ["3-1", "3-2"]
+
+
+def test_contour_lines_grid_too_small():
+    Z = np.array([[1.0]])
+    with pytest.warns(PlotnineWarning):
+        df = contour_lines(
+            np.array([0.0]), np.array([0.0]), Z, np.array([0.5]), 1
+        )
+    assert len(df) == 0
+    assert list(df.columns) == ["x", "y", "level", "nlevel", "piece", "group"]
+
+
+def test_empty_contour_lines_preserve_schema():
+    x, y, Z = peak_grid()
+    with pytest.warns(PlotnineWarning):
+        df = contour_lines(x, y, Z, np.array([5.0]), 1)
+    assert len(df) == 0
+    assert list(df.columns) == ["x", "y", "level", "nlevel", "piece", "group"]
+
+
+def test_contour_band_records_hole_rings():
+    x, y, Z = peak_grid()
+    df = contour_bands(x, y, Z, np.array([0.0, 0.2, 1.0]), 1)
+    # The lower band contains an exterior ring and a hole around the peak.
+    lower = df[df["level"] == df["level"].cat.categories[0]]
+    assert set(lower["subgroup"]) == {0, 1}
+
+
+def test_contour_bands_record_ordered_levels_and_bounds():
+    x, y, Z = peak_grid()
+    breaks = np.array([0.0, 0.2, 1.0])
+    df = contour_bands(x, y, Z, breaks, 1)
+    assert df["level"].cat.ordered
+    assert list(df["level"].cat.categories) == band_labels(breaks)
+    assert set(df["level_low"]) <= {0.0, 0.2}
+    assert set(df["level_high"]) <= {0.2, 1.0}
+    assert (df["level_mid"] == (df["level_low"] + df["level_high"]) / 2).all()
+
+
+def test_contour_pieces_are_numbered_across_bands():
+    x, y, Z = two_peak_grid()
+    df = contour_bands(x, y, Z, np.array([0.2, 0.5, 1.1]), 3)
+    # Number disconnected pieces across all bands, not within each band.
+    pieces = df.groupby("level", observed=True)["piece"].unique()
+    assert [sorted(p) for p in pieces] == [[1, 2], [3, 4]]
+    assert sorted(df["group"].unique()) == ["3-1", "3-2", "3-3", "3-4"]
+    # Scale each upper bound by the largest upper bound.
+    assert df["nlevel"].max() == 1
+    assert (df["nlevel"] == df["level_high"] / 1.1).all()
+
+
+def test_contour_bands_one_break():
+    x, y, Z = peak_grid()
+    with pytest.warns(PlotnineWarning):
+        df = contour_bands(x, y, Z, np.array([0.2]), 1)
+    assert len(df) == 0
+    assert "level_low" in df.columns
+
+
+def test_contour_bands_grid_too_small():
+    Z = np.array([[1.0]])
+    with pytest.warns(PlotnineWarning):
+        df = contour_bands(
+            np.array([0.0]), np.array([0.0]), Z, np.array([0.0, 2.0]), 1
+        )
+    assert len(df) == 0
+    assert list(df["level"].cat.categories) == ["(0, 2]"]
+
+
+def test_duplicate_coordinates_keep_last_value():
+    data = pd.DataFrame({"x": [1, 1, 2], "y": [1, 1, 2], "z": [1.0, 2.0, 3.0]})
+    with pytest.warns(PlotnineWarning):
+        result = drop_duplicate_xy(data)
+    assert len(result) == 2
+    # Grid population order makes the last duplicate win.
+    assert result["z"].tolist() == [2.0, 3.0]
+
+
+def test_unique_coordinates_remain_unchanged():
+    data = pd.DataFrame({"x": [1, 2], "y": [1, 2], "z": [1.0, 2.0]})
+    assert len(drop_duplicate_xy(data)) == 2
+
+
+def test_axis_aligned_grid_has_zero_angle():
+    x, y = np.meshgrid(np.arange(5), np.arange(5))
+    assert estimate_grid_angle(x.ravel(), y.ravel()) == 0
+
+
+def rotate_xy_exact(
+    x: np.ndarray, y: np.ndarray, angle: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Rotate coordinates about the origin without rounding
+
+    Grid-angle estimation receives raw layer coordinates. Use direct
+    rotation arithmetic to create a fixture with the same precision.
+    """
+    cos, sin = np.cos(angle), np.sin(angle)
+    return cos * x - sin * y, sin * x + cos * y
+
+
+def test_rotated_grid_angle_is_recovered():
+    x, y = np.meshgrid(np.arange(5.0), np.arange(5.0))
+    rx, ry = rotate_xy_exact(x.ravel(), y.ravel(), np.pi / 6)
+    assert estimate_grid_angle(rx, ry) == pytest.approx(np.pi / 6)
+
+
+def test_rotated_grid_angle_survives_large_offset():
+    # Exercise a coordinate magnitude typical of projected map data.
+    x, y = np.meshgrid(np.arange(5.0), np.arange(5.0))
+    x, y = x.ravel() + 1e5, y.ravel() + 1e5
+    rx, ry = rotate_xy_exact(x, y, np.pi / 6)
+    assert estimate_grid_angle(rx, ry) == pytest.approx(np.pi / 6)
+
+
+def test_rotation_round_trip_restores_coordinates():
+    x = np.array([0.0, 1.0, 2.0])
+    y = np.array([0.0, 1.0, 2.0])
+    rx, ry = rotate_xy(x, y, 0.4)
+    ux, uy = rotate_xy(rx, ry, -0.4)
+    assert ux == pytest.approx(x)
+    assert uy == pytest.approx(y)
+
+
+def test_zero_angle_preserves_coordinates():
+    x = np.array([0.0, 1.0])
+    y = np.array([2.0, 3.0])
+    rx, ry = rotate_xy(x, y, 0)
+    assert rx.tolist() == [0.0, 1.0]
+    assert ry.tolist() == [2.0, 3.0]
+
+
+def test_rotation_preserves_empty_coordinates():
+    x = np.array([])
+    y = np.array([])
+    rx, ry = rotate_xy(x, y, 0.3)
+    assert rx.size == 0
+    assert ry.size == 0
+
+
+def test_rotated_grid_realigns_at_data_scale():
+    """
+    Verify grid realignment at realistic coordinate scales
+
+    Small integer grids hide precision loss because their spacing exceeds
+    the combined angle-estimation and rotation errors. An angle can satisfy
+    approximate equality while still moving points off shared rows or
+    columns, so compare coordinate counts after a round trip.
+    """
+    x = faithfuld["waiting"].to_numpy()
+    y = faithfuld["eruptions"].to_numpy()
+    rx, ry = rotate_xy_exact(x, y, np.pi / 6)
+
+    angle = estimate_grid_angle(rx, ry)
+    ux, uy = rotate_xy(rx, ry, -angle)
+
+    assert len(np.unique(ux)) == len(np.unique(x))
+    assert len(np.unique(uy)) == len(np.unique(y))

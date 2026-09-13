@@ -3,7 +3,7 @@ from typing import cast
 import numpy as np
 import pandas as pd
 
-from .._utils import get_valid_kwargs, uniquecols
+from .._utils import get_valid_kwargs, normalise_random_state, uniquecols
 from ..doctools import document
 from ..exceptions import PlotnineError
 from .stat import stat
@@ -25,7 +25,10 @@ def bootstrap_statistics(
 
     alpha = 1 - confidence_interval
     size = (n_samples, len(series))
-    inds = random_state.randint(0, len(series), size=size)
+    if isinstance(random_state, np.random.Generator):
+        inds = random_state.integers(0, len(series), size=size)
+    else:
+        inds = random_state.randint(0, len(series), size=size)
     samples = series.to_numpy()[inds]
     means = np.sort(statistic(samples, axis=1))
     return pd.DataFrame(
@@ -51,9 +54,10 @@ def mean_cl_boot(
         Number of sample to draw.
     confidence_interval : float
         Confidence interval in the range (0, 1).
-    random_state : int | ~numpy.random.RandomState, default=None
-        Seed or Random number generator to use. If `None`, then
-        numpy global generator [](`numpy.random`) is used.
+    random_state :
+        Integer seed, [](`~numpy.random.RandomState`), or
+        [](`numpy.random.Generator`). If `None`, draw from NumPy's global
+        random state.
     """
     return bootstrap_statistics(
         series,
@@ -135,7 +139,10 @@ def mean_se(series, mult=1):
         Multiplication factor.
     """
     m = np.mean(series)
-    se = mult * np.sqrt(np.var(series) / len(series))
+    # ddof=1: the standard error of the mean is built from the sample
+    # variance. numpy defaults to ddof=0, which is the population
+    # variance and understates the error by a factor of sqrt((n-1)/n).
+    se = mult * np.sqrt(np.var(series, ddof=1) / len(series))
     return pd.DataFrame({"y": [m], "ymin": m - se, "ymax": m + se})
 
 
@@ -238,9 +245,10 @@ class stat_summary(stat):
         arguments will be assigned to the right functions. If there is
         a conflict, create a wrapper function that resolves the
         ambiguity in the argument names.
-    random_state : int | ~numpy.random.RandomState, default=None
-        Seed or Random number generator to use. If `None`, then
-        numpy global generator [](`numpy.random`) is used.
+    random_state :
+        Integer seed, [](`~numpy.random.RandomState`), or
+        [](`numpy.random.Generator`). If `None`, draw from NumPy's global
+        random state.
 
     Notes
     -----
@@ -289,15 +297,11 @@ class stat_summary(stat):
 
         if (
             "random_state" not in self.params["fun_args"]
-            and self.params["random_state"]
+            and self.params["random_state"] is not None
         ):
-            random_state = self.params["random_state"]
-            if random_state is None:
-                random_state = np.random
-            elif isinstance(random_state, int):
-                random_state = np.random.RandomState(random_state)
-
-            self.params["fun_args"]["random_state"] = random_state
+            self.params["fun_args"]["random_state"] = normalise_random_state(
+                self.params["random_state"]
+            )
 
     def compute_panel(self, data, scales):
         func = make_summary_fun(

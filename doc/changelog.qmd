@@ -89,6 +89,31 @@ title: Changelog
   which you can place the strip on any side of the panel; `"top"` (default),
   `"bottom"`, `"left"` or `"right"`.
 
+- Added [](:class:`~plotnine.geom_contour`) and
+  [](:class:`~plotnine.geom_contour_filled`) to represent a gridded surface
+  with contour lines and filled bands.
+  ({{< issue 1084 >}})
+
+- Added [](:class:`~plotnine.geom_density_2d_filled`), the filled
+  counterpart of [](:class:`~plotnine.geom_density_2d`).
+
+- [](:class:`~plotnine.geom_polygon`) can now draw polygons with holes.
+  Use the new `subgroup` aesthetic to identify each ring within a polygon.
+
+- Plot components that take a `random_state` now also accept a
+  [](`numpy.random.Generator`), in addition to an integer seed or a
+  [](`~numpy.random.RandomState`).
+
+- Added [](:func:`~plotnine.I`), with which you can mark a value as literal.
+  A literal value takes no scale, so it is not trained, not mapped, and gets
+  no legend. One layer can draw literal colours while another maps the same
+  aesthetic through a scale. ({{< issue 1008 >}})
+
+- You can now place an annotation relative to the panel by wrapping a position
+  in [](:func:`~plotnine.I`). `x=I(0.5)` is the centre of the panel and
+  `x=I(0.9)` is 90% across, whatever the data, the limits or the expansion.
+  ({{< issue 939 >}})
+
 ### API Changes
 
 - Removed `geom.to_layer()`, `stat.to_layer()`, `annotate.to_layer()`,
@@ -126,6 +151,15 @@ title: Changelog
 - `statsmodels>=0.14.6` is now required on every platform. This replaces the
   separate `statsmodels<=0.14.4` requirement for Pyodide.
 
+- `contourpy>=1.2.0` is now required. It computes the contours of a surface.
+
+- [](:class:`~plotnine.stat_density_2d`) gained `contour_var`, `bins`,
+  `binwidth` and `breaks`. Every panel now uses the same contour heights.
+  The stat divides density into ten bands by default instead of five, so
+  [](:class:`~plotnine.geom_density_2d`) draws more contour lines for the
+  same data. The `levels` parameter is deprecated; use `bins` or `breaks`
+  instead.
+
 ### Bug Fixes
 
 - [](:class:`~plotnine.scale_size_datetime`) now honours its `range`
@@ -143,6 +177,17 @@ title: Changelog
   [](:class:`~plotnine.coord_trans`)) no longer show triangular spikes; each
   rectangle is now drawn as its own polygon instead of merging a bar's
   segments into a single path.
+
+- Under a non-linear coordinate system such as
+  [](:class:`~plotnine.coord_trans`), a [](:class:`~plotnine.geom_polygon`)
+  with several groups no longer draws an edge from one polygon to the next.
+
+- Under a non-linear coordinate system, separate
+  [](:class:`~plotnine.geom_path`) groups no longer connect when an aesthetic
+  such as `color` varies along the path. The fix also applies to
+  [](:class:`~plotnine.geom_line`), [](:class:`~plotnine.geom_step`),
+  [](:class:`~plotnine.geom_density`) and the line drawn by
+  [](:class:`~plotnine.geom_smooth`).
 
 - In a non-linear coordinate system (e.g. [](:class:`~plotnine.coord_trans`)),
   both edges of a [](:class:`~plotnine.geom_ribbon`) or
@@ -193,6 +238,28 @@ title: Changelog
 - Saving a composition now honours the `dpi` argument. For example,
   `(p1 | p2).save("composition.png", dpi=200)` saves the image at 200 DPI
   instead of the default resolution.
+
+- Plots containing an unseeded [](:class:`~plotnine.geom_sina`) can now be
+  copied, including when the geom has been added to every plot in a
+  composition. Copying previously raised
+  `TypeError: cannot pickle 'module' object`.
+  ({{< issue 1115 >}})
+
+- [](:class:`~plotnine.position_jitter`) and
+  [](:class:`~plotnine.position_jitterdodge`) now make independent random
+  draws for the horizontal and vertical axes when given a seed. Both axes
+  previously received identical offsets, placing points along a diagonal.
+
+- [](:class:`~plotnine.position_jitter`),
+  [](:class:`~plotnine.position_jitterdodge`),
+  [](:class:`~plotnine.stat_summary`), and
+  [](:class:`~plotnine.stat_summary_bin`) now treat `0` as a valid
+  `random_state` seed. They previously selected NumPy's global random state,
+  so results depended on other random draws.
+
+- Broadcasting a layer to every plot in a composition with `&` or `*` now
+  gives each target plot an independent copy. Changes made while drawing one
+  plot no longer affect the layer in another plot.
 
 ### Enhancements
 

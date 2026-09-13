@@ -6,9 +6,12 @@ from .stat_bin import stat_bin
 from .stat_bin_2d import stat_bin2d, stat_bin_2d
 from .stat_bindot import stat_bindot
 from .stat_boxplot import stat_boxplot
+from .stat_contour import stat_contour
+from .stat_contour_filled import stat_contour_filled
 from .stat_count import stat_count
 from .stat_density import stat_density
 from .stat_density_2d import stat_density_2d
+from .stat_density_2d_filled import stat_density_2d_filled
 from .stat_ecdf import stat_ecdf
 from .stat_ellipse import stat_ellipse
 from .stat_function import stat_function
@@ -33,10 +36,13 @@ __all__ = (
     "stat_bin2d",
     "stat_bindot",
     "stat_boxplot",
+    "stat_contour",
+    "stat_contour_filled",
     "stat_density",
     "stat_ecdf",
     "stat_ellipse",
     "stat_density_2d",
+    "stat_density_2d_filled",
     "stat_function",
     "stat_hull",
     "stat_identity",

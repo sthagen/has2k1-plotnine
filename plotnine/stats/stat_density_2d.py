@@ -1,40 +1,64 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
+from warnings import warn
 
 import numpy as np
 import pandas as pd
+from mizani.utils import min_max
 
+from .._utils import groupby_apply, is_scalar
 from ..doctools import document
+from ..exceptions import PlotnineError
+from .contours import contour_breaks, contour_lines, xyz_to_grid
 from .density import get_var_type, kde
-from .stat import stat
+from .stat import restore_constant_columns, stat
 
 if TYPE_CHECKING:
-    from plotnine.typing import FloatArrayLike
+    from plotnine.typing import FloatArray, FloatArrayLike
+
+# Do not restore columns created during density estimation after
+# contouring. Most vary within a group and are excluded automatically,
+# but `n` is constant and would otherwise leak into contour output.
+_DENSITY_PHASE_COLUMNS = frozenset({"z", "density", "ndensity", "count", "n"})
 
 
 @document
 class stat_density_2d(stat):
     """
-    Compute 2D kernel density estimation
+    A two-dimensional kernel density estimate
 
     {usage}
 
     Parameters
     ----------
     {common_parameters}
-    contour : bool, default=True
-        Whether to create contours of the 2d density estimate.
-    n : int, default=64
+    contour :
+        Whether to contour the two-dimensional density estimate.
+    contour_var :
+        Computed variable that sets contour heights. Use `density`,
+        `ndensity` or `count`.
+    n :
         Number of equally spaced points at which the density is to
         be estimated. For efficient computation, it should be a power
         of two.
-    levels : int | array_like, default=5
-        Contour levels. If an integer, it specifies the maximum number
-        of levels, if array_like it is the levels themselves.
-    package : Literal["statsmodels", "scipy", "sklearn"], default="statsmodels"
+    bins :
+        Number of contour bands. Takes precedence over `binwidth`.
+    binwidth :
+        Distance between adjacent contour values.
+    breaks :
+        Explicit contour values, sorted and deduplicated, or a function that
+        receives the range of `contour_var` and distance between contours.
+        Explicit values override `bins` and `binwidth`. A function uses the
+        distance selected by `bins` or `binwidth`, or one tenth of the range
+        when neither is set. By default, values are selected for ten bands.
+    levels :
+        Deprecated and scheduled for removal in a future version. Use `bins`
+        to set the number of bands or `breaks` to set contour values
+        directly. Explicit `bins` or `breaks` takes precedence.
+    package :
         Package whose kernel density estimation to use.
-    kde_params : dict
+    kde_params :
         Keyword arguments to pass on to the kde class.
 
     See Also
@@ -51,28 +75,65 @@ class stat_density_2d(stat):
     **Options for computed aesthetics**
 
     ```python
-    "level"     # density level of a contour
-    "density"   # Computed density at a point
-    "piece"     # Numeric id of a contour in a given group
+    "density"   # computed density at a point
+    "ndensity"  # density, scaled to a maximum of 1
+    "count"     # density scaled by the number of observations
+    "n"         # number of observations in the group
+    "level"     # height of the contour
+    "nlevel"    # height of the contour, scaled to a maximum of 1
+    "piece"     # identifier for one disconnected contour
     ```
 
-    `level` is only relevant when contours are computed. `density`
-    is available only when no contours are computed. `piece` is
-    largely irrelevant.
+    Without contouring, the output contains `density`, `ndensity`, `count`
+    and `n`. With contouring, it contains `level`, `nlevel` and `piece`.
     """
     REQUIRED_AES = {"x"}
     DEFAULT_PARAMS = {
         "geom": "density_2d",
         "contour": True,
+        "contour_var": "density",
+        "bins": None,
+        "binwidth": None,
+        "breaks": None,
         "package": "statsmodels",
         "kde_params": None,
         "n": 64,
-        "levels": 5,
+        "levels": None,
     }
-    CREATES = {"y"}
+    CREATES = {"y", "density", "ndensity", "count", "n"}
+    DROPPED_AES = ["density", "ndensity", "count"]
 
     def setup_params(self, data):
         params = self.params
+
+        if params["levels"] is not None:
+            msg = (
+                "stat_density_2d: `levels` is deprecated and will be "
+                "removed in a future version. Use `bins` for a number of "
+                "contour bands, or `breaks` for the contour values "
+                "themselves."
+            )
+            # `bins` and `breaks` are explicit replacements for `levels`.
+            # Preserve them and report which parameter took precedence.
+            explicit = [
+                name for name in ("bins", "breaks") if params[name] is not None
+            ]
+            if explicit:
+                named = " and ".join(f"`{name}`" for name in explicit)
+                msg += f" `levels` is ignored here, in favour of {named}."
+            elif is_scalar(params["levels"]):
+                params["bins"] = params["levels"]
+            else:
+                params["breaks"] = params["levels"]
+
+            warn(msg, FutureWarning)
+
+        if params["contour_var"] not in ("density", "ndensity", "count"):
+            raise PlotnineError(
+                "`contour_var` must be one of 'density', 'ndensity' or "
+                f"'count'; got {params['contour_var']!r}."
+            )
+
         if params["kde_params"] is None:
             params["kde_params"] = {}
 
@@ -103,85 +164,58 @@ class stat_density_2d(stat):
         grid = np.array([X.flatten(), Y.flatten()]).T
         density = kde(var_data, grid, package, **kde_params)
 
-        if params["contour"]:
-            Z = density.reshape(len(_x), len(_y))
-            data = contour_lines(X, Y, Z, params["levels"])
-            # Each piece should have a distinct group
-            groups = str(group) + "-00" + data["piece"].astype(str)
-            data["group"] = groups
-        else:
-            data = pd.DataFrame(
-                {
-                    "x": X.flatten(),
-                    "y": Y.flatten(),
-                    "density": density.flatten(),
-                    "group": group,
-                    "level": 1,
-                    "piece": 1,
-                }
-            )
+        n_obs = len(data)
+        return pd.DataFrame(
+            {
+                "x": X.flatten(),
+                "y": Y.flatten(),
+                "density": density,
+                "ndensity": density / np.nanmax(density),
+                "count": n_obs * density,
+                "n": n_obs,
+                "group": group,
+                "level": 1,
+                "piece": 1,
+            }
+        )
 
-        return data
+    def compute_layer(self, data, layout):
+        # Estimate every density before selecting breaks so the complete
+        # layer, including all facet panels, shares contour heights.
+        params = self.params
+        data = super().compute_layer(data, layout)
+        if not params["contour"] or not len(data):
+            return data
 
+        data["z"] = data[params["contour_var"]]
+        breaks = contour_breaks(
+            min_max(data["z"], na_rm=True, finite=True),
+            params["bins"],
+            params["binwidth"],
+            params["breaks"],
+        )
+        return groupby_apply(
+            data, ["PANEL", "group"], self._contour_group, breaks
+        )
 
-def contour_lines(X, Y, Z, levels: int | FloatArrayLike):
-    """
-    Calculate contour lines
-    """
-    from contourpy import contour_generator
+    def _contour_group(
+        self, data: pd.DataFrame, breaks: FloatArray
+    ) -> pd.DataFrame:
+        """
+        Contour one panel group and restore its original constant columns
+        """
+        res = self.compute_contours(
+            *xyz_to_grid(data), breaks, data["group"].iloc[0]
+        )
 
-    # Preparation of values and the creating of contours is
-    # adapted from MPL with some adjustments.
-    X = np.asarray(X, dtype=np.float64)
-    Y = np.asarray(Y, dtype=np.float64)
-    Z = np.asarray(Z, dtype=np.float64)
-    zmin, zmax = Z.min(), Z.max()
-    cgen = contour_generator(
-        X, Y, Z, name="mpl2014", corner_mask=False, chunk_size=0
-    )
+        # Contouring follows panel computation. Restore original constant
+        # columns, but exclude columns created during density estimation.
+        return restore_constant_columns(
+            res, data.drop(columns=list(_DENSITY_PHASE_COLUMNS))
+        )
 
-    if isinstance(levels, int):
-        from mizani.breaks import breaks_extended
-
-        levels = breaks_extended(n=levels)((zmin, zmax))
-
-    # The counter_generator gives us a list of vertices that
-    # represent all the contour lines at that level. There
-    # may be 0, 1 or more vertices at a level. Each one of
-    # these we call a piece, and it represented as an nx2 array.
-    #
-    # We want x-y values that describe *all* the contour lines
-    # in tidy format. Therefore each x-y vertex has a
-    # corresponding level and piece id.
-    segments = []
-    piece_ids = []
-    level_values = []
-    start_pid = 1
-    for level in levels:
-        vertices, *_ = cgen.create_contour(level)
-        for pid, piece in enumerate(vertices, start=start_pid):
-            n = len(piece)  # pyright: ignore
-            segments.append(piece)
-            piece_ids.append(np.repeat(pid, n))
-            level_values.append(np.repeat(level, n))
-            start_pid = pid + 1
-
-    # Collapse the info and make it fit for dataframe columns
-    if segments:
-        x, y = np.vstack(segments).T
-        piece = np.hstack(piece_ids)
-        level = np.hstack(level_values)
-    else:
-        x, y = [], []
-        piece = []
-        level = []
-
-    data = pd.DataFrame(
-        {
-            "x": x,
-            "y": y,
-            "level": level,
-            "piece": piece,
-        }
-    )
-    return data
+    def compute_contours(self, x, y, Z, breaks, group):
+        """
+        Trace one contour line at every break on an axis-aligned grid
+        """
+        return contour_lines(x, y, Z, breaks, group)

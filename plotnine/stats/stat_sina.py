@@ -3,7 +3,13 @@ from typing import TYPE_CHECKING, cast
 import numpy as np
 import pandas as pd
 
-from .._utils import array_kind, jitter, nextafter_range, resolution
+from .._utils import (
+    array_kind,
+    jitter,
+    nextafter_range,
+    normalise_random_state,
+    resolution,
+)
 from ..doctools import document
 from ..exceptions import PlotnineError
 from ..mapping.aes import has_groups
@@ -53,9 +59,10 @@ class stat_sina(stat):
         If the samples within the same y-axis bin are more
         than `bin_limit`, the samples's X coordinates will be adjusted.
         This parameter is effective only when `method="counts"`{.py}
-    random_state : int | ~numpy.random.RandomState, default=None
-        Seed or Random number generator to use. If `None`, then
-        numpy global generator [](`numpy.random`) is used.
+    random_state :
+        Integer seed, [](`~numpy.random.RandomState`), or
+        [](`numpy.random.Generator`). If `None`, draw from NumPy's global
+        random state.
     scale : Literal["area", "count", "width"], default="area"
         How to scale the sina groups.
 
@@ -129,10 +136,7 @@ class stat_sina(stat):
         if params["binwidth"] is None and self.params["bins"] is None:
             params["bins"] = 50
 
-        if random_state is None:
-            params["random_state"] = np.random
-        elif isinstance(random_state, int):
-            params["random_state"] = np.random.RandomState(random_state)
+        params["random_state"] = normalise_random_state(random_state)
 
         # Required by compute_density
         params["kernel"] = "gau"  # It has to be a gaussian kernel
@@ -146,6 +150,8 @@ class stat_sina(stat):
         params = self.params
         maxwidth = params["maxwidth"]
         random_state = params["random_state"]
+        if random_state is None:
+            random_state = np.random
         data = super().compute_panel(data, scales)
 
         if not len(data):

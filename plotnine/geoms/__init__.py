@@ -12,10 +12,13 @@ from .geom_bin_2d import geom_bin2d, geom_bin_2d
 from .geom_blank import geom_blank
 from .geom_boxplot import geom_boxplot
 from .geom_col import geom_col
+from .geom_contour import geom_contour
+from .geom_contour_filled import geom_contour_filled
 from .geom_count import geom_count
 from .geom_crossbar import geom_crossbar
 from .geom_density import geom_density
 from .geom_density_2d import geom_density_2d
+from .geom_density_2d_filled import geom_density_2d_filled
 from .geom_dotplot import geom_dotplot
 from .geom_errorbar import geom_errorbar
 from .geom_errorbarh import geom_errorbarh
@@ -61,10 +64,13 @@ __all__ = (
     "geom_blank",
     "geom_boxplot",
     "geom_col",
+    "geom_contour",
+    "geom_contour_filled",
     "geom_count",
     "geom_crossbar",
     "geom_density",
     "geom_density_2d",
+    "geom_density_2d_filled",
     "geom_dotplot",
     "geom_errorbar",
     "geom_errorbarh",

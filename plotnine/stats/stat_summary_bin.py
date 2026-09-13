@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, cast
 import numpy as np
 import pandas as pd
 
-from .._utils import groupby_apply
+from .._utils import groupby_apply, normalise_random_state
 from ..doctools import document
 from ..exceptions import PlotnineWarning
 from ..scales.scale_discrete import scale_discrete
@@ -56,9 +56,10 @@ class stat_summary_bin(stat):
         arguments will be assigned to the right functions. If there is
         a conflict, create a wrapper function that resolves the
         ambiguity in the argument names.
-    random_state : int | ~numpy.random.RandomState, default=None
-        Seed or Random number generator to use. If `None`, then
-        numpy global generator [](`numpy.random`) is used.
+    random_state :
+        Integer seed, [](`~numpy.random.RandomState`), or
+        [](`numpy.random.Generator`). If `None`, draw from NumPy's global
+        random state.
 
     Notes
     -----
@@ -116,15 +117,11 @@ class stat_summary_bin(stat):
 
         if (
             "random_state" not in self.params["fun_args"]
-            and self.params["random_state"]
+            and self.params["random_state"] is not None
         ):
-            random_state = self.params["random_state"]
-            if random_state is None:
-                random_state = np.random
-            elif isinstance(random_state, int):
-                random_state = np.random.RandomState(random_state)
-
-            self.params["fun_args"]["random_state"] = random_state
+            self.params["fun_args"]["random_state"] = normalise_random_state(
+                self.params["random_state"]
+            )
 
     def compute_group(self, data, scales):
         bins = self.params["bins"]

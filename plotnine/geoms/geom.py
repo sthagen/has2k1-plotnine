@@ -113,7 +113,7 @@ class geom(ABC, metaclass=Register):
         geoms should not override this method.
         """
         main = cls.DEFAULT_AES.keys() | cls.REQUIRED_AES
-        other = {"group"}
+        other = {"group", "subgroup"}
         # Need to recognize both spellings
         if "color" in main:
             other.add("colour")
@@ -217,6 +217,7 @@ class geom(ABC, metaclass=Register):
         :
             Data used for drawing the geom.
         """
+        from plotnine.mapping._asis import is_asis
         from plotnine.mapping._atomic import ae_value, broadcast_ae_value
 
         missing_aes = (
@@ -234,6 +235,7 @@ class geom(ABC, metaclass=Register):
         for ae in evaled.columns.intersection(data.columns):
             data[ae] = evaled[ae]
 
+        n = len(data)
         num_panels = len(data["PANEL"].unique()) if "PANEL" in data else 1
         across_panels = num_panels > 1 and not self.params["inherit_aes"]
 
@@ -243,6 +245,10 @@ class geom(ABC, metaclass=Register):
                 data[ae] = value
             elif isinstance(value, ae_value):
                 data[ae] = value * len(data)
+            elif is_asis(value):
+                # Preserve the dtype tag when repeating a literal parameter
+                # so position fractions remain available for later resolution.
+                data[ae] = np.repeat(value, n) if len(value) == 1 else value
             elif across_panels:
                 value = list(chain(*repeat(value, num_panels)))
                 data[ae] = value

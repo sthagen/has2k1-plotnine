@@ -37,6 +37,7 @@ quartodoc:
         - after_stat
         - after_scale
         - stage
+        - I
 
     - subtitle: Functions in the Aesthetic Evaluation Environment
       desc: |
@@ -70,10 +71,13 @@ quartodoc:
         - geom_blank
         - geom_boxplot
         - geom_col
+        - geom_contour
+        - geom_contour_filled
         - geom_count
         - geom_crossbar
         - geom_density
         - geom_density_2d
+        - geom_density_2d_filled
         - geom_dotplot
         - geom_errorbar
         - geom_errorbarh
@@ -142,9 +146,12 @@ quartodoc:
         - stat_bin_2d
         - stat_bindot
         - stat_boxplot
+        - stat_contour
+        - stat_contour_filled
         - stat_count
         - stat_density
         - stat_density_2d
+        - stat_density_2d_filled
         - stat_ecdf
         - stat_ellipse
         - stat_function
