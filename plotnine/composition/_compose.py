@@ -8,7 +8,8 @@ from typing import TYPE_CHECKING, TypeVar, cast, overload
 
 from plotnine.themes.theme import theme, theme_get
 
-from .._utils.context import plot_composition_context
+from .._utils import get_save_format
+from .._utils.context import assign_figure, plot_composition_context
 from .._utils.ipython import (
     get_ipython,
     get_mimebundle,
@@ -386,10 +387,14 @@ class Compose:
         """
         ip = get_ipython()
         format: FigureFormat = (
-            get_option("figure_format")
+            self.theme.getp("figure_format")
+            or get_option("figure_format")
             or (ip and ip.config.InlineBackend.get("figure_format"))
             or "retina"
         )
+        format = cast("FigureFormat", format.lower())
+        if format == "jpg":
+            format = "jpeg"
 
         if format == "retina":
             self = deepcopy(self)
@@ -585,9 +590,12 @@ class Compose:
         old = self.__dict__
         new = result.__dict__
 
-        shallow = {"figure", "gridsspec", "__copy"}
+        skip = {"figure", "_gridspec", "_sub_gridspec"}
         for key, item in old.items():
-            if key in shallow:
+            if key in skip:
+                # A copied composition must create its own figure and layout.
+                continue
+            if key == "__copy":
                 new[key] = item
                 memo[id(new[key])] = new[key]
             else:
@@ -617,31 +625,36 @@ class Compose:
 
     def _create_figure(self):
         """
-        Create figure & gridspecs for all sub compositions
+        Create or reuse the composition's figure and layout
+
+        Reuse a figure supplied by a parent composition or host inset, adding
+        any missing layout. When this composition owns the current figure,
+        replace it with a fresh figure and close the previous one.
         """
-        if not hasattr(self, "figure"):
-            import matplotlib.pyplot as plt
+        import matplotlib.pyplot as plt
 
+        if not hasattr(self, "figure") or self.figure._owner is self:
             from plotnine._mpl.figure import p9Figure
-            from plotnine._mpl.layout_manager import PlotnineLayoutEngine
+            from plotnine._mpl.gridspec import p9GridSpec
 
-            self.figure = cast("p9Figure", plt.figure(FigureClass=p9Figure))
-            self.figure.set_layout_engine(PlotnineLayoutEngine(self))
-
-        if not hasattr(self, "_gridspec"):
+            figure = cast(
+                "p9Figure", plt.figure(FigureClass=p9Figure, owner=self)
+            )
+            self._generate_gridspecs(
+                figure, p9GridSpec(1, 1, figure, nest_into=None)
+            )
+        elif not hasattr(self, "_gridspec"):
             from plotnine._mpl.gridspec import p9GridSpec
 
             self._generate_gridspecs(
-                self.figure,
-                p9GridSpec(1, 1, self.figure, nest_into=None),
+                self.figure, p9GridSpec(1, 1, self.figure, nest_into=None)
             )
 
     def _generate_gridspecs(self, figure: p9Figure, container_gs: p9GridSpec):
         from plotnine import ggplot
         from plotnine._mpl.gridspec import p9GridSpec
 
-        self.figure = figure
-        self._gridspec = container_gs
+        assign_figure(self, figure, container_gs)
         self.layout._setup(self)
         self._sub_gridspec = p9GridSpec.from_layout(
             self.layout, figure=figure, nest_into=container_gs[0]
@@ -666,8 +679,7 @@ class Compose:
             #    2. compose._gridspec
             _container_gs = p9GridSpec(1, 1, figure, nest_into=subplot_spec)
             if isinstance(item, ggplot):
-                item.figure = figure
-                item._gridspec = _container_gs
+                assign_figure(item, figure, _container_gs)
             else:
                 item._generate_gridspecs(figure, _container_gs)
 
@@ -837,10 +849,13 @@ class Compose:
         Parameters
         ----------
         filename :
-            File name to write the plot to. If not specified, a name
+            File name or buffer to write the composition to.
         format :
-            Image format to use, automatically extract from
-            file name extension.
+            Output format. An explicit value takes priority over the filename
+            extension and the composition theme's `figure_format`. If none is
+            set, use Matplotlib's default. The `retina` format saves a PNG at
+            twice the requested DPI. A `.png` extension retains a `retina`
+            theme preference; pass `format="png"` for ordinary resolution.
         dpi :
             DPI for raster graphics. If `None`, use the composition theme's
             `dpi`.
@@ -848,14 +863,26 @@ class Compose:
             These are ignored. Here to "softly" match the API of
             `ggplot.save()`.
         """
-        from plotnine import theme
+        from pathlib import Path
 
-        # Set the composition theme's DPI because the composition owns the
-        # figure. Inner plots inherit this value.
-        cmp = self
-        if dpi:
-            cmp = deepcopy(self)
+        append_extension = (
+            format is None
+            and isinstance(filename, (str, Path))
+            and not Path(filename).suffix.lstrip(".")
+        )
+        format = get_save_format(
+            filename, format, default=self.theme.getp("figure_format")
+        )
+        cmp = deepcopy(self)
+        # Child plots inherit the composition's DPI and output format.
+        if dpi is not None:
             cmp.theme = cmp.theme + theme(dpi=dpi)
+        if format == "retina":
+            cmp._to_retina()
+            format = "png"
+        if append_extension and format is not None:
+            filename = f"{str(filename).rstrip('.')}.{format}"
+        cmp.theme = cmp.theme + theme(figure_format=format)
 
         figure = cmp.draw()
 

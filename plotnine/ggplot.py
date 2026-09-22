@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from copy import copy, deepcopy
+from dataclasses import dataclass
 from io import BytesIO
 from itertools import chain
 from pathlib import Path
@@ -19,12 +20,13 @@ from warnings import warn
 
 from ._utils import (
     from_inches,
+    get_save_format,
     is_data_like,
     order_as_data_mapping,
     to_inches,
     ungroup,
 )
-from ._utils.context import plot_context
+from ._utils.context import assign_figure, plot_context
 from ._utils.ipython import (
     get_ipython,
     get_mimebundle,
@@ -38,7 +40,7 @@ from .facets.layout import Layout
 from .geoms.geom_blank import geom_blank
 from .guides.guides import guides
 from .iapi import labels_view, mpl_save_view
-from .layer import Layers
+from .layer import Layers, layer
 from .mapping.aes import aes
 from .options import get_option
 from .scales.scales import Scales
@@ -136,6 +138,11 @@ class ggplot:
 
     _sidespaces: PlotSideSpaces
 
+    built: PlotBuild
+    """
+    Most recent build result, unset until the first draw
+    """
+
     def __init__(
         self,
         data: Optional[DataLike] = None,
@@ -160,9 +167,6 @@ class ggplot:
         self.layout = Layout()
         self.watermarks: list[watermark] = []
         self._insets: Insets = Insets()
-
-        # build artefacts
-        self._build_objs = NS(meta={})
 
     def __str__(self) -> str:
         """
@@ -191,10 +195,14 @@ class ggplot:
         """
         ip = get_ipython()
         format: FigureFormat = (
-            get_option("figure_format")
+            self.theme.getp("figure_format")
+            or get_option("figure_format")
             or (ip and ip.config.InlineBackend.get("figure_format"))
             or "retina"
         )
+        format = cast("FigureFormat", format.lower())
+        if format == "jpg":
+            format = "jpeg"
 
         # While jpegs can be displayed as retina, we restrict the output
         # of "retina" to png
@@ -236,10 +244,20 @@ class ggplot:
         old = self.__dict__
         new = result.__dict__
 
-        # don't make a deepcopy of data
-        shallow = {"data", "figure", "gs", "_build_objs"}
+        skip = {
+            "figure",
+            "_gridspec",
+            "_sub_gridspec",
+            "axs",
+            # A copied plot has no build result, even when its source does.
+            "built",
+        }
         for key, item in old.items():
-            if key in shallow:
+            if key in skip:
+                continue
+
+            # Share data and the build-result scaffold with the copy.
+            if key in ("data", "_build_objs"):
                 new[key] = item
                 memo[id(new[key])] = new[key]
             else:
@@ -282,7 +300,7 @@ class ggplot:
 
         Parameters
         ----------
-        other :
+        rhs :
             Either an object that knows how to "radd"
             itself to a ggplot, or a list of such objects.
         """
@@ -392,7 +410,7 @@ class ggplot:
             self._draw_plot_background()
             self._insets.draw(which="below")
 
-            self._sub_gridspec, self.axs = self.facet.setup(self)
+            self._sub_gridspec, self.axs = self.built.facet.setup(self)
             self._draw_layers()
             self._draw_panel_borders()
             self._draw_breaks_and_labels()
@@ -418,53 +436,69 @@ class ggplot:
 
     def _create_figure(self):
         """
-        Create gridspec for the panels
+        Create or reuse the plot's figure and gridspec
+
+        Reuse a figure supplied by a parent composition or host inset, adding
+        any missing gridspec. When this plot owns the current figure, replace
+        it with a fresh figure and close the previous one.
         """
-        if not hasattr(self, "figure"):
-            import matplotlib.pyplot as plt
+        import matplotlib.pyplot as plt
 
+        if not hasattr(self, "figure") or self.figure._owner is self:
             from ._mpl.figure import p9Figure
-            from ._mpl.layout_manager import PlotnineLayoutEngine
+            from ._mpl.gridspec import p9GridSpec
 
-            self.figure = cast("p9Figure", plt.figure(FigureClass=p9Figure))
-            self.figure.set_layout_engine(PlotnineLayoutEngine(self))
-
-        if not hasattr(self, "_gridspec"):
+            figure = cast(
+                "p9Figure", plt.figure(FigureClass=p9Figure, owner=self)
+            )
+            assign_figure(self, figure, p9GridSpec(1, 1, figure))
+        elif not hasattr(self, "_gridspec"):
             from ._mpl.gridspec import p9GridSpec
 
             self._gridspec = p9GridSpec(1, 1, self.figure)
 
-    def _build(self):
+    def build(self) -> PlotBuild:
         """
-        Build ggplot for rendering.
+        Build the plot's layers, scales, layout, facet and labels
+
+        Returns
+        -------
+        :
+            The built layers, scales, layout, facet and labels.
 
         Notes
         -----
-        This method modifies the ggplot object. The caller is
-        responsible for making a copy and using that to make
-        the method call.
+        The result contains independent copies of `layers`, `scales`,
+        `layout`, `facet` and `labels`, so building does not modify those
+        plot attributes. Layer mappings and statistics can add labels, while
+        facets can record state such as panel-grid dimensions. These changes
+        remain on the build's copies.
         """
-        if not self.layers:
-            self += geom_blank()
+        plot = deepcopy(self)
+        layers, scales, layout, facet, labels = (
+            plot.layers,
+            plot.scales,
+            plot.layout,
+            plot.facet,
+            plot.labels,
+        )
+        if not layers:
+            layers.append(layer(geom=geom_blank()))
 
-        layers = self._build_objs.layers = self.layers
-        scales = self._build_objs.scales = self.scales
-        layout = self._build_objs.layout = self.layout
-
-        # Update the label information for the plot
-        layers.update_labels(self.labels)
+        # Keep labels derived from layers on the build result.
+        layers.update_labels(labels)
 
         # Give each layer a copy of the data, the mappings and
         # the execution environment
-        layers.setup(self)
+        layers.setup(plot)
 
         # Initialise panels, add extra data for margins & missing
         # facetting variables, and add on a PANEL variable to data
-        layout.setup(layers, self)
+        layout.setup(layers, plot)
 
         # Compute aesthetics to produce data with generalised
         # variable names
-        layers.compute_aesthetics(self)
+        layers.compute_aesthetics(plot)
 
         # Transform data using all scales
         layers.transform(scales)
@@ -479,7 +513,7 @@ class ggplot:
 
         # Apply and map statistics
         layers.compute_statistic(layout)
-        layers.map_statistic(self)
+        layers.map_statistic(plot)
 
         # Prepare data in geoms
         # e.g. from y and width to ymin and ymax
@@ -516,6 +550,26 @@ class ggplot:
         # Allow layout to modify data before rendering
         layout.finish_data(layers)
 
+        return PlotBuild(layers, scales, layout, facet, labels)
+
+    def _build(self):
+        """
+        Build the plot and attach the result
+
+        Notes
+        -----
+        Unlike `build()`, this method stores the result on the plot. It also
+        refreshes the deprecated build-object alias.
+        """
+        self.built = self.build()
+        # Preserve the deprecated build-object alias for extensions that
+        # still depend on it.
+        self._build_objs = NS(
+            layers=self.built.layers,
+            scales=self.built.scales,
+            layout=self.built.layout,
+        )
+
     def _draw_panel_borders(self):
         """
         Draw Panel boders
@@ -549,7 +603,7 @@ class ggplot:
         Draw the main plot(s) onto the axes.
         """
         # Draw the geoms
-        self.layers.draw(self.layout, self.coordinates)
+        self.built.layers.draw(self.built.layout, self.coordinates)
         self.coordinates.draw(self.axs)
 
     def _draw_breaks_and_labels(self):
@@ -561,11 +615,11 @@ class ggplot:
         #      - xaxis & yaxis breaks, labels, limits, ...
         #
         # pidx is the panel index (location left to right, top to bottom)
-        self.facet.strips.draw()
-        for layout_info in self.layout.get_details():
+        self.built.facet.strips.draw()
+        for layout_info in self.built.layout.get_details():
             pidx = layout_info.panel_index
             ax = self.axs[pidx]
-            panel_params = self.layout.panel_params[pidx]
+            panel_params = self.built.layout.panel_params[pidx]
             self.coordinates.setup_ax(ax, panel_params, layout_info)
 
     def _draw_figure_texts(self):
@@ -595,12 +649,12 @@ class ggplot:
         # Get the axis labels (default or specified by user)
         # and let the coordinate modify them e.g. flip
         labels = self.coordinates.labels(
-            self.layout.set_xy_labels(self.labels)
+            self.built.layout.set_xy_labels(copy(self.built.labels))
         )
 
         # The axis title is registered under a per-side target named for
         # its axis position.
-        pp = self.layout.panel_params[0]
+        pp = self.built.layout.panel_params[0]
         if labels.x:
             t = self.figure.add_artist(Text(text=labels.x))
             setattr(targets, f"axis_title_x_{pp.x.position}", t)
@@ -683,22 +737,32 @@ class ggplot:
         This method has the same arguments as [](`~plotnine.ggplot.save`).
         Use it to get access to the figure that will be saved.
         """
-        if format is None and isinstance(filename, (str, Path)):
-            format = str(filename).split(".")[-1]
-
-        fig_kwargs: Dict[str, Any] = {"format": format, **kwargs}
+        append_extension = (
+            format is None
+            and isinstance(filename, (str, Path))
+            and not Path(filename).suffix.lstrip(".")
+        )
+        format = get_save_format(
+            filename, format, default=self.theme.getp("figure_format")
+        )
+        retina = format == "retina"
+        if retina:
+            format = "png"
 
         if limitsize is None:
             limitsize = cast("bool", get_option("limitsize"))
 
         # filename, depends on the object
         if filename is None:
-            ext = format if format else "pdf"
-            filename = self._save_filename(ext)
+            format = format or "pdf"
+            filename = self._save_filename(format)
+        elif append_extension and format is not None:
+            filename = f"{str(filename).rstrip('.')}.{format}"
 
         if path and isinstance(filename, (Path, str)):
             filename = Path(path) / filename
 
+        fig_kwargs: Dict[str, Any] = {"format": format, **kwargs}
         fig_kwargs["fname"] = filename
 
         # Preserve the users object
@@ -735,7 +799,9 @@ class ggplot:
         if dpi is not None:
             self.theme = self.theme + theme(dpi=dpi)
 
-        self._build_objs.meta["figure_format"] = format
+        if retina:
+            self.theme = self.theme.to_retina()
+        self.theme = self.theme + theme(figure_format=format)
         figure = self.draw(show=False)
         return mpl_save_view(figure, fig_kwargs)
 
@@ -761,8 +827,12 @@ class ggplot:
             File name to write the plot to. If not specified, a name
             like “plotnine-save-<hash>.<format>” is used.
         format :
-            Image format to use, automatically extract from
-            file name extension.
+            Output format. An explicit value takes priority over the filename
+            extension and the theme's `figure_format`. Without a filename or
+            preference, use PDF; otherwise use Matplotlib's default. The
+            `retina` format saves a PNG at twice the requested DPI. A `.png`
+            extension retains a `retina` theme preference; pass
+            `format="png"` for ordinary resolution.
         path :
             Path to save plot to (if you just want to set path and
             not filename).
@@ -819,12 +889,39 @@ class ggplot:
             Data used by the specified layer after all transformations,
             statistics, and position adjustments have been applied.
         """
-        p = deepcopy(self)
-        p._build()
-        return p.layers.data[i]
+        return self.build().layers.data[i]
 
 
 ggsave = ggplot.save
+
+
+@dataclass(frozen=True)
+class PlotBuild:
+    """
+    A plot's computed layers, scales, layout, facet and labels
+
+    Parameters
+    ----------
+    layers :
+        Layers with computed aesthetics, statistics and position
+        adjustments applied.
+    scales :
+        Scales trained on the built layer data.
+    layout :
+        Panel layout with panel parameters resolved.
+    facet :
+        Facet state computed for this build. This is the same object as
+        `layout.facet`.
+    labels :
+        Labels with each layer's own mapping and statistic defaults
+        filled in.
+    """
+
+    layers: Layers
+    scales: Scales
+    layout: Layout
+    facet: facet
+    labels: labels_view
 
 
 def save_as_pdf_pages(
@@ -928,6 +1025,8 @@ def save_as_pdf_pages(
     with PdfPages(filename) as pdf:
         # Re-add the first element to the iterator, if it was removed
         for plot in plots:
+            plot = deepcopy(plot)
+            plot.theme = plot.theme + theme(figure_format="pdf")
             fig = plot.draw()
             with plot_context(plot).rc_context:
                 # Save as a page in the PDF file

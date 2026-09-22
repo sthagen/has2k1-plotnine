@@ -125,7 +125,7 @@ class guide(ABC, metaclass=Register):
         plot :
             The plot that supplies layers and mapping for this guide.
         """
-        self.plot_layers = plot.layers
+        self.plot_layers = plot.built.layers
         self.plot_mapping = plot.mapping
 
     def _bind_owner(self, owner: LegendOwner):
@@ -142,10 +142,11 @@ class guide(ABC, metaclass=Register):
             Whoever renders this guide — its theme and figure drive
             layout and attachment.
         """
-        # guide theme has priority and its targets are tracked
-        # independently.
+        # The guide theme controls styling, but the owner supplies figure
+        # properties. Keep the guide's targets separate from the owner's.
         self.figure = owner.figure
         self.theme = owner.theme + self.theme
+        self.theme._inherit_figure_props(owner.theme)
         self.theme._setup(self)
         self.elements = self._elements_cls(self.theme, self)
 

@@ -17,7 +17,7 @@ quartodoc:
       desc: ""
       contents:
         - name: ggplot
-          members: [__add__, __iadd__, show, draw, save, save_helper]
+          members: [__add__, __iadd__, show, draw, build, save, save_helper]
         - qplot
         - watermark
         - name: layer
@@ -67,6 +67,7 @@ quartodoc:
         - geom_abline
         - geom_area
         - geom_bar
+        - geom_beeswarm
         - geom_bin_2d
         - geom_blank
         - geom_boxplot
@@ -142,6 +143,7 @@ quartodoc:
 
     - options: *no-members
       contents:
+        - stat_beeswarm
         - stat_bin
         - stat_bin_2d
         - stat_bindot
@@ -483,6 +485,7 @@ quartodoc:
         - axis_title_y_left
         - axis_title_y_right
         - dpi
+        - figure_format
         - figure_size
         - legend_background
         - legend_box

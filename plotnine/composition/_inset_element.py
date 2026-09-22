@@ -76,10 +76,9 @@ class inset_element:
 
     Notes
     -----
-    `figure_size` and `dpi` set on the inset's theme are ignored. The
-    inset shares the host's figure, so these values come from the host
-    theme. The canvas size of the inset is determined by the bounding
-    box and the area it is `align_to`.
+    The inset shares the host's figure, so the host theme controls
+    `figure_size`, `dpi`, and `figure_format`. The bounding box and
+    `align_to` area determine the inset's canvas size.
 
     For image insets, `inset_element(...) + theme(...)` draws a
     sibling rectangle around the image; only `plot_background` is
@@ -148,11 +147,12 @@ class inset_element:
         parent :
             The host plot whose figure this inset adopts.
         """
+        from .._utils.context import assign_figure
         from ..ggplot import ggplot
         from ._compose import Compose
 
         if isinstance(self.obj, (ggplot, Compose)):
-            self.obj.figure = parent.figure
+            assign_figure(self.obj, parent.figure)
             self.obj.theme._inherit_figure_props(parent.theme)
         elif isinstance(self.obj, _InsetImage):
             self.obj._setup(parent)
