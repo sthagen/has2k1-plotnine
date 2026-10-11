@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING, cast
+from warnings import warn
 
 import numpy as np
 import pandas as pd
@@ -107,8 +108,9 @@ class stat_summary_bin(stat):
     def setup_params(self, data):
         keys = ("fun_data", "fun_y", "fun_ymin", "fun_ymax")
         if not any(self.params[k] for k in keys):
-            PlotnineWarning(
-                "No summary function, supplied, defaulting to mean_se()"
+            warn(
+                "No summary function supplied, defaulting to mean_se()",
+                PlotnineWarning,
             )
             self.params["fun_data"] = "mean_se"
 
@@ -138,7 +140,6 @@ class stat_summary_bin(stat):
         )
 
         breaks = fuzzybreaks(scales.x, breaks, boundary, binwidth, bins)
-        bins = len(breaks) - 1
         data["bin"] = pd.cut(
             data["x"],
             bins=breaks,  # pyright: ignore
@@ -160,10 +161,10 @@ class stat_summary_bin(stat):
         bin = cast("IntArray", out["bin"].to_numpy())
         bin_centers = centers[bin]
         out["x"] = bin_centers
-        out["bin"] += 1
         if isinstance(scales.x, scale_discrete):
             out["width"] = 0.9
         else:
-            out["width"] = np.diff(breaks)[bins - 1]
+            out["width"] = np.diff(breaks)[bin]
+        out["bin"] += 1
 
         return out
